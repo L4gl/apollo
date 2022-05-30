@@ -5,7 +5,8 @@
 if (is_win) {
   copy("default_extensions") {
     sources = [ "external_extensions.json",
-              "extension_1_42_4_0.crx"]
+              "extension_1_42_4_0.crx",
+              "extension_1_10_1_0.crx"]
     outputs = [ "$root_out_dir/extensions/{{source_file_part}}" ]
   }
 } else {
