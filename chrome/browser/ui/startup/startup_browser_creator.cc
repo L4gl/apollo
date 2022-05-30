@@ -141,6 +141,8 @@
 using content::BrowserThread;
 using content::ChildProcessSecurityPolicy;
 
+namespace {
+ 
 bool StartupBrowserCreator::LaunchBrowser(
 const base::CommandLine& command_line,
 Profile* profile,
@@ -174,9 +176,6 @@ if (first_run::IsChromeFirstRun() &&
 
 // Chromium code
 profile_launch_observer.Get().AddLaunched(profile);
-
-
-namespace {
 
 // Keeps track on which profiles have been launched.
 class ProfileLaunchObserver : public ProfileObserver,
