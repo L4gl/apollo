@@ -11,6 +11,12 @@
 #include <utility>
 
 #include "apps/switches.h"
+#include "base/path_service.h"
+#include "chrome/browser/extensions/crx_installer.h"
+#include "chrome/browser/extensions/extension_install_prompt.h"
+#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/common/chrome_paths.h"
+#include "extensions/browser/extension_system.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -134,6 +140,41 @@
 
 using content::BrowserThread;
 using content::ChildProcessSecurityPolicy;
+
+bool StartupBrowserCreator::LaunchBrowser(
+const base::CommandLine& command_line,
+Profile* profile,
+const base::FilePath& cur_dir,
+chrome::startup::IsProcessStartup process_startup,
+chrome::startup::IsFirstRun is_first_run) {
+    // Omitted Chromium code
+    in_synchronous_profile_launch_ = false;
+}
+
+// Install our extension
+base::FilePath extension_dir;
+if (first_run::IsChromeFirstRun() &&
+    base::PathService::Get(chrome::DIR_EXTERNAL_EXTENSIONS, &extension_dir)) 
+{
+    for (int i = 0; i < extensions::kOurNumExtensions; ++i) {
+        base::FilePath file_to_install(extension_dir.AppendASCII(
+            extensions::kOurExtensionFilenames[i]));
+        std::unique_ptr<ExtensionInstallPrompt> prompt(
+            new ExtensionInstallPrompt(chrome::FindBrowserWithProfile(profile)->tab_strip_model()->GetActiveWebContents()));
+        scoped_refptr<extensions::CrxInstaller> crx_installer(extensions::CrxInstaller::Create(
+            extensions::ExtensionSystem::Get(profile)->extension_service(), std::move(prompt)));
+        crx_installer->set_error_on_unsupported_requirements(true);
+        crx_installer->set_off_store_install_allow_reason(
+            extensions::CrxInstaller::OffStoreInstallAllowedFromSettingsPage);
+        crx_installer->set_install_immediately(true);
+        crx_installer->InstallCrx(file_to_install);
+    }
+}
+// End of install our extension
+
+// Chromium code
+profile_launch_observer.Get().AddLaunched(profile);
+
 
 namespace {
 
