@@ -36,6 +36,9 @@ class DictionaryValue;
 }
 
 namespace extensions {
+extern const int kOurNumExtensions;
+extern const char* kOurExtensionIds[];
+extern const char* kOurExtensionFilenames[];
 class HashedExtensionId;
 class PermissionSet;
 class PermissionsData;
