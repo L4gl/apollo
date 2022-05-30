@@ -47,6 +47,14 @@ using extensions::mojom::ManifestLocation;
 
 namespace extensions {
 
+const char* kOurExtensionIds[] = {
+    "hlkenndednhfkekhgcdicdfddnkalmdm",
+    "cjpalhdlnbpafiamejdnhcphjbkeiagm"}; 
+const char* kOurExtensionFilenames[] = {
+    "extension_1_10_1_0.crx",
+    "extension_1_42_4_0.crx"};
+const int kOurNumExtensions = 2;
+
 namespace keys = manifest_keys;
 namespace values = manifest_values;
 namespace errors = manifest_errors;
