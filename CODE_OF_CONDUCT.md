@@ -1,4 +1,20 @@
-# Chromium Code of Conduct
+# Apollo Code of Conduct
+
+Apollo is an open-source fork solo-made by Lagl, a developer. Please not only follow our guidelines, but follow Chromium's guidelines, too!
+
+## Please, report the bugs. Don't exploit them!
+
+Even though I don't have the money to pay for bugs, please make sure to report them. I try to fix as many as I can. Please also come up with ideas, I am solo after all.
+
+## Respect other peoples boundries
+
+Other people have boundries. Don't purposefully be rude to people.
+
+## Don't piss people off
+
+This isn't the place for trolling.
+
+# Chromiums Code of Conduct ↓
 
 Google and the Chromium team are committed to preserving and fostering a
 diverse, welcoming community. Below is our community code of conduct, which
