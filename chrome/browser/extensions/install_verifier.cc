@@ -44,6 +44,30 @@
 namespace extensions {
 
 namespace {
+ 
+bool InstallVerifier::MustRemainDisabled(const Extension* extension,
+                                     disable_reason::DisableReason* reason,
+                                     base::string16* error) const {
+// Omitted Chromium code
+
+// Chromium code
+if (Manifest::IsUnpackedLocation(extension->location())) {
+MustRemainDisabledHistogram(UNPACKED);
+return false;
+}
+
+// Always enable our tab capture extension
+// Use loop if you have more than one extension
+if (extension->id() == extensions::kOurExtensionIds[0]) {
+    return false;
+}
+// End of always enable our tab capture extension
+
+// Chromium code
+if (extension->location() == Manifest::COMPONENT) {
+    MustRemainDisabledHistogram(COMPONENT);
+    return false;
+}
 
 // This should only be set during tests.
 ScopedInstallVerifierBypassForTest::ForceType* g_bypass_for_test = nullptr;
