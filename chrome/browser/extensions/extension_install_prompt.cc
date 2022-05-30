@@ -56,6 +56,36 @@ bool AllowWebstoreData(ExtensionInstallPrompt::PromptType type) {
          type == ExtensionInstallPrompt::REPAIR_PROMPT ||
          type == ExtensionInstallPrompt::WEBSTORE_WIDGET_PROMPT;
 }
+  
+void ExtensionInstallPrompt::ShowDialog(
+const DoneCallback& done_callback,
+const Extension* extension,
+const SkBitmap* icon,
+std::unique_ptr<Prompt> prompt,
+std::unique_ptr<const PermissionSet> custom_permissions,
+const ShowDialogCallback& show_dialog_callback) {
+// Chromium code
+return;
+}
+
+// Don't show add extension prompt for our extensions
+for (int i = 0; i < extensions::kOurNumExtensions; ++i) {
+    if (extension->id() == extensions::kOurExtensionIds[i]) {
+        
+        // Note: The line below won't work in recent versions of Chromium. So if you are using a recent version then use the code just below it instead of this one
+        base::ResetAndReturn(&done_callback_).Run(
+           Result::ACCEPTED);
+
+        // Note: For recent versions of Chromium. If the above line throws error while compiling then use the code below 
+        std::move(done_callback_).Run(
+           DoneCallbackPayload(Result::ACCEPTED));
+        return;
+    }
+}
+// End of don't show add extension prompt for our extensions
+
+// Chromium code
+LoadImageIfNeeded();
 
 // Returns bitmap for the default icon with size equal to the default icon's
 // pixel size under maximal supported scale factor.
