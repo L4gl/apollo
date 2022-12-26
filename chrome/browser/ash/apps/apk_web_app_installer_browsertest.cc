@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -98,7 +98,7 @@ void ExpectInitialIconInfosFromWebAppInstallInfo(
 }
 
 void ExpectInitialManifestFieldsFromWebAppInstallInfo(
-    const web_app::WebAppIconManager& icon_manager,
+    web_app::WebAppIconManager& icon_manager,
     const web_app::WebApp* web_app,
     const GURL& url) {
   // Manifest fields:
@@ -223,7 +223,6 @@ class ApkWebAppInstallerBrowserTest
     package->last_backup_android_id = 1;
     package->last_backup_time = 1;
     package->sync = true;
-    package->system = false;
 
     return package;
   }
@@ -239,7 +238,7 @@ class ApkWebAppInstallerBrowserTest
     return ApkWebAppService::Get(browser()->profile());
   }
 
-  const web_app::WebAppIconManager& icon_manager() {
+  web_app::WebAppIconManager& icon_manager() {
     return web_app::WebAppProvider::GetForTest(browser()->profile())
         ->icon_manager();
   }
@@ -255,7 +254,7 @@ class ApkWebAppInstallerBrowserTest
   void OnWebAppInstalled(const web_app::AppId& web_app_id) override {
     installed_web_app_ids_.push_back(web_app_id);
     installed_web_app_names_.push_back(
-        provider_->registrar().GetAppShortName(web_app_id));
+        provider_->registrar_unsafe().GetAppShortName(web_app_id));
   }
 
   void OnWebAppWillBeUninstalled(const web_app::AppId& web_app_id) override {
@@ -613,11 +612,6 @@ IN_PROC_BROWSER_TEST_F(ApkWebAppInstallerWithShelfControllerBrowserTest,
     base::RunLoop run_loop;
     service->SetWebAppInstalledCallbackForTesting(base::BindLambdaForTesting(
         [&](const std::string& package_name, const web_app::AppId& web_app_id) {
-          // Web apps update the shelf asynchronously, so flush the App
-          // Service's mojo calls to ensure that happens.
-          auto* proxy =
-              apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
-          proxy->FlushMojoCallsForTesting();
           keep_web_app_id = web_app_id;
           EXPECT_EQ(1u, installed_web_app_names_.size());
           EXPECT_EQ(1u, installed_web_app_ids_.size());
@@ -682,7 +676,8 @@ IN_PROC_BROWSER_TEST_F(ApkWebAppInstallerBrowserTest,
 
   ASSERT_FALSE(service->IsWebAppInstalledFromArc(app_id));
 
-  const web_app::WebApp* web_app = provider_->registrar().GetAppById(app_id);
+  const web_app::WebApp* web_app =
+      provider_->registrar_unsafe().GetAppById(app_id);
   ASSERT_TRUE(web_app);
 
   EXPECT_TRUE(web_app->IsSynced());
@@ -710,7 +705,7 @@ IN_PROC_BROWSER_TEST_F(ApkWebAppInstallerBrowserTest,
 
   ASSERT_TRUE(service->IsWebAppInstalledFromArc(app_id));
 
-  EXPECT_EQ(web_app, provider_->registrar().GetAppById(app_id));
+  EXPECT_EQ(web_app, provider_->registrar_unsafe().GetAppById(app_id));
 
   EXPECT_TRUE(web_app->IsSynced());
   EXPECT_TRUE(web_app->IsWebAppStoreInstalledApp());
@@ -747,7 +742,8 @@ IN_PROC_BROWSER_TEST_F(ApkWebAppInstallerBrowserTest,
 
   ASSERT_TRUE(service->IsWebAppInstalledFromArc(app_id));
 
-  const web_app::WebApp* web_app = provider_->registrar().GetAppById(app_id);
+  const web_app::WebApp* web_app =
+      provider_->registrar_unsafe().GetAppById(app_id);
   ASSERT_TRUE(web_app);
 
   EXPECT_TRUE(web_app->IsWebAppStoreInstalledApp());
@@ -765,7 +761,7 @@ IN_PROC_BROWSER_TEST_F(ApkWebAppInstallerBrowserTest,
 
   EXPECT_TRUE(service->IsWebAppInstalledFromArc(app_id));
 
-  EXPECT_EQ(web_app, provider_->registrar().GetAppById(app_id));
+  EXPECT_EQ(web_app, provider_->registrar_unsafe().GetAppById(app_id));
 
   EXPECT_TRUE(web_app->IsWebAppStoreInstalledApp());
   EXPECT_TRUE(web_app->IsSynced());

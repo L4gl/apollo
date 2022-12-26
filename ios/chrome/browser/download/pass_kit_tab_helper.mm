@@ -1,20 +1,21 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/download/pass_kit_tab_helper.h"
 
-#include <memory>
-#include <string>
+#import <memory>
+#import <string>
 
 #import <PassKit/PassKit.h>
 
-#include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
-#include "ios/chrome/browser/download/mime_type_util.h"
+#import "base/files/file_path.h"
+#import "base/memory/ptr_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "ios/chrome/browser/download/mime_type_util.h"
 #import "ios/chrome/browser/download/pass_kit_tab_helper_delegate.h"
+#import "ios/chrome/browser/ui/commands/web_content_commands.h"
 #import "ios/web/public/download/download_task.h"
-#include "net/url_request/url_fetcher_response_writer.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -61,8 +62,8 @@ void PassKitTabHelper::Download(std::unique_ptr<web::DownloadTask> task) {
   task_ptr->Start(base::FilePath());
 }
 
-void PassKitTabHelper::SetDelegate(id<PassKitTabHelperDelegate> delegate) {
-  delegate_ = delegate;
+void PassKitTabHelper::SetWebContentsHandler(id<WebContentCommands> handler) {
+  handler_ = handler;
 }
 
 void PassKitTabHelper::OnDownloadUpdated(web::DownloadTask* updated_task) {
@@ -89,9 +90,7 @@ void PassKitTabHelper::OnDownloadDataRead(
     NSData* data) {
   DCHECK(task);
   PKPass* pass = [[PKPass alloc] initWithData:data error:nil];
-  [delegate_ passKitTabHelper:this
-         presentDialogForPass:pass
-                     webState:web_state_];
+  [handler_ showDialogForPassKitPass:pass];
 
   UMA_HISTOGRAM_ENUMERATION(kUmaDownloadPassKitResult, GetUmaResult(task.get()),
                             DownloadPassKitResult::Count);

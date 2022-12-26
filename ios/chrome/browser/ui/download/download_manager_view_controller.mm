@@ -1,28 +1,24 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/download/download_manager_view_controller.h"
 
-#import <MaterialComponents/MaterialPalettes.h>
-#import <MaterialComponents/MaterialTypography.h>
-
-#include "base/metrics/histogram_functions.h"
-#include "base/notreached.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/download/download_manager_metric_names.h"
-#include "ios/chrome/browser/ui/download/download_manager_animation_constants.h"
+#import "base/metrics/histogram_functions.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/download/download_manager_metric_names.h"
+#import "ios/chrome/browser/ui/download/download_manager_animation_constants.h"
 #import "ios/chrome/browser/ui/download/download_manager_state_view.h"
 #import "ios/chrome/browser/ui/download/legacy_download_manager_state_view.h"
 #import "ios/chrome/browser/ui/download/radial_progress_view.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#import "ios/chrome/browser/ui/icons/download_icon.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/branded_images/branded_images_api.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -77,7 +73,7 @@ NSString* GetSizeString(long long size_in_bytes) {
 // Download Manager UI has 2 rows. First row is always visible and contains
 // essential download controls: close button, action button and status label.
 // Second row is hidden by default and constains Install Google Drive button.
-// The second row is visible if |_installDriveButtonVisible| is set to YES.
+// The second row is visible if `_installDriveButtonVisible` is set to YES.
 // Each row is a UIView with controls as subviews, which allows to:
 //   - vertically align all controls in the row
 //   - hide all controls in a row altogether
@@ -474,7 +470,10 @@ NSString* GetSizeString(long long size_in_bytes) {
   if (!_statusLabel) {
     _statusLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _statusLabel.font = [MDCTypography body1Font];
+    const CGFloat kBody1FontSize = 14.0;
+    const UIFontWeight kBody1FontWeight = UIFontWeightRegular;
+    _statusLabel.font = [UIFont systemFontOfSize:kBody1FontSize
+                                          weight:kBody1FontWeight];
     _statusLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
     [_statusLabel
         setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
@@ -490,7 +489,10 @@ NSString* GetSizeString(long long size_in_bytes) {
     _actionButton = [UIButton buttonWithType:UIButtonTypeCustom];
     _actionButton.translatesAutoresizingMaskIntoConstraints = NO;
     _actionButton.exclusiveTouch = YES;
-    _actionButton.titleLabel.font = [MDCTypography buttonFont];
+    const CGFloat kButtonFontSize = 14.0;
+    const UIFontWeight kButtonFontWeight = UIFontWeightMedium;
+    _actionButton.titleLabel.font = [UIFont systemFontOfSize:kButtonFontSize
+                                                      weight:kButtonFontWeight];
     [_actionButton setTitleColor:[UIColor colorNamed:kBlueColor]
                         forState:UIControlStateNormal];
 
@@ -510,7 +512,10 @@ NSString* GetSizeString(long long size_in_bytes) {
     _installDriveButton = [UIButton buttonWithType:UIButtonTypeCustom];
     _installDriveButton.translatesAutoresizingMaskIntoConstraints = NO;
     _installDriveButton.exclusiveTouch = YES;
-    _installDriveButton.titleLabel.font = [MDCTypography buttonFont];
+    const CGFloat kButtonFontSize = 14.0;
+    const UIFontWeight kButtonFontWeight = UIFontWeightMedium;
+    _installDriveButton.titleLabel.font =
+        [UIFont systemFontOfSize:kButtonFontSize weight:kButtonFontWeight];
     [_installDriveButton setTitleColor:[UIColor colorNamed:kBlueColor]
                               forState:UIControlStateNormal];
 
@@ -540,7 +545,10 @@ NSString* GetSizeString(long long size_in_bytes) {
   if (!_installDriveLabel) {
     _installDriveLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _installDriveLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _installDriveLabel.font = [MDCTypography body1Font];
+    const CGFloat kBody1FontSize = 14.0;
+    const UIFontWeight kBody1FontWeight = UIFontWeightRegular;
+    _installDriveLabel.font = [UIFont systemFontOfSize:kBody1FontSize
+                                                weight:kBody1FontWeight];
     _installDriveLabel.text =
         l10n_util::GetNSString(IDS_IOS_DOWNLOAD_MANAGER_GOOGLE_DRIVE);
     [_installDriveLabel sizeToFit];
@@ -627,7 +635,7 @@ NSString* GetSizeString(long long size_in_bytes) {
 
 // Updates and activates self.bottomMarginGuideTopConstraint.
 // self.bottomMarginGuideTopConstraint constraints kBottomMarginGuide's
-// topAnchor to installDriveControlsRow's bottom if |_installDriveButtonVisible|
+// topAnchor to installDriveControlsRow's bottom if `_installDriveButtonVisible`
 // is set to YES, otherwise self.view.bottomAnchor is constrained to
 // downloadControlsRow's bottom. This resizes self.view to show or hide
 // installDriveControlsRow view.
@@ -654,13 +662,7 @@ NSString* GetSizeString(long long size_in_bytes) {
           ? @"background_regular"
           : @"background_compact";
 
-  UIImage* image = [UIImage imageNamed:imageName
-                              inBundle:nil
-         compatibleWithTraitCollection:traitCollection];
-  UIEdgeInsets insets = UIEdgeInsetsMake(
-      kTopShadowHeight, kLeftRightShadowHeight, 0, kLeftRightShadowHeight);
-
-  self.background.image = [image resizableImageWithCapInsets:insets];
+  self.background.image = [UIImage imageNamed:imageName];
 }
 
 // Updates and activates constraints which depend on ui size class.
@@ -717,7 +719,7 @@ NSString* GetSizeString(long long size_in_bytes) {
   [self.stateSymbol setState:_state];
 }
 
-// Updates status label text depending on |state|.
+// Updates status label text depending on `state`.
 - (void)updateStatusLabel {
   NSString* statusText = nil;
   switch (_state) {
@@ -759,7 +761,7 @@ NSString* GetSizeString(long long size_in_bytes) {
   self.statusLabel.text = statusText;
 }
 
-// Updates title and hidden state for action button depending on |state|.
+// Updates title and hidden state for action button depending on `state`.
 - (void)updateActionButton {
   NSString* title = nil;
   switch (_state) {

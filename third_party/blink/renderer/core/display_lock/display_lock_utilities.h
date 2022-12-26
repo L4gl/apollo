@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,11 +58,15 @@ class CORE_EXPORT DisplayLockUtilities {
     friend void Document::EnsurePaintLocationDataValidForNode(
         const Node* node,
         DocumentUpdateReason reason);
+    friend void Document::EnsurePaintLocationDataValidForNode(
+        const Node* node,
+        DocumentUpdateReason reason,
+        CSSPropertyID property_id);
     friend VisibleSelection
     FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated() const;
     friend gfx::RectF Range::BoundingRect() const;
     friend DOMRectList* Range::getClientRects() const;
-    friend bool Element::isVisible(IsVisibleOptions*) const;
+    friend bool Element::checkVisibility(CheckVisibilityOptions*) const;
 
     friend class DisplayLockContext;
 
@@ -84,7 +88,8 @@ class CORE_EXPORT DisplayLockUtilities {
                                            emit_warnings)) {}
     explicit ScopedForcedUpdate(const Range* range,
                                 DisplayLockContext::ForcedPhase phase,
-                                bool only_cv_auto = false)
+                                bool only_cv_auto = false,
+                                bool emit_warnings = true)
         : impl_(MakeGarbageCollected<Impl>(range, phase)) {}
 
     friend class DisplayLockDocumentState;
@@ -98,7 +103,8 @@ class CORE_EXPORT DisplayLockUtilities {
            bool emit_warnings = true);
       Impl(const Range* range,
            DisplayLockContext::ForcedPhase phase,
-           bool only_cv_auto = false);
+           bool only_cv_auto = false,
+           bool emit_warnings = true);
 
       // Adds another display-lock scope to this chain. Added when a new lock is
       // created in the ancestor chain of this chain's node.
@@ -122,6 +128,7 @@ class CORE_EXPORT DisplayLockUtilities {
       HeapHashSet<Member<DisplayLockContext>> forced_context_set_;
       Member<Impl> parent_frame_impl_;
       bool only_cv_auto_;
+      bool emit_warnings_;
     };
 
     Impl* impl_ = nullptr;
@@ -213,11 +220,6 @@ class CORE_EXPORT DisplayLockUtilities {
       const Node& node,
       DisplayLockActivationReason reason);
 
-  // Returns the nearest inclusive ancestor of |element| that has
-  // content-visibility: hidden-matchable.
-  // TODO(crbug.com/1249939): Remove this.
-  static Element* NearestHiddenMatchableInclusiveAncestor(Element& element);
-
   // Ancestor navigation functions.
 
   // Helpers for ancestor navigation to find locks.
@@ -291,6 +293,8 @@ class CORE_EXPORT DisplayLockUtilities {
   static void ElementLostFocus(Element*);
   static void ElementGainedFocus(Element*);
 
+  // Returns true if the selection changed functions need to be called.
+  static bool NeedsSelectionChangedUpdate(const Document& document);
   static void SelectionChanged(const EphemeralRangeInFlatTree& old_selection,
                                const EphemeralRangeInFlatTree& new_selection);
   static void SelectionRemovedFromDocument(Document& document);
@@ -314,7 +318,16 @@ class CORE_EXPORT DisplayLockUtilities {
   // LockedAncestorPreventing*.
   static bool IsUnlockedQuickCheck(const Node& node);
 
+  // True if unlocking would invalidate style and produce a style recalc root at
+  // the specified node.
+  //
+  // See StyleEngine::style_recalc_root_.
+  static bool IsPotentialStyleRecalcRoot(const Node& node);
+
  private:
+  static bool IsDisplayLockedPreventingPaintUnmemoized(const Node& node,
+                                                       bool inclusive_check);
+
   // This is a helper function for ShouldIgnoreNodeDueToDisplayLock() when the
   // activation reason is kAccessibility. Note that it's private because it
   // assumes certain conditions (specifically the presence of `memoizer_`, which

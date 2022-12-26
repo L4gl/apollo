@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -594,7 +594,7 @@ TEST_F(PageInfoTest, OnChosenObjectDeleted) {
 
   ASSERT_EQ(1u, last_chosen_object_info().size());
   const PageInfoUI::ChosenObjectInfo* info = last_chosen_object_info()[0].get();
-  page_info()->OnSiteChosenObjectDeleted(info->ui_info,
+  page_info()->OnSiteChosenObjectDeleted(*info->ui_info,
                                          info->chooser_object->value);
 
   EXPECT_FALSE(store->HasDevicePermission(origin(), *device_info));
@@ -610,6 +610,30 @@ TEST_F(PageInfoTest, Malware) {
   EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_UNENCRYPTED,
             page_info()->site_connection_status());
   EXPECT_EQ(PageInfo::SAFE_BROWSING_STATUS_MALWARE,
+            page_info()->safe_browsing_status());
+}
+
+TEST_F(PageInfoTest, ManagedPolicyBlock) {
+  security_level_ = security_state::DANGEROUS;
+  visible_security_state_.malicious_content_status =
+      security_state::MALICIOUS_CONTENT_STATUS_MANAGED_POLICY_BLOCK;
+  SetDefaultUIExpectations(mock_ui());
+
+  EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_UNENCRYPTED,
+            page_info()->site_connection_status());
+  EXPECT_EQ(PageInfo::SAFE_BROWSING_STATUS_MANAGED_POLICY_BLOCK,
+            page_info()->safe_browsing_status());
+}
+
+TEST_F(PageInfoTest, ManagedPolicyWarn) {
+  security_level_ = security_state::DANGEROUS;
+  visible_security_state_.malicious_content_status =
+      security_state::MALICIOUS_CONTENT_STATUS_MANAGED_POLICY_WARN;
+  SetDefaultUIExpectations(mock_ui());
+
+  EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_UNENCRYPTED,
+            page_info()->site_connection_status());
+  EXPECT_EQ(PageInfo::SAFE_BROWSING_STATUS_MANAGED_POLICY_WARN,
             page_info()->safe_browsing_status());
 }
 
@@ -1088,6 +1112,8 @@ TEST_F(PageInfoTest, ReEnableWarnings) {
   };
   const char kGenericHistogram[] =
       "interstitial.ssl.did_user_revoke_decisions2";
+  auto* storage_partition =
+      web_contents()->GetPrimaryMainFrame()->GetStoragePartition();
   for (const auto& test : kTestCases) {
     base::HistogramTester histograms;
     StatefulSSLHostStateDelegate* ssl_state =
@@ -1102,11 +1128,11 @@ TEST_F(PageInfoTest, ReEnableWarnings) {
       // the profile settings for the site (since the exception is what
       // will make the button visible).
       ssl_state->AllowCert(host, *cert(), net::ERR_CERT_DATE_INVALID,
-                           web_contents());
+                           storage_partition);
       page_info();
       if (test.button_clicked) {
         page_info()->OnRevokeSSLErrorBypassButtonPressed();
-        EXPECT_FALSE(ssl_state->HasAllowException(host, web_contents()));
+        EXPECT_FALSE(ssl_state->HasAllowException(host, storage_partition));
         ClearPageInfo();
         histograms.ExpectTotalCount(kGenericHistogram, 1);
         histograms.ExpectBucketCount(
@@ -1116,7 +1142,7 @@ TEST_F(PageInfoTest, ReEnableWarnings) {
             1);
       } else {  // Case where button is visible but not clicked.
         ClearPageInfo();
-        EXPECT_TRUE(ssl_state->HasAllowException(host, web_contents()));
+        EXPECT_TRUE(ssl_state->HasAllowException(host, storage_partition));
         histograms.ExpectTotalCount(kGenericHistogram, 1);
         histograms.ExpectBucketCount(
             kGenericHistogram,
@@ -1127,7 +1153,7 @@ TEST_F(PageInfoTest, ReEnableWarnings) {
     } else {
       page_info();
       ClearPageInfo();
-      EXPECT_FALSE(ssl_state->HasAllowException(host, web_contents()));
+      EXPECT_FALSE(ssl_state->HasAllowException(host, storage_partition));
       // Button is not visible, so check histogram is empty after opening and
       // closing page info.
       histograms.ExpectTotalCount(kGenericHistogram, 0);
@@ -1215,7 +1241,7 @@ TEST_F(PageInfoTest, AdPersonalization) {
 
   content_settings::PageSpecificContentSettings* pscs =
       content_settings::PageSpecificContentSettings::GetForFrame(
-          web_contents()->GetMainFrame());
+          web_contents()->GetPrimaryMainFrame());
   EXPECT_FALSE(pscs->HasAccessedTopics());
   EXPECT_THAT(pscs->GetAccessedTopics(), testing::IsEmpty());
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,8 @@ import android.widget.EditText;
 
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
 import org.chromium.ui.modelutil.PropertyModel;
+
+import java.util.List;
 
 /**
  * Toolbar for controlling the list of history clusters in the Journeys UI.
@@ -32,8 +34,27 @@ class HistoryClustersToolbar extends SelectableListToolbar<PropertyModel> {
         mSearchText = findViewById(R.id.search_text);
     }
 
-    void setSearchText(String text) {
-        mSearchText.setText(text);
-        mSearchText.setSelection(text.length());
+    @Override
+    public void onSelectionStateChange(List selectedItems) {
+        super.onSelectionStateChange(selectedItems);
+        if (mIsSelectionEnabled) {
+            getMenu()
+                    .findItem(R.id.selection_mode_copy_link)
+                    .setVisible(mSelectionDelegate.getSelectedItems().size() == 1);
+        }
+    }
+
+    boolean isSearchTextFocused() {
+        return mSearchText.isFocused();
+    }
+
+    void setSearchText(String text, boolean wantFocus) {
+        if (!text.equals(mSearchText.getText().toString())) {
+            mSearchText.setText(text);
+            mSearchText.setSelection(text.length());
+        }
+
+        if (wantFocus) return;
+        mSearchText.clearFocus();
     }
 }

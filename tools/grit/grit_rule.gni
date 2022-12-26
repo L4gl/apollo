@@ -1,4 +1,4 @@
-# Copyright 2014 The Chromium Authors. All rights reserved.
+# Copyright 2014 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -329,8 +329,6 @@ template("grit") {
     # script as inputs.
     public_deps = [ ":$_grit_custom_target" ]
 
-    deps = [ "//base" ]
-
     if (defined(invoker.public_configs)) {
       public_configs += invoker.public_configs
     }
@@ -391,12 +389,11 @@ if (is_android) {
     zip(_zip_target_name) {
       base_dir = _grit_output_dir
 
-      # This needs to get outputs from grit's internal target, not the final
-      # source_set.
-      inputs = filter_exclude(get_target_outputs(":${_grit_target_name}_grit"),
-                              [ "*.stamp" ])
+      # No need to depend on the source_set().
+      _grit_dep = ":${_grit_target_name}_grit"
+      deps = [ _grit_dep ]
+      inputs = filter_exclude(get_target_outputs(_grit_dep), [ "*.stamp" ])
       output = _resources_zip
-      deps = [ ":$_grit_target_name" ]
     }
 
     android_generated_resources(target_name) {
@@ -437,7 +434,10 @@ if (is_android) {
       inputs = rebase_path(invoker.generated_files, ".", base_dir)
       output = _resources_zip
       if (defined(invoker.deps)) {
-        deps = invoker.deps
+        deps = []
+        foreach(_dep, invoker.deps) {
+          deps += [ "${_dep}_grit" ]
+        }
       }
     }
 

@@ -1,17 +1,17 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 module ui.ozone.mojom;
 
-import "mojo/public/mojom/base/file_path.mojom";
-import "skia/public/mojom/skcolor.mojom";
+import "skia/public/mojom/skcolor4f.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "ui/gfx/mojom/accelerated_widget.mojom";
 import "ui/gfx/mojom/buffer_types.mojom";
 import "ui/gfx/mojom/gpu_fence_handle.mojom";
 import "ui/gfx/mojom/presentation_feedback.mojom";
 import "ui/gfx/mojom/swap_result.mojom";
+import "ui/gfx/mojom/frame_data.mojom";
 import "ui/ozone/platform/wayland/mojom/wayland_overlay_config.mojom";
 
 // Used by the GPU for communication with the WaylandBufferManagerHost in
@@ -68,7 +68,7 @@ interface WaylandBufferManagerHost {
   // used to identify imported wl_buffers on the browser process side and map
   // them with the buffer objects on the gpu process side.
   CreateSolidColorBuffer(gfx.mojom.Size size,
-                         skia.mojom.SkColor color,
+                         skia.mojom.SkColor4f color,
                          uint32 buffer_id);
 
   // These two methods are independent from the type of rendering.
@@ -80,10 +80,11 @@ interface WaylandBufferManagerHost {
   DestroyBuffer(uint32 buffer_id);
 
   // Send overlay configurations for a frame to a WaylandWindow with the
-  // following |widget| and |frame_id|.
+  // following |widget|, |frame_id|, and |overlays|.
   CommitOverlays(gfx.mojom.AcceleratedWidget widget,
                  uint32 frame_id,
-                 array<WaylandOverlayConfig> overlays);
+                 gfx.mojom.FrameData data,
+                 array<wl.mojom.WaylandOverlayConfig> overlays);
 };
 
 

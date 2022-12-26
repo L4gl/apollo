@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/web_app_icon_downloader.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
+#include "components/webapps/browser/installable/installable_params.h"
 #include "components/webapps/common/web_page_metadata.mojom-forward.h"
 #include "components/webapps/common/web_page_metadata_agent.mojom-forward.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -70,12 +71,13 @@ class WebAppDataRetriever : content::WebContentsObserver {
   virtual void CheckInstallabilityAndRetrieveManifest(
       content::WebContents* web_contents,
       bool bypass_service_worker_check,
-      CheckInstallabilityCallback callback);
+      CheckInstallabilityCallback callback,
+      absl::optional<webapps::InstallableParams> params = absl::nullopt);
 
   // Downloads icons from |icon_urls|. Runs |callback| with a map of
   // the retrieved icons.
   virtual void GetIcons(content::WebContents* web_contents,
-                        std::vector<GURL> icon_urls,
+                        base::flat_set<GURL> icon_urls,
                         bool skip_page_favicons,
                         GetIconsCallback callback);
 

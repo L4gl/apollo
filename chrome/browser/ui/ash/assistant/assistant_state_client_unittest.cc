@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "chrome/test/base/chrome_ash_test_base.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -30,10 +29,7 @@ class AssistantStateClientTest : public ChromeAshTestBase {
   ~AssistantStateClientTest() override = default;
 
   void SetUp() override {
-    // Need to initialize DBusThreadManager before ArcSessionManager's
-    // constructor calls DBusThreadManager::Get().
-    chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
+    ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
     ChromeAshTestBase::SetUp();
 
     // Setup test profile.
@@ -62,8 +58,7 @@ class AssistantStateClientTest : public ChromeAshTestBase {
     arc_session_manager_->Shutdown();
     arc_session_manager_.reset();
     ChromeAshTestBase::TearDown();
-    chromeos::ConciergeClient::Shutdown();
-    chromeos::DBusThreadManager::Shutdown();
+    ash::ConciergeClient::Shutdown();
   }
 
   AssistantStateClient* assistant_state_client() {

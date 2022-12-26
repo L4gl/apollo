@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,10 @@
 #include "chrome/browser/ash/arc/fileapi/arc_media_view_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
+
+// Enable VLOG level 1.
+#undef ENABLED_VLOG_LEVEL
+#define ENABLED_VLOG_LEVEL 1
 
 using content::BrowserThread;
 
@@ -28,13 +32,15 @@ struct DocumentsProviderSpec {
 // List of documents providers for media views.
 constexpr DocumentsProviderSpec kDocumentsProviderAllowlist[] = {
     {kMediaDocumentsProviderAuthority, kImagesRootDocumentId,
-     kImagesRootDocumentId, true},
+     // All roots are now writable after the introduction of this feature
+     // (b/255697751).
+     kImagesRootDocumentId, /*read_only=*/false},
     {kMediaDocumentsProviderAuthority, kVideosRootDocumentId,
-     kVideosRootDocumentId, true},
+     kVideosRootDocumentId, /*read_only=*/false},
     {kMediaDocumentsProviderAuthority, kAudioRootDocumentId,
-     kAudioRootDocumentId, true},
+     kAudioRootDocumentId, /*read_only=*/false},
     {kMediaDocumentsProviderAuthority, kDocumentsRootDocumentId,
-     kDocumentsRootDocumentId, true},
+     kDocumentsRootDocumentId, /*read_only=*/false},
 };
 
 }  // namespace
@@ -110,7 +116,7 @@ void ArcDocumentsProviderRootMap::RegisterRoot(
   Key key(authority, root_document_id);
   if (map_.find(key) != map_.end()) {
     VLOG(1) << "Trying to register (" << authority << ", " << root_document_id
-            << ") which is already regisered.";
+            << ") which is already registered.";
     return;
   }
   map_.emplace(key, std::make_unique<ArcDocumentsProviderRoot>(

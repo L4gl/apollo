@@ -1,10 +1,12 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CC_PAINT_PAINT_OP_READER_H_
 #define CC_PAINT_PAINT_OP_READER_H_
 
+#include "base/bits.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_filter.h"
@@ -68,6 +70,7 @@ class CC_PAINT_EXPORT PaintOpReader {
   void Read(SkRect* rect);
   void Read(SkIRect* rect);
   void Read(SkRRect* rect);
+  void Read(SkColor4f* color);
 
   void Read(SkPath* path);
   void Read(PaintFlags* flags);
@@ -195,8 +198,9 @@ class CC_PAINT_EXPORT PaintOpReader {
     kSharedImageProviderNoAccess = 50,
     kSharedImageProviderSkImageCreationFailed = 51,
     kZeroSkColorFilterBytes = 52,
+    kInsufficientPixelData = 53,
 
-    kMaxValue = kZeroSkColorFilterBytes,
+    kMaxValue = kInsufficientPixelData
   };
 
   template <typename T>
@@ -295,12 +299,9 @@ class CC_PAINT_EXPORT PaintOpReader {
   void ReadLightingSpotPaintFilter(
       sk_sp<PaintFilter>* filter,
       const absl::optional<PaintFilter::CropRect>& crop_rect);
-  void ReadStretchPaintFilter(
-      sk_sp<PaintFilter>* filter,
-      const absl::optional<PaintFilter::CropRect>& crop_rect);
 
   // Returns the size of the read record, 0 if error.
-  size_t Read(sk_sp<PaintRecord>* record);
+  size_t Read(absl::optional<PaintRecord>* record);
 
   void Read(SkRegion* region);
   uint8_t* CopyScratchSpace(size_t bytes);
@@ -309,7 +310,7 @@ class CC_PAINT_EXPORT PaintOpReader {
   const volatile char* memory_ = nullptr;
   size_t remaining_bytes_ = 0u;
   bool valid_ = true;
-  const PaintOp::DeserializeOptions& options_;
+  const raw_ref<const PaintOp::DeserializeOptions> options_;
 
   // Indicates that the data was serialized with the following constraints:
   // 1) PaintRecords and SkDrawLoopers are ignored.

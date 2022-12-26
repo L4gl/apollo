@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,36 +6,52 @@
  * @fileoverview 'os-settings-add-spellcheck-language-dialog' is a dialog for
  * adding spell check languages.
  */
-import {afterNextRender, flush, html, Polymer, TemplateInstanceBase, Templatizer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import './add_items_dialog.js';
+
+import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {recordSettingChange} from '../metrics_recorder.js';
-import {PrefsBehavior} from '../prefs_behavior.js';
+import {PrefsBehavior, PrefsBehaviorInterface} from '../prefs_behavior.js';
 
 import {Item} from './add_items_dialog.js';
-import {LanguageHelper, LanguagesModel, SpellCheckLanguageState} from './languages_types.js';
+import {getTemplate} from './add_spellcheck_languages_dialog.html.js';
+import {LanguageHelper, LanguagesModel} from './languages_types.js';
 
-Polymer({
-  is: 'os-settings-add-spellcheck-languages-dialog',
+/**
+ * @constructor
+ * @extends {PolymerElement}
+ * @implements {PrefsBehaviorInterface}
+ */
+const OsSettingsAddSpellcheckLanguagesDialogElementBase =
+    mixinBehaviors([PrefsBehavior], PolymerElement);
 
-  _template: html`{__html_template__}`,
+/** @polymer */
+class OsSettingsAddSpellcheckLanguagesDialogElement extends
+    OsSettingsAddSpellcheckLanguagesDialogElementBase {
+  static get is() {
+    return 'os-settings-add-spellcheck-languages-dialog';
+  }
 
-  behaviors: [
-    PrefsBehavior,
-  ],
+  static get template() {
+    return getTemplate();
+  }
 
-  properties: {
-    /* Preferences state. */
-    prefs: {
-      type: Object,
-      notify: true,
-    },
+  static get properties() {
+    return {
+      /* Preferences state. */
+      prefs: {
+        type: Object,
+        notify: true,
+      },
 
-    /** @type {!LanguagesModel|undefined} */
-    languages: Object,
+      /** @type {!LanguagesModel|undefined} */
+      languages: Object,
 
-    /** @type {!LanguageHelper} */
-    languageHelper: Object,
-  },
+      /** @type {!LanguageHelper} */
+      languageHelper: Object,
+    };
+  }
 
   /**
    * Get suggested languages based on enabled languages and input methods.
@@ -51,7 +67,7 @@ Polymer({
     return this.languages.spellCheckOffLanguages
         .map(spellCheckLang => spellCheckLang.language.code)
         .filter(code => languageCodes.has(code));
-  },
+  }
 
   /**
    * Get the list of languages used for the "all languages" section, filtering
@@ -66,11 +82,11 @@ Polymer({
           name: this.getDisplayText_(spellCheckLang.language),
           searchTerms: [
             spellCheckLang.language.displayName,
-            spellCheckLang.language.nativeDisplayName
+            spellCheckLang.language.nativeDisplayName,
           ],
           disabledByPolicy: spellCheckLang.isManaged,
         }));
-  },
+  }
 
   /**
    * @param {!chrome.languageSettingsPrivate.Language} language
@@ -84,7 +100,7 @@ Polymer({
       displayText += ' - ' + language.nativeDisplayName;
     }
     return displayText;
-  },
+  }
 
   /**
    * Add spell check languages.
@@ -96,5 +112,9 @@ Polymer({
       this.languageHelper.toggleSpellCheck(code, true);
     });
     recordSettingChange();
-  },
-});
+  }
+}
+
+customElements.define(
+    OsSettingsAddSpellcheckLanguagesDialogElement.is,
+    OsSettingsAddSpellcheckLanguagesDialogElement);

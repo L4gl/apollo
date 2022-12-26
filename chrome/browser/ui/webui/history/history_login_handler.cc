@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,14 +25,14 @@ HistoryLoginHandler::HistoryLoginHandler(base::RepeatingClosure signin_callback)
 HistoryLoginHandler::~HistoryLoginHandler() {}
 
 void HistoryLoginHandler::RegisterMessages() {
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       "otherDevicesInitialized",
       base::BindRepeating(&HistoryLoginHandler::HandleOtherDevicesInitialized,
                           base::Unretained(this)));
 
-  web_ui()->RegisterDeprecatedMessageCallback(
-      "startSignInFlow",
-      base::BindRepeating(&HistoryLoginHandler::HandleStartSignInFlow,
+  web_ui()->RegisterMessageCallback(
+      "startTurnOnSyncFlow",
+      base::BindRepeating(&HistoryLoginHandler::HandleTurnOnSyncFlow,
                           base::Unretained(this)));
 }
 
@@ -49,7 +49,7 @@ void HistoryLoginHandler::OnJavascriptDisallowed() {
 }
 
 void HistoryLoginHandler::HandleOtherDevicesInitialized(
-    const base::ListValue* /*args*/) {
+    const base::Value::List& /*args*/) {
   AllowJavascript();
 }
 
@@ -61,13 +61,12 @@ void HistoryLoginHandler::ProfileInfoChanged() {
   FireWebUIListener("sign-in-state-changed", base::Value(signed_in));
 }
 
-void HistoryLoginHandler::HandleStartSignInFlow(
-    const base::ListValue* /*args*/) {
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
+void HistoryLoginHandler::HandleTurnOnSyncFlow(
+    const base::Value::List& /*args*/) {
+  Profile* profile = Profile::FromWebUI(web_ui());
   signin_ui_util::EnableSyncFromSingleAccountPromo(
-      browser,
-      IdentityManagerFactory::GetForProfile(browser->profile())
-          ->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin),
+      profile,
+      IdentityManagerFactory::GetForProfile(profile)->GetPrimaryAccountInfo(
+          signin::ConsentLevel::kSignin),
       signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS);
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,21 +65,20 @@ void TableExample::CreateExampleView(View* container) {
                                      MaximumFlexSizeRule::kUnbounded)
                        .WithWeight(1);
 
-  const auto make_checkbox = [](const std::u16string& label, int id,
-                                raw_ptr<TableView>* table,
-                                raw_ptr<Checkbox>* checkbox,
-                                FlexSpecification full_flex) {
-    return Builder<Checkbox>()
-        .CopyAddressTo(checkbox)
-        .SetText(label)
-        .SetCallback(base::BindRepeating(
-            [](int id, raw_ptr<TableView>* table, raw_ptr<Checkbox>* checkbox) {
-              (*table)->SetColumnVisibility(id, (*checkbox)->GetChecked());
-            },
-            id, table, checkbox))
-        .SetChecked(true)
-        .SetProperty(kFlexBehaviorKey, full_flex);
-  };
+  const auto make_checkbox =
+      [](const std::u16string& label, int id, raw_ptr<TableView>* table,
+         raw_ptr<Checkbox>* checkbox, FlexSpecification full_flex) {
+        return Builder<Checkbox>()
+            .CopyAddressTo(checkbox)
+            .SetText(label)
+            .SetCallback(base::BindRepeating(
+                [](int id, TableView* table, Checkbox* checkbox) {
+                  table->SetColumnVisibility(id, checkbox->GetChecked());
+                },
+                id, *table, *checkbox))
+            .SetChecked(true)
+            .SetProperty(kFlexBehaviorKey, full_flex);
+      };
 
   // Make table
   Builder<View>(container)
@@ -111,14 +110,11 @@ void TableExample::CreateExampleView(View* container) {
       .BuildChildren();
 }
 
-int TableExample::RowCount() {
+size_t TableExample::RowCount() {
   return 10;
 }
 
-std::u16string TableExample::GetText(int row, int column_id) {
-  if (row == -1)
-    return std::u16string();
-
+std::u16string TableExample::GetText(size_t row, int column_id) {
   const char* const cells[5][4] = {
       {"Orange", "Orange", "South America", "$5"},
       {"Apple", "Green", "Canada", "$3"},
@@ -129,16 +125,13 @@ std::u16string TableExample::GetText(int row, int column_id) {
   return ASCIIToUTF16(cells[row % 5][column_id]);
 }
 
-ui::ImageModel TableExample::GetIcon(int row) {
+ui::ImageModel TableExample::GetIcon(size_t row) {
   SkBitmap row_icon = row % 2 ? icon1_ : icon2_;
   return ui::ImageModel::FromImageSkia(
       gfx::ImageSkia::CreateFrom1xBitmap(row_icon));
 }
 
-std::u16string TableExample::GetTooltip(int row) {
-  if (row == -1)
-    return std::u16string();
-
+std::u16string TableExample::GetTooltip(size_t row) {
   const char* const tooltips[5] = {
       "Orange - Orange you glad I didn't say banana?",
       "Apple - An apple a day keeps the doctor away",
@@ -151,7 +144,7 @@ std::u16string TableExample::GetTooltip(int row) {
 
 void TableExample::SetObserver(ui::TableModelObserver* observer) {}
 
-void TableExample::GetGroupRange(int model_index, GroupRange* range) {
+void TableExample::GetGroupRange(size_t model_index, GroupRange* range) {
   if (model_index < 2) {
     range->start = 0;
     range->length = 2;
@@ -165,15 +158,11 @@ void TableExample::GetGroupRange(int model_index, GroupRange* range) {
 }
 
 void TableExample::OnSelectionChanged() {
-  PrintStatus("Selected: %s",
-              base::UTF16ToASCII(GetText(table_->selection_model().active(), 0))
-                  .c_str());
+  PrintStatus("Selected: %s", SelectedColumnName().c_str());
 }
 
 void TableExample::OnDoubleClick() {
-  PrintStatus("Double Click: %s",
-              base::UTF16ToASCII(GetText(table_->selection_model().active(), 0))
-                  .c_str());
+  PrintStatus("Double Click: %s", SelectedColumnName().c_str());
 }
 
 void TableExample::OnMiddleClick() {}
@@ -194,6 +183,13 @@ void TableExample::OnViewThemeChanged(View* observed_view) {
 
 void TableExample::OnViewIsDeleting(View* observed_view) {
   observer_.Reset();
+}
+
+std::string TableExample::SelectedColumnName() {
+  return table_->selection_model().active().has_value()
+             ? base::UTF16ToASCII(
+                   GetText(table_->selection_model().active().value(), 0))
+             : std::string("<None>");
 }
 
 }  // namespace views::examples

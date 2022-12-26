@@ -1,18 +1,18 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/arc/input_overlay/actions/input_element.h"
 
-#include <algorithm>
 #include <iterator>
 
+#include "base/containers/contains.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
-namespace arc {
-namespace input_overlay {
+namespace arc::input_overlay {
 
 int ModifierDomCodeToEventFlag(ui::DomCode code) {
   switch (code) {
@@ -97,7 +97,7 @@ std::unique_ptr<InputElement> InputElement::CreateActionMoveKeyElement(
     const std::vector<ui::DomCode>& keys) {
   auto element = std::make_unique<InputElement>();
   element->input_sources_ = InputSource::IS_KEYBOARD;
-  std::copy(keys.begin(), keys.end(), std::back_inserter(element->keys_));
+  base::ranges::copy(keys, std::back_inserter(element->keys_));
   // There are four and only four keys representing move up, left, down and
   // right.
   DCHECK(element->keys_.size() == kActionMoveKeysSize);
@@ -161,7 +161,7 @@ bool InputElement::IsOverlapped(const InputElement& input_element) const {
   }
   if (input_sources_ == InputSource::IS_KEYBOARD) {
     for (auto key : input_element.keys()) {
-      if (std::find(keys_.begin(), keys_.end(), key) != keys_.end())
+      if (base::Contains(keys_, key))
         return true;
     }
     return false;
@@ -169,7 +169,7 @@ bool InputElement::IsOverlapped(const InputElement& input_element) const {
   return mouse_action_ == input_element.mouse_action();
 }
 
-void InputElement::SetKey(int index, ui::DomCode code) {
+void InputElement::SetKey(size_t index, ui::DomCode code) {
   DCHECK(index < keys_.size());
   if (index >= keys_.size())
     return;
@@ -178,7 +178,12 @@ void InputElement::SetKey(int index, ui::DomCode code) {
 
 void InputElement::SetKeys(std::vector<ui::DomCode>& keys) {
   keys_.clear();
-  std::copy(keys.begin(), keys.end(), std::back_inserter(keys_));
+  base::ranges::copy(keys, std::back_inserter(keys_));
+}
+
+int InputElement::GetIndexOfKey(ui::DomCode key) const {
+  auto it = base::ranges::find(keys_, key);
+  return it == keys_.end() ? -1 : it - keys_.begin();
 }
 
 std::unique_ptr<InputElementProto> InputElement::ConvertToProto() {
@@ -201,5 +206,8 @@ bool InputElement::operator==(const InputElement& other) const {
   return equal;
 }
 
-}  // namespace input_overlay
-}  // namespace arc
+bool InputElement::operator!=(const InputElement& other) const {
+  return !(*this == other);
+}
+
+}  // namespace arc::input_overlay

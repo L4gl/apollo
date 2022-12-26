@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,13 +29,8 @@ class X11Extension;
 
 namespace views {
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-class WindowEventFilterLacros;
-using WindowEventFilterClass = WindowEventFilterLacros;
-#else
 class WindowEventFilterLinux;
 using WindowEventFilterClass = WindowEventFilterLinux;
-#endif
 
 // Contains Linux specific implementation, which supports both X11 and Wayland
 // backend.
@@ -73,21 +68,22 @@ class VIEWS_EXPORT DesktopWindowTreeHostLinux
       Widget::MoveLoopEscapeBehavior escape_behavior) override;
 
   // PlatformWindowDelegate:
-#if !BUILDFLAG(IS_CHROMEOS_LACROS)
   void DispatchEvent(ui::Event* event) override;
-#endif
   void OnClosed() override;
 
   ui::X11Extension* GetX11Extension();
   const ui::X11Extension* GetX11Extension() const;
 
- private:
-  FRIEND_TEST_ALL_PREFIXES(DesktopWindowTreeHostPlatformImplTest, HitTest);
-
-  // DesktopWindowTreeHostPlatform overrides:
+  // DesktopWindowTreeHostPlatform:
   void AddAdditionalInitProperties(
       const Widget::InitParams& params,
       ui::PlatformWindowInitProperties* properties) override;
+
+ private:
+  FRIEND_TEST_ALL_PREFIXES(DesktopWindowTreeHostPlatformImplTestWithTouch,
+                           HitTest);
+
+  // DesktopWindowTreeHostPlatform:
   base::flat_map<std::string, std::string> GetKeyboardLayoutMap() override;
 
   // Called back by compositor_observer_ if the latter is set.

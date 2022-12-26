@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,11 +80,6 @@ class SyncApiComponentFactoryImpl : public syncer::SyncApiComponentFactory {
   void ClearAllTransportData() override;
 
  private:
-  // Factory function for ModelTypeController instances for models living on
-  // |ui_thread_|.
-  std::unique_ptr<syncer::ModelTypeController>
-  CreateModelTypeControllerForModelRunningOnUIThread(syncer::ModelType type);
-
   // Factory function for ModelTypeControllerDelegate instances for models
   // living in |ui_thread_| that have their delegate accessible via SyncClient.
   std::unique_ptr<syncer::ModelTypeControllerDelegate>

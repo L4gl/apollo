@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -443,14 +443,14 @@ namespace declarativeNetRequest {
 
     // The unique identifier for the frame's document, if this request is for a
     // frame.
-    [nodoc] DOMString? documentId;
+    DOMString? documentId;
 
     // The type of the frame, if this request is for a frame.
-    [nodoc] extensionTypes.FrameType? frameType;
+    extensionTypes.FrameType? frameType;
 
     // The lifecycle of the frame's document, if this request is for a
     // frame.
-    [nodoc] extensionTypes.DocumentLifecycle? documentLifecycle;
+    extensionTypes.DocumentLifecycle? documentLifecycle;
 
     // ID of frame that wraps the frame which sent the request. Set to -1 if no
     // parent frame exists.
@@ -458,7 +458,7 @@ namespace declarativeNetRequest {
 
     // The unique identifier for the frame's parent document, if this request
     // is for a frame and has a parent.
-    [nodoc] DOMString? parentDocumentId;
+    DOMString? parentDocumentId;
 
     // The ID of the tab in which the request takes place. Set to -1 if the
     // request isn't related to a tab.
@@ -681,7 +681,8 @@ namespace declarativeNetRequest {
         IsRegexSupportedCallback callback);
 
     // Returns the number of static rules an extension can enable before the
-    // <a href="#global-rule-limit">global static rule limit</a> is reached.
+    // <a href="#global-static-rule-limit">global static rule limit</a> is
+    // reached.
     [supportsPromises] static void getAvailableStaticRuleCount(
         GetAvailableStaticRuleCountCallback callback);
 
@@ -699,7 +700,7 @@ namespace declarativeNetRequest {
   interface Properties {
     // The minimum number of static rules guaranteed to an extension across its
     // enabled static rulesets. Any rules above this limit will count towards
-    // the <a href="#global-rule-limit">global rule limit</a>.
+    // the <a href="#global-static-rule-limit">global static rule limit</a>.
     [value=30000] static long GUARANTEED_MINIMUM_STATIC_RULES();
 
     // The maximum number of dynamic rules that an extension can add.

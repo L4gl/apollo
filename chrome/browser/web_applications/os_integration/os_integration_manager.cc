@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,23 +8,34 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
+#include "base/barrier_callback.h"
+#include "base/barrier_closure.h"
 #include "base/callback.h"
-#include "base/callback_forward.h"
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/os_integration/os_integration_sub_manager.h"
+#include "chrome/browser/web_applications/os_integration/protocol_handling_sub_manager.h"
+#include "chrome/browser/web_applications/os_integration/run_on_os_login_sub_manager.h"
+#include "chrome/browser/web_applications/os_integration/shortcut_handling_sub_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut.h"
 #include "chrome/browser/web_applications/os_integration/web_app_uninstallation_via_os_settings_registration.h"
+#include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/browser_thread.h"
@@ -43,6 +54,30 @@ bool g_suppress_os_hooks_for_testing_ = false;
 }  // namespace
 
 namespace web_app {
+
+namespace {
+
+bool AreOsIntegrationSubManagersEnabled() {
+  return base::FeatureList::IsEnabled(features::kOsIntegrationSubManagers);
+}
+
+bool AreSubManagersExecuteEnabled() {
+  if (!AreOsIntegrationSubManagersEnabled())
+    return false;
+  return (features::kOsIntegrationSubManagersStageParam.Get() ==
+          features::OsIntegrationSubManagersStage::kExecuteAndWriteConfig);
+}
+
+OsHooksErrors GetFinalErrorBitsetFromCollection(
+    std::vector<OsHooksErrors> os_hooks_errors) {
+  OsHooksErrors final_errors;
+  for (const OsHooksErrors& error : os_hooks_errors) {
+    final_errors = final_errors | error;
+  }
+  return final_errors;
+}
+
+}  // namespace
 
 OsIntegrationManager::ScopedSuppressForTesting::ScopedSuppressForTesting()
     :
@@ -81,7 +116,7 @@ class OsIntegrationManager::OsHooksBarrier
 
   ~OsHooksBarrier() {
     DCHECK(callback_);
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback_), std::move(errors_)));
   }
 
@@ -114,6 +149,26 @@ OsIntegrationManager::OsIntegrationManager(
 
 OsIntegrationManager::~OsIntegrationManager() = default;
 
+// static
+base::RepeatingCallback<void(OsHooksErrors)>
+OsIntegrationManager::GetBarrierForSynchronize(
+    AnyOsHooksErrorCallback errors_callback) {
+  // There are always 2 barriers, one for the normal OS Hook call and one for
+  // Synchronize().
+  int num_barriers = 2;
+
+  auto barrier_callback_for_synchronize = base::BarrierCallback<OsHooksErrors>(
+      num_barriers,
+      base::BindOnce(
+          [](AnyOsHooksErrorCallback callback,
+             std::vector<OsHooksErrors> combined_errors) {
+            std::move(callback).Run(
+                GetFinalErrorBitsetFromCollection(combined_errors));
+          },
+          std::move(errors_callback)));
+  return barrier_callback_for_synchronize;
+}
+
 void OsIntegrationManager::SetSubsystems(WebAppSyncBridge* sync_bridge,
                                          WebAppRegistrar* registrar,
                                          WebAppUiManager* ui_manager,
@@ -129,6 +184,18 @@ void OsIntegrationManager::SetSubsystems(WebAppSyncBridge* sync_bridge,
     protocol_handler_manager_->SetSubsystems(registrar);
   if (url_handler_manager_)
     url_handler_manager_->SetSubsystems(registrar);
+
+  sub_managers_.clear();
+  auto shortcut_handling_sub_manager =
+      std::make_unique<ShortcutHandlingSubManager>(*icon_manager, *registrar);
+  auto protocol_handling_sub_manager =
+      std::make_unique<ProtocolHandlingSubManager>(*registrar);
+
+  auto run_on_os_login_sub_manager =
+      std::make_unique<RunOnOsLoginSubManager>(*registrar);
+  sub_managers_.push_back(std::move(shortcut_handling_sub_manager));
+  sub_managers_.push_back(std::move(protocol_handling_sub_manager));
+  sub_managers_.push_back(std::move(run_on_os_login_sub_manager));
 }
 
 void OsIntegrationManager::Start() {
@@ -136,23 +203,55 @@ void OsIntegrationManager::Start() {
   DCHECK(file_handler_manager_);
 
   registrar_observation_.Observe(registrar_.get());
-
-#if BUILDFLAG(IS_MAC)
-  // Ensure that all installed apps are included in the AppShimRegistry when the
-  // profile is loaded. This is redundant, because apps are registered when they
-  // are installed. It is necessary, however, because app registration was added
-  // long after app installation launched. This should be removed after shipping
-  // for a few versions (whereupon it may be assumed that most applications have
-  // been registered).
-  std::vector<AppId> app_ids = registrar_->GetAppIds();
-  for (const auto& app_id : app_ids) {
-    AppShimRegistry::Get()->OnAppInstalledForProfile(app_id,
-                                                     profile_->GetPath());
-  }
-#endif
+  shortcut_manager_->Start();
   file_handler_manager_->Start();
   if (protocol_handler_manager_)
     protocol_handler_manager_->Start();
+
+  // Start all sub managers that need to be started.
+  for (const auto& sub_manager : sub_managers_) {
+    sub_manager->Start();
+  }
+}
+
+void OsIntegrationManager::Synchronize(const AppId& app_id,
+                                       base::OnceClosure callback) {
+  if (!AreOsIntegrationSubManagersEnabled()) {
+    std::move(callback).Run();
+    return;
+  }
+
+  if (!registrar_->GetAppById(app_id)) {
+    std::move(callback).Run();
+    return;
+  }
+
+  std::unique_ptr<proto::WebAppOsIntegrationState> desired_states =
+      std::make_unique<proto::WebAppOsIntegrationState>();
+  proto::WebAppOsIntegrationState* desired_states_ptr = desired_states.get();
+
+  base::RepeatingClosure configure_barrier;
+  if (AreSubManagersExecuteEnabled()) {
+    configure_barrier = base::BarrierClosure(
+        sub_managers_.size(),
+        base::BindOnce(
+            &OsIntegrationManager::ExecuteAllSubManagerConfigurations,
+            weak_ptr_factory_.GetWeakPtr(), app_id, std::move(desired_states),
+            std::move(callback)));
+  } else {
+    configure_barrier = base::BarrierClosure(
+        sub_managers_.size(),
+        base::BindOnce(&OsIntegrationManager::WriteStateToDB,
+                       weak_ptr_factory_.GetWeakPtr(), app_id,
+                       std::move(desired_states), std::move(callback)));
+  }
+
+  for (const auto& sub_manager : sub_managers_) {
+    // This dereference is safe because the barrier closure guarantees that it
+    // will not be called until `configure_barrier` is called from each sub-
+    // manager.
+    sub_manager->Configure(app_id, *desired_states_ptr, configure_barrier);
+  }
 }
 
 void OsIntegrationManager::InstallOsHooks(
@@ -162,7 +261,7 @@ void OsIntegrationManager::InstallOsHooks(
     InstallOsHooksOptions options) {
   if (g_suppress_os_hooks_for_testing_) {
     OsHooksErrors os_hooks_errors;
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), os_hooks_errors));
     return;
   }
@@ -193,10 +292,10 @@ void OsIntegrationManager::InstallOsHooks(
   // TODO(ortuno): Make adding a shortcut to the applications menu independent
   // from adding a shortcut to desktop.
   if (options.os_hooks[OsHookType::kShortcuts]) {
-    CreateShortcuts(app_id, options.add_to_desktop,
+    CreateShortcuts(app_id, options.add_to_desktop, options.reason,
                     std::move(shortcuts_callback));
   } else {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(shortcuts_callback),
                                   /*shortcuts_created=*/false));
   }
@@ -215,7 +314,7 @@ void OsIntegrationManager::UninstallOsHooks(const AppId& app_id,
                                             UninstallOsHooksCallback callback) {
   if (g_suppress_os_hooks_for_testing_) {
     OsHooksErrors os_hooks_errors;
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), os_hooks_errors));
     return;
   }
@@ -225,28 +324,27 @@ void OsIntegrationManager::UninstallOsHooks(const AppId& app_id,
       os_hooks_errors, std::move(callback));
 
   if (os_hooks[OsHookType::kShortcutsMenu]) {
-    bool success = UnregisterShortcutsMenu(app_id);
+    bool success = UnregisterShortcutsMenu(
+        app_id,
+        barrier->CreateBarrierCallbackForType(OsHookType::kShortcutsMenu));
     if (!success)
       barrier->OnError(OsHookType::kShortcutsMenu);
   }
 
-  if (os_hooks[OsHookType::kShortcuts] || os_hooks[OsHookType::kRunOnOsLogin]) {
+  if (os_hooks[OsHookType::kRunOnOsLogin] &&
+      base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin)) {
+    UnregisterRunOnOsLogin(app_id, barrier->CreateBarrierCallbackForType(
+                                       OsHookType::kRunOnOsLogin));
+  }
+
+  if (os_hooks[OsHookType::kShortcuts]) {
     std::unique_ptr<ShortcutInfo> shortcut_info = BuildShortcutInfo(app_id);
     base::FilePath shortcut_data_dir =
         internals::GetShortcutDataDir(*shortcut_info);
 
-    if (os_hooks[OsHookType::kRunOnOsLogin] &&
-        base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin)) {
-      UnregisterRunOnOsLogin(
-          app_id, shortcut_info->profile_path, shortcut_info->title,
-          barrier->CreateBarrierCallbackForType(OsHookType::kRunOnOsLogin));
-    }
-
-    if (os_hooks[OsHookType::kShortcuts]) {
-      DeleteShortcuts(
-          app_id, shortcut_data_dir, std::move(shortcut_info),
-          barrier->CreateBarrierCallbackForType(OsHookType::kShortcuts));
-    }
+    DeleteShortcuts(
+        app_id, shortcut_data_dir, std::move(shortcut_info),
+        barrier->CreateBarrierCallbackForType(OsHookType::kShortcuts));
   }
   // unregistration and record errors during unregistration.
   if (os_hooks[OsHookType::kFileHandlers]) {
@@ -276,7 +374,7 @@ void OsIntegrationManager::UpdateOsHooks(
     UpdateOsHooksCallback callback) {
   if (g_suppress_os_hooks_for_testing_) {
     OsHooksErrors os_hooks_errors;
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), os_hooks_errors));
     return;
   }
@@ -290,9 +388,10 @@ void OsIntegrationManager::UpdateOsHooks(
                          OsHookType::kFileHandlers)));
   UpdateShortcuts(app_id, old_name,
                   base::BindOnce(barrier->CreateBarrierCallbackForType(
-                                     OsHookType::kShortcuts),
-                                 Result::kOk));
-  UpdateShortcutsMenu(app_id, web_app_info);
+                      OsHookType::kShortcuts)));
+  UpdateShortcutsMenu(app_id, web_app_info,
+                      base::BindOnce(barrier->CreateBarrierCallbackForType(
+                          OsHookType::kShortcutsMenu)));
   UpdateUrlHandlers(
       app_id,
       base::BindOnce(
@@ -367,6 +466,11 @@ OsIntegrationManager::GetDisallowedHandlersForProtocol(
   return protocol_handler_manager_->GetDisallowedHandlersForProtocol(protocol);
 }
 
+WebAppShortcutManager& OsIntegrationManager::shortcut_manager_for_testing() {
+  DCHECK(shortcut_manager_);
+  return *shortcut_manager_;
+}
+
 UrlHandlerManager& OsIntegrationManager::url_handler_manager_for_testing() {
   DCHECK(url_handler_manager_);
   return *url_handler_manager_;
@@ -384,9 +488,10 @@ FakeOsIntegrationManager* OsIntegrationManager::AsTestOsIntegrationManager() {
 
 void OsIntegrationManager::CreateShortcuts(const AppId& app_id,
                                            bool add_to_desktop,
+                                           ShortcutCreationReason reason,
                                            CreateShortcutsCallback callback) {
   if (shortcut_manager_->CanCreateShortcuts()) {
-    shortcut_manager_->CreateShortcuts(app_id, add_to_desktop,
+    shortcut_manager_->CreateShortcuts(app_id, add_to_desktop, reason,
                                        std::move(callback));
   } else {
     std::move(callback).Run(false);
@@ -396,11 +501,15 @@ void OsIntegrationManager::CreateShortcuts(const AppId& app_id,
 void OsIntegrationManager::RegisterFileHandlers(const AppId& app_id,
                                                 ResultCallback callback) {
   DCHECK(file_handler_manager_);
-  file_handler_manager_->EnableAndRegisterOsFileHandlers(app_id);
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.FileHandlersRegistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
 
-  // TODO(crbug.com/1087219): callback should be run after all hooks are
-  // deployed, need to refactor filehandler to allow this.
-  std::move(callback).Run(Result::kOk);
+  file_handler_manager_->EnableAndRegisterOsFileHandlers(
+      app_id, std::move(metrics_callback));
 }
 
 void OsIntegrationManager::RegisterProtocolHandlers(const AppId& app_id,
@@ -444,13 +553,17 @@ void OsIntegrationManager::RegisterShortcutsMenu(
     return;
   }
 
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.ShortcutsMenuRegistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
+
   DCHECK(shortcut_manager_);
   shortcut_manager_->RegisterShortcutsMenuWithOs(
-      app_id, shortcuts_menu_item_infos, shortcuts_menu_icon_bitmaps);
-
-  // TODO(https://crbug.com/1098471): fix RegisterShortcutsMenuWithOs to
-  // take callback.
-  std::move(callback).Run(Result::kOk);
+      app_id, shortcuts_menu_item_infos, shortcuts_menu_icon_bitmaps,
+      std::move(metrics_callback));
 }
 
 void OsIntegrationManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
@@ -461,8 +574,15 @@ void OsIntegrationManager::ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
     return;
   }
 
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.ShortcutsMenuRegistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
+
   shortcut_manager_->ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
-      app_id, std::move(callback));
+      app_id, std::move(metrics_callback));
 }
 
 void OsIntegrationManager::RegisterRunOnOsLogin(const AppId& app_id,
@@ -496,19 +616,30 @@ void OsIntegrationManager::RegisterWebAppOsUninstallation(
   }
 }
 
-bool OsIntegrationManager::UnregisterShortcutsMenu(const AppId& app_id) {
-  if (!ShouldRegisterShortcutsMenuWithOs())
+bool OsIntegrationManager::UnregisterShortcutsMenu(const AppId& app_id,
+                                                   ResultCallback callback) {
+  if (!ShouldRegisterShortcutsMenuWithOs()) {
+    std::move(callback).Run(Result::kOk);
     return true;
-  return UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath());
+  }
+
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.ShortcutsMenuUnregistered.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
+
+  return UnregisterShortcutsMenuWithOs(app_id, profile_->GetPath(),
+                                       std::move(metrics_callback));
 }
 
-void OsIntegrationManager::UnregisterRunOnOsLogin(
-    const AppId& app_id,
-    const base::FilePath& profile_path,
-    const std::u16string& shortcut_title,
-    ResultCallback callback) {
-  ScheduleUnregisterRunOnOsLogin(sync_bridge_, app_id, profile_path,
-                                 shortcut_title, std::move(callback));
+void OsIntegrationManager::UnregisterRunOnOsLogin(const AppId& app_id,
+                                                  ResultCallback callback) {
+  ScheduleUnregisterRunOnOsLogin(
+      sync_bridge_, app_id, profile_->GetPath(),
+      base::UTF8ToUTF16(registrar_->GetAppShortName(app_id)),
+      std::move(callback));
 }
 
 void OsIntegrationManager::DeleteShortcuts(
@@ -532,9 +663,14 @@ void OsIntegrationManager::DeleteShortcuts(
 void OsIntegrationManager::UnregisterFileHandlers(const AppId& app_id,
                                                   ResultCallback callback) {
   DCHECK(file_handler_manager_);
-
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.FileHandlersUnregistration.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
   file_handler_manager_->DisableAndUnregisterOsFileHandlers(
-      app_id, std::move(callback));
+      app_id, std::move(metrics_callback));
 }
 
 void OsIntegrationManager::UnregisterProtocolHandlers(const AppId& app_id,
@@ -573,21 +709,34 @@ void OsIntegrationManager::UnregisterWebAppOsUninstallation(
 
 void OsIntegrationManager::UpdateShortcuts(const AppId& app_id,
                                            base::StringPiece old_name,
-                                           base::OnceClosure callback) {
+                                           ResultCallback callback) {
   DCHECK(shortcut_manager_);
-  shortcut_manager_->UpdateShortcuts(app_id, old_name, std::move(callback));
+  if (!shortcut_manager_->CanCreateShortcuts()) {
+    std::move(callback).Run(Result::kOk);
+    return;
+  }
+
+  ResultCallback metrics_callback =
+      base::BindOnce([](Result result) {
+        base::UmaHistogramBoolean("WebApp.Shortcuts.Update.Result",
+                                  (result == Result::kOk));
+        return result;
+      }).Then(std::move(callback));
+
+  shortcut_manager_->UpdateShortcuts(app_id, old_name,
+                                     std::move(metrics_callback));
 }
 
 void OsIntegrationManager::UpdateShortcutsMenu(
     const AppId& app_id,
-    const WebAppInstallInfo& web_app_info) {
-  DCHECK(shortcut_manager_);
+    const WebAppInstallInfo& web_app_info,
+    ResultCallback callback) {
   if (web_app_info.shortcuts_menu_item_infos.empty()) {
-    shortcut_manager_->UnregisterShortcutsMenuWithOs(app_id);
+    UnregisterShortcutsMenu(app_id, std::move(callback));
   } else {
-    shortcut_manager_->RegisterShortcutsMenuWithOs(
-        app_id, web_app_info.shortcuts_menu_item_infos,
-        web_app_info.shortcuts_menu_icon_bitmaps);
+    RegisterShortcutsMenu(app_id, web_app_info.shortcuts_menu_item_infos,
+                          web_app_info.shortcuts_menu_icon_bitmaps,
+                          std::move(callback));
   }
 }
 
@@ -621,9 +770,6 @@ void OsIntegrationManager::UpdateFileHandlers(
         [](base::WeakPtr<OsIntegrationManager> os_integration_manager,
            const AppId& app_id, ResultCallback finished_callback,
            Result result) {
-          // Re-register file handlers regardless of `result`.
-          // TODO(https://crbug.com/1124047): Report `result` in
-          // an UMA metric.
           if (!os_integration_manager) {
             std::move(finished_callback).Run(Result::kError);
             return;
@@ -672,7 +818,8 @@ void OsIntegrationManager::UpdateProtocolHandlers(
   // `UpdateOSHooks`, which also recreates the shortcuts, only do it if
   // required.
   if (force_shortcut_updates_if_needed) {
-    UpdateShortcuts(app_id, "", std::move(shortcuts_callback));
+    UpdateShortcuts(app_id, "",
+                    base::IgnoreArgs<Result>(std::move(shortcuts_callback)));
     return;
   }
 #endif
@@ -717,10 +864,66 @@ void OsIntegrationManager::OnWebAppProfileWillBeDeleted(const AppId& app_id) {
   UninstallAllOsHooks(app_id, base::DoNothing());
 }
 
+void OsIntegrationManager::OnAppRegistrarDestroyed() {
+  registrar_observation_.Reset();
+}
+
 std::unique_ptr<ShortcutInfo> OsIntegrationManager::BuildShortcutInfo(
     const AppId& app_id) {
   DCHECK(shortcut_manager_);
   return shortcut_manager_->BuildShortcutInfo(app_id);
+}
+
+void OsIntegrationManager::ExecuteAllSubManagerConfigurations(
+    const AppId& app_id,
+    std::unique_ptr<proto::WebAppOsIntegrationState> desired_states,
+    base::OnceClosure callback) {
+  // This can never be a use-case where we execute OS integration registration/
+  // unregistration but do not update the WebAppOsIntegrationState proto in the
+  // web_app DB.
+  DCHECK(AreOsIntegrationSubManagersEnabled());
+
+  const WebApp* web_app = registrar_->GetAppById(app_id);
+  if (!web_app) {
+    std::move(callback).Run();
+    return;
+  }
+
+  proto::WebAppOsIntegrationState* desired_states_ptr = desired_states.get();
+  auto write_state_callback = base::BarrierClosure(
+      sub_managers_.size(),
+      base::BindOnce(&OsIntegrationManager::WriteStateToDB,
+                     weak_ptr_factory_.GetWeakPtr(), app_id,
+                     std::move(desired_states), std::move(callback)));
+
+  const absl::optional<proto::WebAppOsIntegrationState> current_state =
+      web_app->current_os_integration_states();
+
+  for (const auto& sub_manager : sub_managers_) {
+    sub_manager->Execute(app_id, *desired_states_ptr, current_state,
+                         write_state_callback);
+  }
+}
+
+void OsIntegrationManager::WriteStateToDB(
+    const AppId& app_id,
+    std::unique_ptr<proto::WebAppOsIntegrationState> desired_states,
+    base::OnceClosure callback) {
+  // Exit early if the app is scheduled to be uninstalled or is already
+  // uninstalled.
+  const WebApp* existing_app = registrar_->GetAppById(app_id);
+  if (!existing_app || existing_app->is_uninstalling()) {
+    std::move(callback).Run();
+    return;
+  }
+
+  {
+    ScopedRegistryUpdate update(sync_bridge_);
+    WebApp* web_app = update->UpdateApp(app_id);
+    web_app->SetCurrentOsIntegrationStates(*desired_states.get());
+  }
+
+  std::move(callback).Run();
 }
 
 void OsIntegrationManager::OnShortcutsCreated(
@@ -780,9 +983,7 @@ void OsIntegrationManager::OnShortcutsCreated(
                                      OsHookType::kRunOnOsLogin));
   }
 
-  if (options.os_hooks[OsHookType::kUninstallationViaOsSettings] &&
-      base::FeatureList::IsEnabled(
-          features::kEnableWebAppUninstallFromOsSettings)) {
+  if (options.os_hooks[OsHookType::kUninstallationViaOsSettings]) {
     RegisterWebAppOsUninstallation(
         app_id, registrar_ ? registrar_->GetAppShortName(app_id) : "");
   }

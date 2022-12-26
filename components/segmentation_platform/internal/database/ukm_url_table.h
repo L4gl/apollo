@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,8 +24,11 @@ class UkmUrlTable {
   explicit UkmUrlTable(sql::Database* db);
   ~UkmUrlTable();
 
-  UkmUrlTable(UkmUrlTable&) = delete;
-  UkmUrlTable& operator=(UkmUrlTable&) = delete;
+  UkmUrlTable(const UkmUrlTable&) = delete;
+  UkmUrlTable& operator=(const UkmUrlTable&) = delete;
+
+  // Converts the given GURL to string.
+  static std::string GetDatabaseUrlString(const GURL& url);
 
   // Returns an ID for the URL. The ID will be a persistent hash of the `url`.
   static UrlId GenerateUrlId(const GURL& url);

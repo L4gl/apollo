@@ -41,12 +41,12 @@ DocumentLoadTiming::DocumentLoadTiming(DocumentLoader& document_loader)
     : user_timing_mark_fully_loaded_(absl::nullopt),
       user_timing_mark_fully_visible_(absl::nullopt),
       user_timing_mark_interactive_(absl::nullopt),
-      redirect_count_(0),
-      has_cross_origin_redirect_(false),
-      can_request_from_previous_document_(false),
       clock_(base::DefaultClock::GetInstance()),
       tick_clock_(base::DefaultTickClock::GetInstance()),
-      document_loader_(document_loader) {}
+      document_loader_(document_loader),
+      redirect_count_(0),
+      has_cross_origin_redirect_(false),
+      can_request_from_previous_document_(false) {}
 
 void DocumentLoadTiming::Trace(Visitor* visitor) const {
   visitor->Trace(document_loader_);
@@ -154,7 +154,7 @@ void DocumentLoadTiming::SetNavigationStart(base::TimeTicks navigation_start) {
   NotifyDocumentTimingChanged();
 }
 
-void DocumentLoadTiming::MarkBackForwardCacheRestoreNavigationStart(
+void DocumentLoadTiming::SetBackForwardCacheRestoreNavigationStart(
     base::TimeTicks navigation_start) {
   bfcache_restore_navigation_starts_.push_back(navigation_start);
   NotifyDocumentTimingChanged();
@@ -214,7 +214,7 @@ void DocumentLoadTiming::SetRedirectEnd(base::TimeTicks redirect_end) {
   NotifyDocumentTimingChanged();
 }
 
-void DocumentLoadTiming::MarkUnloadEventStart(base::TimeTicks start_time) {
+void DocumentLoadTiming::SetUnloadEventStart(base::TimeTicks start_time) {
   unload_event_start_ = start_time;
   TRACE_EVENT_MARK_WITH_TIMESTAMP1("blink.user_timing", "unloadEventStart",
                                    start_time, "frame",
@@ -222,7 +222,7 @@ void DocumentLoadTiming::MarkUnloadEventStart(base::TimeTicks start_time) {
   NotifyDocumentTimingChanged();
 }
 
-void DocumentLoadTiming::MarkUnloadEventEnd(base::TimeTicks end_time) {
+void DocumentLoadTiming::SetUnloadEventEnd(base::TimeTicks end_time) {
   unload_event_end_ = end_time;
   TRACE_EVENT_MARK_WITH_TIMESTAMP1("blink.user_timing", "unloadEventEnd",
                                    end_time, "frame", ToTraceValue(GetFrame()));
@@ -281,7 +281,7 @@ void DocumentLoadTiming::MarkCommitNavigationEnd() {
   NotifyDocumentTimingChanged();
 }
 
-void DocumentLoadTiming::MarkActivationStart(base::TimeTicks activation_start) {
+void DocumentLoadTiming::SetActivationStart(base::TimeTicks activation_start) {
   activation_start_ = activation_start;
   TRACE_EVENT_MARK_WITH_TIMESTAMP1("blink.user_timing", "activationtart",
                                    activation_start, "frame",

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,10 +26,6 @@ class SavedDeskNameView : public DesksTextfield {
 
   static constexpr int kSavedDeskNameViewHeight = 20;
 
-  // Commits an on-going name change (if any) by bluring the focus away from any
-  // view on `widget`, where `widget` should be the saved desk library widget.
-  static void CommitChanges(views::Widget* widget);
-
   const absl::optional<std::u16string> temporary_name() const {
     return temporary_name_;
   }
@@ -49,11 +45,6 @@ class SavedDeskNameView : public DesksTextfield {
   void OnGestureEvent(ui::GestureEvent* event) override;
 
  private:
-  // Gets the available width for `this`. It is the largest width `this` can be
-  // based on the parent's and visible sibling's preferred sizes. Will always
-  // return a value greater than or equal to one.
-  int GetAvailableWidth() const;
-
   // Store the modified text view name if name nudge is removed.
   absl::optional<std::u16string> temporary_name_;
 };

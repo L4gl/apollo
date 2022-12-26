@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,9 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForPrintManagementApp() {
   info->title = l10n_util::GetStringUTF16(IDS_PRINT_MANAGEMENT_TITLE);
   web_app::CreateIconInfoForSystemWebApp(
       info->start_url,
-      {{"print_management_192.png", 192, IDR_PRINT_MANAGEMENT_ICON}}, *info);
+      {{"print_management_192.png", 192,
+        IDR_ASH_PRINT_MANAGEMENT_PRINT_MANAGEMENT_192_PNG}},
+      *info);
   info->theme_color =
       web_app::GetDefaultBackgroundColor(/*use_dark_mode=*/false);
   info->dark_mode_theme_color =
@@ -39,10 +41,10 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForPrintManagementApp() {
 
 PrintManagementSystemAppDelegate::PrintManagementSystemAppDelegate(
     Profile* profile)
-    : web_app::SystemWebAppDelegate(web_app::SystemAppType::PRINT_MANAGEMENT,
-                                    "PrintManagement",
-                                    GURL("chrome://print-management/pwa.html"),
-                                    profile) {}
+    : ash::SystemWebAppDelegate(ash::SystemWebAppType::PRINT_MANAGEMENT,
+                                "PrintManagement",
+                                GURL("chrome://print-management/pwa.html"),
+                                profile) {}
 
 std::unique_ptr<WebAppInstallInfo>
 PrintManagementSystemAppDelegate::GetWebAppInfo() const {
@@ -50,7 +52,7 @@ PrintManagementSystemAppDelegate::GetWebAppInfo() const {
 }
 
 bool PrintManagementSystemAppDelegate::ShouldShowInLauncher() const {
-  return false;
+  return true;
 }
 gfx::Size PrintManagementSystemAppDelegate::GetMinimumWindowSize() const {
   return {600, 320};

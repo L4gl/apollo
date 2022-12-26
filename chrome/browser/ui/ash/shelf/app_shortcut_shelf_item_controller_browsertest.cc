@@ -1,28 +1,28 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/ash/shelf/app_shortcut_shelf_item_controller.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "base/callback_helpers.h"
-#include "base/test/scoped_feature_list.h"
-#include "chrome/browser/ash/crostini/crostini_terminal.h"
+#include "chrome/browser/ash/crostini/crostini_util.h"
+#include "chrome/browser/ash/guest_os/guest_os_terminal.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller_util.h"
+#include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
 
 namespace {
@@ -60,28 +60,24 @@ class Waiter : public BrowserListObserver {
 // which allows us to test app menu with either windows or tabs (shift click).
 class AppShortcutShelfItemControllerBrowserTest : public InProcessBrowserTest {
  protected:
-  AppShortcutShelfItemControllerBrowserTest() {
-    features_.InitWithFeatures({ash::features::kTerminalSSH}, {});
-  }
-
   void SetUpOnMainThread() override {
     controller_ = ChromeShelfController::instance();
     ASSERT_TRUE(controller_);
   }
 
   void InstallApp() {
-    web_app::WebAppProvider::GetForTest(browser()->profile())
-        ->system_web_app_manager()
-        .InstallSystemAppsForTesting();
+    ash::SystemWebAppManager::GetForTest(browser()->profile())
+        ->InstallSystemAppsForTesting();
 
-    app_id_ = *web_app::GetAppIdForSystemWebApp(
-        browser()->profile(), web_app::SystemAppType::TERMINAL);
+    app_id_ = *ash::GetAppIdForSystemWebApp(browser()->profile(),
+                                            ash::SystemWebAppType::TERMINAL);
     app_shelf_id_ = ash::ShelfID(app_id_);
     PinAppWithIDToShelf(app_id_);
   }
 
   Browser* LaunchApp() {
-    crostini::LaunchTerminal(browser()->profile());
+    guest_os::LaunchTerminal(browser()->profile(), display::kInvalidDisplayId,
+                             crostini::DefaultContainerId());
     return Waiter::WaitForNewBrowser();
   }
 
@@ -98,7 +94,6 @@ class AppShortcutShelfItemControllerBrowserTest : public InProcessBrowserTest {
 
   web_app::AppId app_id_;
   ash::ShelfID app_shelf_id_;
-  base::test::ScopedFeatureList features_;
 };
 
 // Test interacting with the app menu without shift key down: the app menu has

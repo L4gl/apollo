@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,12 @@ namespace indexed_db {
 
 extern const base::FilePath::CharType kBlobExtension[];
 extern const base::FilePath::CharType kIndexedDBExtension[];
+extern const base::FilePath::CharType kIndexedDBFile[];
 extern const base::FilePath::CharType kLevelDBExtension[];
+
+// Returns whether the legacy (first-party/default-bucket) path should be used
+// for storing IDB files for the given bucket.
+bool ShouldUseLegacyFilePath(const storage::BucketLocator& bucket_locator);
 
 base::FilePath GetBlobStoreFileName(
     const storage::BucketLocator& bucket_locator);

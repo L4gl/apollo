@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,7 @@
 #include "net/third_party/quiche/src/quiche/common/structured_headers.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace net {
-namespace structured_headers {
+namespace net::structured_headers {
 
 using Item = quiche::structured_headers::Item;
 using ParameterisedIdentifier =
@@ -48,8 +47,7 @@ inline absl::optional<List> ParseList(base::StringPiece str) {
   return quiche::structured_headers::ParseList(
       base::StringPieceToStringView(str));
 }
-inline absl::optional<Dictionary> ParseDictionary(
-    const base::StringPiece& str) {
+inline absl::optional<Dictionary> ParseDictionary(base::StringPiece str) {
   return quiche::structured_headers::ParseDictionary(
       base::StringPieceToStringView(str));
 }
@@ -69,7 +67,6 @@ inline absl::optional<std::string> SerializeDictionary(
   return quiche::structured_headers::SerializeDictionary(value);
 }
 
-}  // namespace structured_headers
-}  // namespace net
+}  // namespace net::structured_headers
 
 #endif  // NET_HTTP_STRUCTURED_HEADERS_H_

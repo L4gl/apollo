@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,11 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "components/viz/service/display/output_surface_client.h"
 #include "components/viz/service/display/output_surface_frame.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/geometry/transform.h"
@@ -21,9 +22,7 @@ namespace cc {
 
 PixelTestOutputSurface::PixelTestOutputSurface(
     std::unique_ptr<viz::SoftwareOutputDevice> software_device)
-    : OutputSurface(std::move(software_device)) {
-  capabilities_.supports_stencil = true;
-}
+    : OutputSurface(std::move(software_device)) {}
 
 PixelTestOutputSurface::~PixelTestOutputSurface() = default;
 
@@ -35,28 +34,22 @@ void PixelTestOutputSurface::EnsureBackbuffer() {}
 
 void PixelTestOutputSurface::DiscardBackbuffer() {}
 
-void PixelTestOutputSurface::BindFramebuffer() {}
-
 void PixelTestOutputSurface::Reshape(const ReshapeParams& params) {
   software_device()->Resize(params.size, params.device_scale_factor);
 }
 
-bool PixelTestOutputSurface::HasExternalStencilTest() const {
-  return false;
-}
-
-void PixelTestOutputSurface::ApplyExternalStencil() {}
-
 void PixelTestOutputSurface::SwapBuffers(viz::OutputSurfaceFrame frame) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&PixelTestOutputSurface::SwapBuffersCallback,
                                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void PixelTestOutputSurface::SwapBuffersCallback() {
   base::TimeTicks now = base::TimeTicks::Now();
-  gfx::SwapTimings timings = {now, now};
-  client_->DidReceiveSwapBuffersAck(timings,
+  gpu::SwapBuffersCompleteParams params;
+  params.swap_response.timings = {now, now};
+  params.swap_response.result = gfx::SwapResult::SWAP_ACK;
+  client_->DidReceiveSwapBuffersAck(params,
                                     /*release_fence=*/gfx::GpuFenceHandle());
   client_->DidReceivePresentationFeedback(
       gfx::PresentationFeedback(base::TimeTicks::Now(), base::TimeDelta(), 0));
@@ -64,21 +57,6 @@ void PixelTestOutputSurface::SwapBuffersCallback() {
 
 bool PixelTestOutputSurface::IsDisplayedAsOverlayPlane() const {
   return false;
-}
-
-unsigned PixelTestOutputSurface::GetOverlayTextureId() const {
-  return 0;
-}
-
-uint32_t PixelTestOutputSurface::GetFramebufferCopyTextureFormat() {
-  // This format will work if the |context_provider| has an RGB or RGBA
-  // framebuffer. For now assume tests do not want/care about alpha in
-  // the root render pass.
-  return GL_RGB;
-}
-
-unsigned PixelTestOutputSurface::UpdateGpuFence() {
-  return 0;
 }
 
 void PixelTestOutputSurface::SetUpdateVSyncParametersCallback(

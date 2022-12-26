@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,9 +69,6 @@ class MockTransportClientSocketFactory : public ClientSocketFactory {
     kDelayedFailing,
     // A stalled socket that never connects at all.
     kStalled,
-    // A stalled socket that never connects at all, but returns a failing
-    // ConnectionAttempt in |GetConnectionAttempts|.
-    kStalledFailing,
     // A socket that can be triggered to connect explicitly, asynchronously.
     kTriggerable,
   };
@@ -148,8 +145,8 @@ class MockTransportClientSocketFactory : public ClientSocketFactory {
 
  private:
   raw_ptr<NetLog> net_log_;
-  int allocation_count_;
-  Type client_socket_type_;
+  int allocation_count_ = 0;
+  Type client_socket_type_ = Type::kSynchronous;
   base::span<const Rule> rules_;
   base::TimeDelta delay_;
   base::queue<base::OnceClosure> triggerable_sockets_;

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -47,7 +47,7 @@ class PolicyConversionsClientTest : public ::testing::Test {
     PolicyMap::Entry entry(policy::POLICY_LEVEL_MANDATORY,
                            policy::POLICY_SCOPE_MACHINE,
                            policy::POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                           base::Value(std::vector<base::Value>()), nullptr);
+                           base::Value(base::Value::List()), nullptr);
     if (set_is_default)
       entry.SetIsDefaultValue();
     return entry;

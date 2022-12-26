@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
+#include "base/test/bind.h"
 #include "base/values.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_data.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
@@ -30,6 +31,9 @@
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/profiles/profile_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/common/extension.h"
 #include "extensions/components/native_app_window/native_app_window_views.h"
@@ -67,6 +71,32 @@ const char kTestEnterpriseAccountId[] = "enterprise-kiosk-app@localhost";
 
 const test::UIPath kConfigNetwork = {"app-launch-splash", "configNetwork"};
 const char kSizeChangedMessage[] = "size_changed";
+
+bool ShouldBrowserBeClosedByAppSessionBrowserHander(
+    AppSessionAsh* app_session) {
+  base::RunLoop waiter;
+  bool result = false;
+  app_session->SetOnHandleBrowserCallbackForTesting(
+      base::BindLambdaForTesting([&waiter, &result](bool is_closing) {
+        result = is_closing;
+        waiter.Quit();
+      }));
+  waiter.Run();
+  return result;
+}
+
+Browser* OpenA11ySettingsBrowser(AppSessionAsh* app_session) {
+  auto* settings_manager = chrome::SettingsWindowManager::GetInstance();
+  Profile* profile = ProfileManager::GetPrimaryUserProfile();
+
+  settings_manager->ShowOSSettings(
+      profile, chromeos::settings::mojom::kManageAccessibilitySubpagePath);
+
+  EXPECT_FALSE(ShouldBrowserBeClosedByAppSessionBrowserHander(app_session));
+
+  Browser* settings_browser = app_session->GetSettingsBrowserForTesting();
+  return settings_browser;
+}
 
 KioskBaseTest::KioskBaseTest()
     : settings_helper_(false), fake_cws_(new FakeCWS) {
@@ -234,6 +264,14 @@ void KioskBaseTest::StartAppLaunchFromLoginScreen(
   EXPECT_TRUE(LaunchApp(test_app_id()));
 }
 
+void KioskBaseTest::StartExistingAppLaunchFromLoginScreen(
+    NetworkPortalDetector::CaptivePortalStatus network_status) {
+  SetupTestAppUpdateCheck();
+
+  network_portal_detector_.SimulateDefaultNetworkState(network_status);
+  EXPECT_TRUE(LaunchApp(test_app_id()));
+}
+
 const extensions::Extension* KioskBaseTest::GetInstalledApp() {
   Profile* app_profile = ProfileManager::GetPrimaryUserProfile();
   return extensions::ExtensionRegistry::Get(app_profile)
@@ -252,7 +290,7 @@ void KioskBaseTest::WaitForAppLaunchWithOptions(bool check_launch_data,
                                                 bool terminate_app,
                                                 bool keep_app_open) {
   ExtensionTestMessageListener launch_data_check_listener(
-      "launchData.isKioskSession = true", false);
+      "launchData.isKioskSession = true");
 
   // Wait for the Kiosk App to launch.
   KioskSessionInitializedWaiter().Wait();

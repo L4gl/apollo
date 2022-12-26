@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,6 @@
 #include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/shared_bitmap.h"
-#include "components/viz/service/display/display_resource_provider_gl.h"
 #include "components/viz/service/display/display_resource_provider_skia.h"
 #include "components/viz/service/display/display_resource_provider_software.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -130,7 +129,6 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
         disable_picture_quad_image_filtering_);
   }
 
-  renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
   float device_scale_factor = 1.f;
   renderer_->DrawFrame(pass_list, device_scale_factor, device_viewport_size_,
                        display_color_spaces_,
@@ -141,8 +139,6 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
   renderer_->SwapBuffersSkipped();
 
   // Wait for the readback to complete.
-  if (output_surface_->context_provider())
-    output_surface_->context_provider()->ContextGL()->Finish();
   run_loop.Run();
 
   return PixelsMatchReference(ref_file, comparator);
@@ -167,7 +163,6 @@ bool PixelTest::RunPixelTest(viz::AggregatedRenderPassList* pass_list,
         disable_picture_quad_image_filtering_);
   }
 
-  renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
   float device_scale_factor = 1.f;
   renderer_->DrawFrame(pass_list, device_scale_factor, device_viewport_size_,
                        display_color_spaces_,
@@ -178,8 +173,6 @@ bool PixelTest::RunPixelTest(viz::AggregatedRenderPassList* pass_list,
   renderer_->SwapBuffersSkipped();
 
   // Wait for the readback to complete.
-  if (output_surface_->context_provider())
-    output_surface_->context_provider()->ContextGL()->Finish();
   run_loop.Run();
 
   // Need to wrap |ref_pixels| in a SkBitmap.
@@ -286,7 +279,7 @@ void PixelTest::SetUpSkiaRenderer(gfx::SurfaceOrigin output_surface_origin) {
   child_context_provider_ =
       base::MakeRefCounted<viz::TestInProcessContextProvider>(
           viz::TestContextType::kGLES2, /*support_locking=*/false);
-  gpu::ContextResult result = child_context_provider_->BindToCurrentThread();
+  gpu::ContextResult result = child_context_provider_->BindToCurrentSequence();
   DCHECK_EQ(result, gpu::ContextResult::kSuccess);
   child_resource_provider_ = std::make_unique<viz::ClientResourceProvider>();
 }

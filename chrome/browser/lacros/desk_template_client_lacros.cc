@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,6 +69,7 @@ void DeskTemplateClientLacros::CreateBrowserWithRestoredData(
   create_params.initial_show_state =
       static_cast<ui::WindowShowState>(show_state);
   create_params.initial_bounds = bounds;
+  create_params.restore_id = additional_state->restore_window_id;
   Browser* browser = Browser::Create(create_params);
   for (size_t i = 0; i < additional_state->urls.size(); i++) {
     chrome::AddTabAt(
@@ -83,10 +84,10 @@ void DeskTemplateClientLacros::CreateBrowserWithRestoredData(
   }
 }
 
-void DeskTemplateClientLacros::GetTabStripModelUrls(
+void DeskTemplateClientLacros::GetBrowserInformation(
     uint32_t serial,
     const std::string& window_unique_id,
-    GetTabStripModelUrlsCallback callback) {
+    GetBrowserInformationCallback callback) {
   Browser* browser = nullptr;
   for (auto* b : *BrowserList::GetInstance()) {
     if (views::DesktopWindowTreeHostLacros::From(

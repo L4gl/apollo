@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -53,7 +53,7 @@ bool GraphicsDelegateWin::InitializeOnMainThread() {
 
 void GraphicsDelegateWin::InitializeOnGLThread() {
   DCHECK(context_provider_);
-  if (context_provider_->BindToCurrentThread() ==
+  if (context_provider_->BindToCurrentSequence() ==
       gpu::ContextResult::kSuccess) {
     gl_ = context_provider_->ContextGL();
     sii_ = context_provider_->SharedImageInterface();
@@ -201,25 +201,19 @@ void GraphicsDelegateWin::ResetMemoryBuffer() {
   gpu_memory_buffer_ = nullptr;
 }
 
-void GraphicsDelegateWin::UpdateViews(
-    std::vector<device::mojom::XRViewPtr> views) {
-  // Store the first left and right views. VRUiHostImpl::SetVRDisplayInfo has
-  // already validated that the left and right views exist.
+void GraphicsDelegateWin::SetXrViews(
+    const std::vector<device::mojom::XRViewPtr>& views) {
+  // Store the first left and right views.
   for (auto& view : views) {
     if (view->eye == device::mojom::XREye::kLeft) {
-      left_ = std::move(view);
+      left_ = view.Clone();
     } else if (view->eye == device::mojom::XREye::kRight) {
-      right_ = std::move(view);
+      right_ = view.Clone();
     }
   }
 
   DCHECK(left_);
   DCHECK(right_);
-}
-
-void GraphicsDelegateWin::SetVRDisplayInfo(
-    device::mojom::VRDisplayInfoPtr info) {
-  UpdateViews(std::move(info->views));
 }
 
 FovRectangles GraphicsDelegateWin::GetRecommendedFovs() {
@@ -269,12 +263,12 @@ CameraModel CameraModelViewProjFromXRView(
   float x_scale = 2.0f / (left_tan + right_tan);
   float y_scale = 2.0f / (up_tan + down_tan);
   // clang-format off
-  model.proj_matrix =
-      gfx::Transform(x_scale, 0, -((left_tan - right_tan) * x_scale * 0.5), 0,
-                     0, y_scale, ((up_tan - down_tan) * y_scale * 0.5), 0,
-                     0, 0, (kZFar + kZNear) / (kZNear - kZFar),
-                        2 * kZFar * kZNear / (kZNear - kZFar),
-                     0, 0, -1, 0);
+  model.proj_matrix = gfx::Transform::RowMajor(
+      x_scale, 0, -((left_tan - right_tan) * x_scale * 0.5), 0,
+      0, y_scale, ((up_tan - down_tan) * y_scale * 0.5), 0,
+      0, 0, (kZFar + kZNear) / (kZNear - kZFar),
+          2 * kZFar * kZNear / (kZNear - kZFar),
+      0, 0, -1, 0);
   // clang-format on
   model.view_proj_matrix = model.proj_matrix * model.view_matrix;
   return model;

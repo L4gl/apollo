@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,11 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/containers/contains.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chrome/browser/ash/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/ash/shelf/shelf_controller_helper.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
@@ -290,8 +291,8 @@ TEST_F(ChromeShelfPrefsTest, TransformationForStandaloneBrowserChromeApps) {
 
   // The three items should come in order. Other items might be added by
   // migration. That's OK.
-  auto it = std::find(pinned_apps_strs.begin(), pinned_apps_strs.end(),
-                      kAshChromeAppIdWithUsualPrefix);
+  auto it =
+      base::ranges::find(pinned_apps_strs, kAshChromeAppIdWithUsualPrefix);
   size_t index = it - pinned_apps_strs.begin();
 
   ASSERT_EQ(pinned_apps_strs[index + 1], kLacrosChromeAppIdWithUsualPrefix);
@@ -311,13 +312,40 @@ TEST_F(ChromeShelfPrefsTest, TransformationForStandaloneBrowserChromeApps) {
   ASSERT_EQ(pinned_apps_strs[index + 2], kLacrosChromeAppIdWithUsualPrefix);
 }
 
+// If Lacros is the primary browser, then it should be pinned before non-browser
+// apps.
+TEST_F(ChromeShelfPrefsTest, LacrosPrimaryPinnedApp) {
+  // Enable lacros-only.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {ash::features::kLacrosPrimary, ash::features::kLacrosSupport}, {});
+  AddRegularUser("test@test.com");
+
+  ASSERT_TRUE(shelf_prefs_->ShouldPerformConsistencyMigrations());
+  std::vector<ash::ShelfID> pinned_apps =
+      shelf_prefs_->GetPinnedAppsFromSync(helper_.get());
+  std::vector<std::string> pinned_apps_strs;
+  pinned_apps_strs.reserve(pinned_apps.size());
+  for (auto& shelf_id : pinned_apps) {
+    pinned_apps_strs.push_back(shelf_id.app_id);
+  }
+
+  // Pinned apps should have the chrome and lacros apps as first two items.
+  ASSERT_GE(pinned_apps_strs.size(), 2u);
+  EXPECT_EQ(pinned_apps_strs[0], app_constants::kChromeAppId);
+  EXPECT_EQ(pinned_apps_strs[1], app_constants::kLacrosAppId);
+
+  // Pinned apps should have the gmail app.
+  EXPECT_TRUE(base::Contains(pinned_apps_strs, extension_misc::kGmailAppId));
+}
+
 // If Lacros is the only browser, then it should be pinned instead of ash.
 TEST_F(ChromeShelfPrefsTest, LacrosOnlyPinnedApp) {
   // Enable lacros-only.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
-       chromeos::features::kLacrosSupport},
+      {ash::features::kLacrosOnly, ash::features::kLacrosPrimary,
+       ash::features::kLacrosSupport},
       {});
   AddRegularUser("test@test.com");
 
@@ -356,8 +384,8 @@ TEST_F(ChromeShelfPrefsTest, ShelfPositionAfterLacrosMigration) {
   // Enable lacros-only.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
-       chromeos::features::kLacrosSupport},
+      {ash::features::kLacrosOnly, ash::features::kLacrosPrimary,
+       ash::features::kLacrosSupport},
       {});
   AddRegularUser("test@test.com");
 
@@ -391,8 +419,8 @@ TEST_F(ChromeShelfPrefsTest, EnableSideBySideLacrosDisable) {
   // Disable lacros.
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      {}, {chromeos::features::kLacrosOnly, chromeos::features::kLacrosPrimary,
-           chromeos::features::kLacrosSupport});
+      {}, {ash::features::kLacrosOnly, ash::features::kLacrosPrimary,
+           ash::features::kLacrosSupport});
   AddRegularUser("test@test.com");
 
   // Perform migration

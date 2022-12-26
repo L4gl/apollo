@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,17 +16,15 @@
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
-#include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
-#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "skia/ext/skia_utils_base.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -36,10 +34,9 @@
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_sequence_number_token.h"
 #include "ui/base/clipboard/custom_data_helper.h"
+#include "ui/base/clipboard/file_info.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/base/data_transfer_policy/data_transfer_policy_controller.h"
-#include "ui/gfx/codec/png_codec.h"
-#include "ui/gfx/geometry/size.h"
 
 namespace ui {
 
@@ -229,7 +226,7 @@ class ClipboardInternal {
         base::BindOnce(&ClipboardData::EncodeBitmapData,
                        std::move(maybe_bitmap.value())),
         base::BindOnce(&ClipboardInternal::DidEncodePng,
-                       weak_factory_.GetWeakPtr(), sequence_number()));
+                       weak_factory_.GetMutableWeakPtr(), sequence_number()));
   }
 
   // Reads data of type |type| from the ClipboardData.
@@ -280,7 +277,7 @@ class ClipboardInternal {
     DCHECK(data);
     std::unique_ptr<ClipboardData> previous_data = std::move(data_);
     data_ = std::move(data);
-    sequence_number_ = ClipboardSequenceNumberToken();
+    sequence_number_ = data_->sequence_number_token();
     ClipboardMonitor::GetInstance()->NotifyClipboardDataChanged();
     return previous_data;
   }
@@ -327,7 +324,7 @@ class ClipboardInternal {
   // Current ClipboardData.
   std::unique_ptr<ClipboardData> data_;
 
-  // Sequence number uniquely identifying clipboard state.
+  // Unique identifier for the current clipboard state.
   ClipboardSequenceNumberToken sequence_number_;
 
   // Repeated image read requests shouldn't invoke multiple encoding operations.
@@ -811,7 +808,7 @@ void ClipboardNonBacked::ReadData(const ClipboardFormatType& format,
 #endif
 }
 
-#if defined(USE_OZONE)
+#if BUILDFLAG(IS_OZONE)
 bool ClipboardNonBacked::IsSelectionBufferAvailable() const {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return false;
@@ -819,7 +816,7 @@ bool ClipboardNonBacked::IsSelectionBufferAvailable() const {
   return true;
 #endif
 }
-#endif  // defined(USE_OZONE)
+#endif  // BUILDFLAG(IS_OZONE)
 
 void ClipboardNonBacked::WritePortableAndPlatformRepresentations(
     ClipboardBuffer buffer,

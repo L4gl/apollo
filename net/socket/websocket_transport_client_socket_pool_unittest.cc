@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,7 +17,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "net/base/features.h"
 #include "net/base/ip_endpoint.h"
@@ -41,7 +40,6 @@
 #include "net/socket/transport_client_socket_pool_test_util.h"
 #include "net/socket/transport_connect_job.h"
 #include "net/socket/websocket_endpoint_lock_manager.h"
-#include "net/socket/websocket_transport_connect_job.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_with_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -72,7 +70,7 @@ IPAddress ParseIP(const std::string& ip) {
 void RunLoopForTimePeriod(base::TimeDelta period) {
   base::RunLoop run_loop;
   base::OnceClosure quit_closure(run_loop.QuitClosure());
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, std::move(quit_closure), period);
   run_loop.Run();
 }
@@ -82,7 +80,7 @@ class WebSocketTransportClientSocketPoolTest : public TestWithTaskEnvironment {
   WebSocketTransportClientSocketPoolTest()
       : group_id_(url::SchemeHostPort(url::kHttpScheme, "www.google.com", 80),
                   PrivacyMode::PRIVACY_MODE_DISABLED,
-                  NetworkIsolationKey(),
+                  NetworkAnonymizationKey(),
                   SecureDnsPolicy::kAllow),
         params_(ClientSocketPool::SocketParams::CreateForHttpForTesting()),
         host_resolver_(std::make_unique<
@@ -182,8 +180,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest, Basic) {
   TestLoadTimingInfoConnectedNotReused(handle);
 }
 
-// Make sure that WebSocketTransportConnectJob passes on its priority to its
-// HostResolver request on Init.
+// Make sure that the ConnectJob passes on its priority to its HostResolver
+// request on Init.
 TEST_F(WebSocketTransportClientSocketPoolTest, SetResolvePriorityOnInit) {
   for (int i = MINIMUM_PRIORITY; i <= MAXIMUM_PRIORITY; ++i) {
     RequestPriority priority = static_cast<RequestPriority>(i);
@@ -209,7 +207,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, InitHostResolutionFailure) {
       ERR_IO_PENDING,
       handle.Init(ClientSocketPool::GroupId(
                       std::move(endpoint), PRIVACY_MODE_DISABLED,
-                      NetworkIsolationKey(), SecureDnsPolicy::kAllow),
+                      NetworkAnonymizationKey(), SecureDnsPolicy::kAllow),
                   ClientSocketPool::SocketParams::CreateForHttpForTesting(),
                   absl::nullopt /* proxy_annotation_tag */, kDefaultPriority,
                   SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -547,7 +545,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, LockReleasedOnHandleReset) {
 // The lock on the endpoint is released when a ClientSocketHandle is deleted.
 TEST_F(WebSocketTransportClientSocketPoolTest, LockReleasedOnHandleDelete) {
   TestCompletionCallback callback;
-  std::unique_ptr<ClientSocketHandle> handle(new ClientSocketHandle);
+  auto handle = std::make_unique<ClientSocketHandle>();
   int rv =
       handle->Init(group_id_, params_, absl::nullopt /* proxy_annotation_tag */,
                    LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
@@ -1241,10 +1239,11 @@ TEST_F(WebSocketTransportClientSocketPoolTest, EndpointLockIsOnlyReleasedOnce) {
             request(2)->handle()->GetLoadState());
 }
 
-// Make sure that WebSocket requests use the correct NetworkIsolationKey.
-TEST_F(WebSocketTransportClientSocketPoolTest, NetworkIsolationKey) {
+// Make sure that WebSocket requests use the correct NetworkAnonymizationKey.
+TEST_F(WebSocketTransportClientSocketPoolTest, NetworkAnonymizationKey) {
   const SchemefulSite kSite(GURL("https://foo.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey(kSite, kSite);
+  const NetworkAnonymizationKey kNetworkAnonymizationKey(
+      kSite, kSite, /*is_cross_site=*/false);
 
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
@@ -1260,7 +1259,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, NetworkIsolationKey) {
   ClientSocketHandle handle;
   ClientSocketPool::GroupId group_id(
       url::SchemeHostPort(url::kHttpScheme, "www.google.com", 80),
-      PrivacyMode::PRIVACY_MODE_DISABLED, kNetworkIsolationKey,
+      PrivacyMode::PRIVACY_MODE_DISABLED, kNetworkAnonymizationKey,
       SecureDnsPolicy::kAllow);
   EXPECT_THAT(
       handle.Init(group_id, params_, absl::nullopt /* proxy_annotation_tag */,
@@ -1271,12 +1270,12 @@ TEST_F(WebSocketTransportClientSocketPoolTest, NetworkIsolationKey) {
       IsError(ERR_IO_PENDING));
 
   ASSERT_EQ(1u, host_resolver_->last_id());
-  EXPECT_EQ(kNetworkIsolationKey,
-            host_resolver_->request_network_isolation_key(1));
+  EXPECT_EQ(kNetworkAnonymizationKey,
+            host_resolver_->request_network_anonymization_key(1));
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest,
-       WebSocketTransportConnectJobWithDnsAliases) {
+       TransportConnectJobWithDnsAliases) {
   host_resolver_->set_synchronous_mode(true);
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::Type::kSynchronous);
@@ -1290,11 +1289,11 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
   TestConnectJobDelegate test_delegate;
   scoped_refptr<TransportSocketParams> params =
       base::MakeRefCounted<TransportSocketParams>(
-          HostPortPair(kHostName, 80), NetworkIsolationKey(),
+          HostPortPair(kHostName, 80), NetworkAnonymizationKey(),
           SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
           /*supported_alpns=*/base::flat_set<std::string>());
 
-  WebSocketTransportConnectJob transport_connect_job(
+  TransportConnectJob transport_connect_job(
       DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_, params,
       &test_delegate, nullptr /* net_log */);
 
@@ -1308,7 +1307,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest,
-       WebSocketTransportConnectJobWithNoAdditionalDnsAliases) {
+       TransportConnectJobWithNoAdditionalDnsAliases) {
   host_resolver_->set_synchronous_mode(true);
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::Type::kSynchronous);
@@ -1323,11 +1322,11 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
   TestConnectJobDelegate test_delegate;
   scoped_refptr<TransportSocketParams> params =
       base::MakeRefCounted<TransportSocketParams>(
-          HostPortPair(kHostName, 80), NetworkIsolationKey(),
+          HostPortPair(kHostName, 80), NetworkAnonymizationKey(),
           SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
           /*supported_alpns=*/base::flat_set<std::string>());
 
-  WebSocketTransportConnectJob transport_connect_job(
+  TransportConnectJob transport_connect_job(
       DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_, params,
       &test_delegate, nullptr /* net_log */);
 
@@ -1337,6 +1336,59 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
   // Verify that the alias list only contains kHostName.
   EXPECT_THAT(test_delegate.socket()->GetDnsAliases(),
               testing::ElementsAre(kHostName));
+}
+
+TEST_F(WebSocketTransportClientSocketPoolTest, LoadState) {
+  host_resolver_->rules()->AddRule("v6-only.test", "1:abcd::3:4:ff");
+  host_resolver_->rules()->AddRule("v6-and-v4.test", "1:abcd::3:4:ff,2.2.2.2");
+  host_resolver_->set_ondemand_mode(true);
+
+  client_socket_factory_.set_default_client_socket_type(
+      MockTransportClientSocketFactory::Type::kDelayedFailing);
+
+  auto params_v6_only = base::MakeRefCounted<TransportSocketParams>(
+      HostPortPair("v6-only.test", 80), NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
+      /*supported_alpns=*/base::flat_set<std::string>());
+  auto params_v6_and_v4 = base::MakeRefCounted<TransportSocketParams>(
+      HostPortPair("v6-and-v4.test", 80), NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
+      /*supported_alpns=*/base::flat_set<std::string>());
+
+  // v6-only.test will first block on DNS.
+  TestConnectJobDelegate test_delegate_v6_only;
+  TransportConnectJob connect_job_v6_only(
+      DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
+      params_v6_only, &test_delegate_v6_only, /*net_log=*/nullptr);
+  EXPECT_THAT(connect_job_v6_only.Connect(), test::IsError(ERR_IO_PENDING));
+  EXPECT_THAT(connect_job_v6_only.GetLoadState(), LOAD_STATE_RESOLVING_HOST);
+
+  // When DNS is resolved, it should block on making a connection.
+  host_resolver_->ResolveOnlyRequestNow();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_THAT(connect_job_v6_only.GetLoadState(), LOAD_STATE_CONNECTING);
+
+  // v6-and-v4.test will also first block on DNS.
+  TestConnectJobDelegate test_delegate_v6_and_v4;
+  TransportConnectJob connect_job_v6_and_v4(
+      DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
+      params_v6_and_v4, &test_delegate_v6_and_v4, /*net_log=*/nullptr);
+  EXPECT_THAT(connect_job_v6_and_v4.Connect(), test::IsError(ERR_IO_PENDING));
+  EXPECT_THAT(connect_job_v6_and_v4.GetLoadState(), LOAD_STATE_RESOLVING_HOST);
+
+  // When DNS is resolved, it should attempt to connect to the IPv6 address, but
+  // `connect_job_v6_only` holds the lock.
+  host_resolver_->ResolveOnlyRequestNow();
+  RunUntilIdle();
+  EXPECT_THAT(connect_job_v6_and_v4.GetLoadState(),
+              LOAD_STATE_WAITING_FOR_AVAILABLE_SOCKET);
+
+  // After the IPv6 fallback timeout, it should attempt to connect to the IPv4
+  // address. This lock is available, so `GetLoadState` should report it is now
+  // actively connecting.
+  RunLoopForTimePeriod(TransportConnectJob::kIPv6FallbackTime +
+                       base::Milliseconds(50));
+  EXPECT_THAT(connect_job_v6_and_v4.GetLoadState(), LOAD_STATE_CONNECTING);
 }
 
 }  // namespace

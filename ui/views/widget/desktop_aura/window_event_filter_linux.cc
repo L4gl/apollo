@@ -1,9 +1,10 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ui/views/widget/desktop_aura/window_event_filter_linux.h"
 
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -14,8 +15,8 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/linux/linux_ui.h"
 #include "ui/platform_window/wm/wm_move_resize_handler.h"
-#include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
@@ -75,23 +76,21 @@ bool WindowEventFilterLinux::HandleMouseEventWithHitTest(
 
 void WindowEventFilterLinux::OnClickedCaption(ui::MouseEvent* event,
                                               int previous_click_component) {
-  LinuxUI* linux_ui = LinuxUI::instance();
-
-  views::LinuxUI::WindowFrameActionSource action_type;
-  views::LinuxUI::WindowFrameAction default_action;
+  ui::LinuxUi::WindowFrameActionSource action_type;
+  ui::LinuxUi::WindowFrameAction default_action;
 
   if (event->IsRightMouseButton()) {
-    action_type = LinuxUI::WindowFrameActionSource::kRightClick;
-    default_action = LinuxUI::WindowFrameAction::kMenu;
+    action_type = ui::LinuxUi::WindowFrameActionSource::kRightClick;
+    default_action = ui::LinuxUi::WindowFrameAction::kMenu;
   } else if (event->IsMiddleMouseButton()) {
-    action_type = LinuxUI::WindowFrameActionSource::kMiddleClick;
-    default_action = LinuxUI::WindowFrameAction::kNone;
+    action_type = ui::LinuxUi::WindowFrameActionSource::kMiddleClick;
+    default_action = ui::LinuxUi::WindowFrameAction::kNone;
   } else if (event->IsLeftMouseButton() &&
              event->flags() & ui::EF_IS_DOUBLE_CLICK) {
     click_component_ = HTNOWHERE;
     if (previous_click_component == HTCAPTION) {
-      action_type = LinuxUI::WindowFrameActionSource::kDoubleClick;
-      default_action = LinuxUI::WindowFrameAction::kToggleMaximize;
+      action_type = ui::LinuxUi::WindowFrameActionSource::kDoubleClick;
+      default_action = ui::LinuxUi::WindowFrameAction::kToggleMaximize;
     } else {
       return;
     }
@@ -101,24 +100,26 @@ void WindowEventFilterLinux::OnClickedCaption(ui::MouseEvent* event,
   }
 
   auto* content_window = desktop_window_tree_host_->GetContentWindow();
-  LinuxUI::WindowFrameAction action =
-      linux_ui ? linux_ui->GetWindowFrameAction(action_type) : default_action;
+  auto* linux_ui_theme = ui::LinuxUi::instance();
+  ui::LinuxUi::WindowFrameAction action =
+      linux_ui_theme ? linux_ui_theme->GetWindowFrameAction(action_type)
+                     : default_action;
   switch (action) {
-    case LinuxUI::WindowFrameAction::kNone:
+    case ui::LinuxUi::WindowFrameAction::kNone:
       break;
-    case LinuxUI::WindowFrameAction::kLower:
+    case ui::LinuxUi::WindowFrameAction::kLower:
       LowerWindow();
       event->SetHandled();
       break;
-    case LinuxUI::WindowFrameAction::kMinimize:
+    case ui::LinuxUi::WindowFrameAction::kMinimize:
       desktop_window_tree_host_->Minimize();
       event->SetHandled();
       break;
-    case LinuxUI::WindowFrameAction::kToggleMaximize:
+    case ui::LinuxUi::WindowFrameAction::kToggleMaximize:
       MaybeToggleMaximizedState(content_window);
       event->SetHandled();
       break;
-    case LinuxUI::WindowFrameAction::kMenu:
+    case ui::LinuxUi::WindowFrameAction::kMenu:
       views::Widget* widget =
           views::Widget::GetWidgetForNativeView(content_window);
       if (!widget)
@@ -126,13 +127,14 @@ void WindowEventFilterLinux::OnClickedCaption(ui::MouseEvent* event,
       views::View* view = widget->GetContentsView();
       if (!view || !view->context_menu_controller())
         break;
-      gfx::Point location(event->location());
       // Controller requires locations to be in DIP, while |this| receives the
       // location in px.
-      desktop_window_tree_host_->GetRootTransform().TransformPointReverse(
-          &location);
-      views::View::ConvertPointToScreen(view, &location);
-      view->ShowContextMenu(location, ui::MENU_SOURCE_MOUSE);
+      gfx::PointF location = desktop_window_tree_host_->GetRootTransform()
+                                 .InverseMapPoint(event->location_f())
+                                 .value_or(event->location_f());
+      gfx::Point location_in_screen = gfx::ToRoundedPoint(location);
+      views::View::ConvertPointToScreen(view, &location_in_screen);
+      view->ShowContextMenu(location_in_screen, ui::MENU_SOURCE_MOUSE);
       event->SetHandled();
       break;
   }

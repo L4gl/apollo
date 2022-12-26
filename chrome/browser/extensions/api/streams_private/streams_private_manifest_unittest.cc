@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,18 +31,18 @@ TEST_F(StreamsPrivateManifestTest, ValidMimeTypesHandlerMIMETypes) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
           .SetID(extension_misc::kQuickOfficeExtensionId)
-          .SetManifest(
-              DictionaryBuilder()
-                  .Set("name", "MIME type handler test")
-                  .Set("version", "1.0.0")
-                  .Set("manifest_version", 2)
-                  .Set("mime_types", ListBuilder().Append("text/plain").Build())
-                  .Build())
+          .SetManifest(DictionaryBuilder()
+                           .Set("name", "MIME type handler test")
+                           .Set("version", "1.0.0")
+                           .Set("manifest_version", 2)
+                           .Set("mime_types",
+                                ListBuilder().Append("text/plain").BuildList())
+                           .BuildDict())
           .Build();
 
   ASSERT_TRUE(extension.get());
   MimeTypesHandler* handler = MimeTypesHandler::GetHandler(extension.get());
-  ASSERT_TRUE(handler != NULL);
+  ASSERT_TRUE(handler != nullptr);
 
   EXPECT_FALSE(handler->CanHandleMIMEType("text/html"));
   EXPECT_TRUE(handler->CanHandleMIMEType("text/plain"));
@@ -51,19 +51,19 @@ TEST_F(StreamsPrivateManifestTest, ValidMimeTypesHandlerMIMETypes) {
 TEST_F(StreamsPrivateManifestTest, MimeTypesHandlerMIMETypesNotAllowlisted) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(
-              DictionaryBuilder()
-                  .Set("name", "MIME types test")
-                  .Set("version", "1.0.0")
-                  .Set("manifest_version", 2)
-                  .Set("mime_types", ListBuilder().Append("text/plain").Build())
-                  .Build())
+          .SetManifest(DictionaryBuilder()
+                           .Set("name", "MIME types test")
+                           .Set("version", "1.0.0")
+                           .Set("manifest_version", 2)
+                           .Set("mime_types",
+                                ListBuilder().Append("text/plain").BuildList())
+                           .BuildDict())
           .Build();
 
   ASSERT_TRUE(extension.get());
 
   MimeTypesHandler* handler = MimeTypesHandler::GetHandler(extension.get());
-  ASSERT_TRUE(handler == NULL);
+  ASSERT_TRUE(handler == nullptr);
 }
 
 }  // namespace

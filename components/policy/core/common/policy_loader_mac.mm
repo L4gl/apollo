@@ -1,4 +1,4 @@
-// Copyright (c) 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,11 +6,12 @@
 
 #include <utility>
 
+#include <Foundation/Foundation.h>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/enterprise_util.h"
-#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/mac/foundation_util.h"
@@ -20,7 +21,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/policy/core/common/external_data_fetcher.h"
-#include "components/policy/core/common/features.h"
 #include "components/policy/core/common/mac_util.h"
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_load_status.h"
@@ -104,13 +104,13 @@ void PolicyLoaderMac::InitOnBackgroundThread() {
                             state.user_joined);
 }
 
-std::unique_ptr<PolicyBundle> PolicyLoaderMac::Load() {
+PolicyBundle PolicyLoaderMac::Load() {
   preferences_->AppSynchronize(application_id_);
-  std::unique_ptr<PolicyBundle> bundle(new PolicyBundle());
+  PolicyBundle bundle;
 
   // Load Chrome's policy.
   PolicyMap& chrome_policy =
-      bundle->Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()));
+      bundle.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()));
 
   PolicyLoadStatusUmaReporter status;
   bool policy_present = false;
@@ -128,11 +128,16 @@ std::unique_ptr<PolicyBundle> PolicyLoaderMac::Load() {
     bool forced = preferences_->AppValueIsForced(name, application_id_);
     PolicyLevel level =
         forced ? POLICY_LEVEL_MANDATORY : POLICY_LEVEL_RECOMMENDED;
-    // TODO(joaodasilva): figure the policy scope.
+    PolicyScope scope = POLICY_SCOPE_USER;
+    if (forced) {
+      scope = preferences_->IsManagedPolicyAvailableForMachineScope(name)
+                  ? POLICY_SCOPE_MACHINE
+                  : POLICY_SCOPE_USER;
+    }
     std::unique_ptr<base::Value> policy = PropertyToValue(value);
     if (policy) {
-      chrome_policy.Set(it.key(), level, POLICY_SCOPE_MACHINE,
-                        POLICY_SOURCE_PLATFORM, std::move(*policy), nullptr);
+      chrome_policy.Set(it.key(), level, scope, POLICY_SOURCE_PLATFORM,
+                        std::move(*policy), nullptr);
     } else {
       status.Add(POLICY_LOAD_STATUS_PARSE_ERROR);
     }
@@ -142,7 +147,7 @@ std::unique_ptr<PolicyBundle> PolicyLoaderMac::Load() {
     status.Add(POLICY_LOAD_STATUS_NO_POLICY);
 
   // Load policy for the registered components.
-  LoadPolicyForDomain(POLICY_DOMAIN_EXTENSIONS, "extensions", bundle.get());
+  LoadPolicyForDomain(POLICY_DOMAIN_EXTENSIONS, "extensions", &bundle);
 
   if (!ShouldHonorPolicies())
     FilterSensitivePolicies(&chrome_policy);
@@ -226,9 +231,15 @@ void PolicyLoaderMac::LoadPolicyForComponent(
     bool forced = preferences_->AppValueIsForced(pref_name, bundle_id);
     PolicyLevel level =
         forced ? POLICY_LEVEL_MANDATORY : POLICY_LEVEL_RECOMMENDED;
+    PolicyScope scope = POLICY_SCOPE_USER;
+    if (forced) {
+      scope = preferences_->IsManagedPolicyAvailableForMachineScope(pref_name)
+                  ? POLICY_SCOPE_MACHINE
+                  : POLICY_SCOPE_USER;
+    }
     std::unique_ptr<base::Value> policy_value = PropertyToValue(value);
     if (policy_value) {
-      policy->Set(it.key(), level, POLICY_SCOPE_MACHINE, POLICY_SOURCE_PLATFORM,
+      policy->Set(it.key(), level, scope, POLICY_SOURCE_PLATFORM,
                   std::move(*policy_value), nullptr);
     }
   }

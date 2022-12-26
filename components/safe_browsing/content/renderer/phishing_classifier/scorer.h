@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -26,6 +26,7 @@
 #include "base/files/memory_mapped_file.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/observer_list.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "components/optimization_guide/machine_learning_tflite_buildflags.h"
@@ -79,6 +80,8 @@ class Scorer {
 
   // Returns the version number of the loaded client model.
   virtual int model_version() const = 0;
+
+  virtual int dom_model_version() const = 0;
 
   bool HasVisualTfLiteModel() const;
 
@@ -140,6 +143,33 @@ class Scorer {
 
  private:
   friend class PhishingScorerTest;
+};
+
+// A small wrapper around a Scorer that allows callers to observe for changes in
+// the model.
+class ScorerStorage {
+ public:
+  static ScorerStorage* GetInstance();
+
+  class Observer : public base::CheckedObserver {
+   public:
+    virtual void OnScorerChanged() = 0;
+  };
+
+  ScorerStorage();
+  ~ScorerStorage();
+  ScorerStorage(const ScorerStorage&) = delete;
+  ScorerStorage& operator=(const ScorerStorage&) = delete;
+
+  void SetScorer(std::unique_ptr<Scorer> scorer);
+  Scorer* GetScorer() const;
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
+ private:
+  std::unique_ptr<Scorer> scorer_;
+  base::ObserverList<Observer> observers_;
 };
 
 }  // namespace safe_browsing

@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,6 +21,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
@@ -30,7 +31,6 @@ import org.chromium.chrome.browser.compositor.layouts.Layout.Orientation;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
-import org.chromium.chrome.browser.continuous_search.ContinuousSearchContainerCoordinator;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.gesturenav.HistoryNavigationCoordinator;
 import org.chromium.chrome.browser.layouts.CompositorModelChangeProcessor;
@@ -175,6 +175,9 @@ public class LayoutManagerImpl
     private final ObservableSupplierImpl<Boolean> mHandleBackPressChangedSupplier =
             new ObservableSupplierImpl<>();
 
+    /** When non-null, #doneShowing should call into the sequencer instead of doing normal work. */
+    private ShowingEventSequencer mShowingEventSequencer;
+
     /**
      * Protected class to handle {@link TabModelObserver} related tasks. Extending classes will
      * need to override any related calls to add new functionality
@@ -234,13 +237,23 @@ public class LayoutManagerImpl
         }
 
         @Override
-        public void didCloseTab(Tab tab) {
+        public void onFinishingTabClosure(Tab tab) {
             tabClosed(tab.getId(), tab.isIncognito(), false);
         }
 
         @Override
         public void tabPendingClosure(Tab tab) {
             tabClosed(tab.getId(), tab.isIncognito(), false);
+        }
+
+        @Override
+        public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
+            // Handled by willCloseAllTabs;
+            if (isAllTabs) return;
+
+            for (Tab tab : tabs) {
+                tabClosed(tab.getId(), tab.isIncognito(), false);
+            }
         }
 
         @Override
@@ -251,6 +264,35 @@ public class LayoutManagerImpl
         @Override
         public void tabRemoved(Tab tab) {
             tabClosed(tab.getId(), tab.isIncognito(), true);
+        }
+    }
+
+    /**
+     * Scoped class that temporarily delays doneShowing. This stops reentrancy from Layouts without
+     * animations that try to call {@link #doneShowing()} immediately. The done showing transition
+     * is different from all the others in that the manager drives it instead, instead of the
+     * layouts calling up into the host to drive it. This is why only done showing needs help
+     * stopping reentrancy.
+     */
+    private class ShowingEventSequencer implements AutoCloseable {
+        private boolean mPendingDoneShowing;
+
+        private ShowingEventSequencer() {
+            assert LayoutManagerImpl.this.mShowingEventSequencer == null;
+            LayoutManagerImpl.this.mShowingEventSequencer = this;
+        }
+
+        @Override
+        public void close() {
+            assert LayoutManagerImpl.this.mShowingEventSequencer == this;
+            LayoutManagerImpl.this.mShowingEventSequencer = null;
+            if (mPendingDoneShowing) {
+                LayoutManagerImpl.this.doneShowing();
+            }
+        }
+
+        public void setPendingDoneShowing() {
+            mPendingDoneShowing = true;
         }
     }
 
@@ -275,7 +317,6 @@ public class LayoutManagerImpl
         // Overlays are ordered back (closest to the web content) to front.
         Class[] overlayOrder = new Class[] {
                 HistoryNavigationCoordinator.getSceneOverlayClass(),
-                ContinuousSearchContainerCoordinator.getSceneOverlayClass(),
                 TopToolbarOverlayCoordinator.class,
                 // StripLayoutHelperManager should be updated before ScrollingBottomViewSceneLayer
                 // Since ScrollingBottomViewSceneLayer change the container size,
@@ -763,6 +804,10 @@ public class LayoutManagerImpl
         getActiveLayout().onTabsAllClosing(incognito);
     }
 
+    protected Supplier<TopUiThemeColorProvider> getTopUiThemeColorProvider() {
+        return mTopUiThemeColorProvider;
+    }
+
     @Override
     public void initLayoutTabFromHost(final int tabId) {
         if (getTabModelSelector() == null || getActiveLayout() == null) return;
@@ -930,6 +975,11 @@ public class LayoutManagerImpl
 
     @Override
     public void doneShowing() {
+        if (mShowingEventSequencer != null) {
+            mShowingEventSequencer.setPendingDoneShowing();
+            return;
+        }
+
         // Notify LayoutObservers the active layout is finished showing.
         for (LayoutStateObserver observer : mLayoutObservers) {
             observer.onFinishedShowing(getActiveLayout().getLayoutType());
@@ -1011,20 +1061,26 @@ public class LayoutManagerImpl
         }
 
         onViewportChanged();
-        getActiveLayout().show(time(), animate);
-        mHost.setContentOverlayVisibility(getActiveLayout().shouldDisplayContentOverlay(),
-                getActiveLayout().canHostBeFocusable());
-        requestUpdate();
 
-        // TODO(crbug.com/1108496): Remove after migrates to LayoutStateObserver#onStartedShowing.
-        // Notify observers about the new scene.
-        for (SceneChangeObserver observer : mSceneChangeObservers) {
-            observer.onSceneChange(getActiveLayout());
-        }
+        // In order to prevent another state transition in the middle of processing this one,
+        // scopedSequencer will add itself as a member of this class, and then remove itself once
+        // its scope is closed.
+        try (ShowingEventSequencer scopedSequencer = new ShowingEventSequencer()) {
+            getActiveLayout().show(time(), animate);
+            mHost.setContentOverlayVisibility(getActiveLayout().shouldDisplayContentOverlay(),
+                    getActiveLayout().canHostBeFocusable());
+            requestUpdate();
 
-        for (LayoutStateObserver observer : mLayoutObservers) {
-            observer.onStartedShowing(
-                    layout.getLayoutType(), shouldShowToolbarAnimationOnShow(animate));
+            // TODO(crbug.com/1108496): Remove after migrates to
+            // LayoutStateObserver#onStartedShowing. Notify observers about the new scene.
+            for (SceneChangeObserver observer : mSceneChangeObservers) {
+                observer.onSceneChange(getActiveLayout());
+            }
+
+            for (LayoutStateObserver observer : mLayoutObservers) {
+                observer.onStartedShowing(
+                        layout.getLayoutType(), shouldShowToolbarAnimationOnShow(animate));
+            }
         }
     }
 
@@ -1089,8 +1145,12 @@ public class LayoutManagerImpl
             if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
 
             // If the back button was consumed by any overlays, return true.
-            if (mSceneOverlays.get(i).onBackPressed()) return true;
+            if (mSceneOverlays.get(i).onBackPressed()) {
+                BackPressManager.record(BackPressHandler.Type.SCENE_OVERLAY);
+                return true;
+            }
         }
+        // Back press metrics of active layout is recorded by their implementations.
         return getActiveLayout() != null && getActiveLayout().onBackPressed();
     }
 
@@ -1154,7 +1214,7 @@ public class LayoutManagerImpl
      * Clears all content associated with {@code tabId} from the internal caches.
      * @param tabId The id of the tab to clear.
      */
-    protected void emptyCachesExcept(int tabId) {
+    protected void emptyTabCachesExcept(int tabId) {
         LayoutTab tab = mTabCache.get(tabId);
         mTabCache.clear();
         if (tab != null) mTabCache.put(tabId, tab);
@@ -1183,6 +1243,11 @@ public class LayoutManagerImpl
     @Override
     public boolean isLayoutVisible(int layoutType) {
         return getActiveLayout() != null && getActiveLayout().getLayoutType() == layoutType;
+    }
+
+    @Override
+    public boolean isLayoutStartingToHide(int layoutType) {
+        return isLayoutVisible(layoutType) && getActiveLayout().isStartingToHide();
     }
 
     @Override

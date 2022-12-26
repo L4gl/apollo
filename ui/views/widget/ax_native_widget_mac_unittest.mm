@@ -1,9 +1,10 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <memory>
 
+#import <Accessibility/Accessibility.h>
 #import <Cocoa/Cocoa.h>
 
 #include "base/mac/mac_util.h"
@@ -329,14 +330,39 @@ TEST_F(AXNativeWidgetMacTest, PositionAttribute) {
   EXPECT_NSEQ(widget_origin, A11yElementAtMidpoint().accessibilityFrame.origin);
 }
 
-// Test for NSAccessibilityHelpAttribute.
-TEST_F(AXNativeWidgetMacTest, HelpAttribute) {
+// Test for surfacing information in TooltipText.
+TEST_F(AXNativeWidgetMacTest, TooltipText) {
   Label* label = new Label(base::SysNSStringToUTF16(kTestStringValue));
   label->SetSize(GetWidgetBounds().size());
-  EXPECT_NSEQ(@"", A11yElementAtMidpoint().accessibilityHelp);
+  EXPECT_NSEQ(nil, A11yElementAtMidpoint().accessibilityHelp);
   label->SetTooltipText(base::SysNSStringToUTF16(kTestPlaceholderText));
   widget()->GetContentsView()->AddChildView(label);
-  EXPECT_NSEQ(kTestPlaceholderText, A11yElementAtMidpoint().accessibilityHelp);
+
+  // The tooltip is exposed in accessibilityHelp only before macOS 11. After,
+  // it is accessibilityCustomContent. This is because the DescriptionFrom
+  // for the ToolTip string has been been set to kAriaDescription, and
+  // `aria-description` is exposed in AXCustomContent.
+  id<NSAccessibility> element = A11yElementAtMidpoint();
+
+  if (@available(macOS 11.0, *)) {
+    NSString* description = nil;
+    ASSERT_TRUE(
+        [element conformsToProtocol:@protocol(AXCustomContentProvider)]);
+    auto element_with_content =
+        static_cast<id<AXCustomContentProvider>>(element);
+    for (AXCustomContent* content in element_with_content
+             .accessibilityCustomContent) {
+      if ([content.label isEqualToString:@"description"]) {
+        // There should be only one AXCustomContent with the label
+        // "description".
+        EXPECT_EQ(description, nil);
+        description = content.value;
+      }
+    }
+    EXPECT_NSEQ(kTestPlaceholderText, description);
+  } else {
+    EXPECT_NSEQ(kTestPlaceholderText, element.accessibilityHelp);
+  }
 }
 
 // Test view properties that should report the native NSWindow, and test
@@ -377,13 +403,24 @@ TEST_F(AXNativeWidgetMacTest, TextfieldGenericAttributes) {
   textfield->RequestFocus();
   EXPECT_EQ(YES, ax_obj.isAccessibilityFocused);
 
-  // NSAccessibilityTitleAttribute.
-  EXPECT_NSEQ(NSAccessibilityTextFieldRole, ax_obj.accessibilityRole);
-  EXPECT_NSEQ(kTestTitle, ax_obj.accessibilityTitle);
+  // NSAccessibilityTitleAttribute, NSAccessibilityLabelAttribute.
+  // https://developer.apple.com/documentation/appkit/nsaccessibilityprotocol
+  // * accessibilityTitle() returns the title of the accessibility element,
+  //   for example a button's visible text.
+  // * accessibilityLabel() returns a short description of the accessibility
+  //   element.
+  // Textfield::SetAssociatedLabel() is what should be used if the textfield
+  // has a visible label. Because AddChildTextfield() uses SetAccessibleName()
+  // to set the accessible name to a flat string, the title should be exposed
+  // via accessibilityLabel() instead of accessibilityTitle();
+  EXPECT_NSEQ(@"", ax_obj.accessibilityTitle);
+  EXPECT_NSEQ(kTestTitle, ax_obj.accessibilityLabel);
   EXPECT_NSEQ(kTestStringValue, ax_obj.accessibilityValue);
 
+  // NSAccessibilityRoleAttribute,
   // NSAccessibilitySubroleAttribute and
   // NSAccessibilityRoleDescriptionAttribute.
+  EXPECT_NSEQ(NSAccessibilityTextFieldRole, ax_obj.accessibilityRole);
   EXPECT_NSEQ(nil, ax_obj.accessibilitySubrole);
   NSString* role_description =
       NSAccessibilityRoleDescription(NSAccessibilityTextFieldRole, nil);
@@ -442,6 +479,7 @@ TEST_F(AXNativeWidgetMacTest, TextfieldEditableAttributes) {
   EXPECT_EQ(textfield->GetSelectedText(),
             base::SysNSStringToUTF16(ax_node.accessibilitySelectedText));
   EXPECT_EQ(forward_range, gfx::Range(ax_node.accessibilitySelectedTextRange));
+  EXPECT_EQ(0, ax_node.accessibilityInsertionPointLineNumber);
 
   const gfx::Range reversed_range(6, 2);
   textfield->SetSelectedRange(reversed_range);
@@ -689,6 +727,7 @@ TEST_F(AXNativeWidgetMacTest, ProtectedTextfields) {
   EXPECT_NSEQ(@"", ax_node.accessibilitySelectedText);
   EXPECT_NSEQ(NSMakeRange(kTestStringLength, 0),
               ax_node.accessibilitySelectedTextRange);
+  EXPECT_EQ(0, ax_node.accessibilityInsertionPointLineNumber);
 
   EXPECT_EQ(kTestStringLength, ax_node.accessibilityNumberOfCharacters);
   EXPECT_NSEQ(NSMakeRange(0, kTestStringLength),
@@ -705,6 +744,7 @@ TEST_F(AXNativeWidgetMacTest, ProtectedTextfields) {
   EXPECT_EQ(u"12ab", textfield->GetText());
   EXPECT_NSEQ(@"••••", ax_node.accessibilityValue);
   EXPECT_EQ(4, ax_node.accessibilityNumberOfCharacters);
+  EXPECT_EQ(0, ax_node.accessibilityInsertionPointLineNumber);
 }
 
 // Test text-specific attributes of Labels.
@@ -773,8 +813,8 @@ class TestComboboxModel : public ui::ComboboxModel {
   TestComboboxModel& operator=(const TestComboboxModel&) = delete;
 
   // ui::ComboboxModel:
-  int GetItemCount() const override { return 2; }
-  std::u16string GetItemAt(int index) const override {
+  size_t GetItemCount() const override { return 2; }
+  std::u16string GetItemAt(size_t index) const override {
     return index == 0 ? base::SysNSStringToUTF16(kTestStringValue)
                       : u"Second Item";
   }

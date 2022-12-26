@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,10 @@
  * 'settings-privacy-guide-page' is the settings page that helps users guide
  * various privacy settings.
  */
-import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import '../../prefs/prefs.js';
-import '../../settings_shared_css.js';
+import '../../settings_shared.css.js';
 import 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 import './privacy_guide_clear_on_exit_fragment.js';
 import './privacy_guide_completion_fragment.js';
@@ -23,8 +23,8 @@ import './step_indicator.js';
 
 import {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
-import {WebUIListenerMixin, WebUIListenerMixinInterface} from 'chrome://resources/js/web_ui_listener_mixin.js';
+import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../../hats_browser_proxy.js';
@@ -56,9 +56,9 @@ export interface SettingsPrivacyGuidePageElement {
   };
 }
 
-const PrivacyGuideBase = RouteObserverMixin(WebUIListenerMixin(
+const PrivacyGuideBase = RouteObserverMixin(WebUiListenerMixin(
                              I18nMixin(PrefsMixin(PolymerElement)))) as {
-  new (): PolymerElement & I18nMixinInterface & WebUIListenerMixinInterface &
+  new (): PolymerElement & I18nMixinInterface & WebUiListenerMixinInterface &
       RouteObserverMixinInterface & PrefsMixinInterface,
 };
 
@@ -128,7 +128,7 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
         reflectToAttribute: true,
         type: Boolean,
         value: false,
-      }
+      },
     };
   }
 
@@ -165,12 +165,12 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
   override ready() {
     super.ready();
 
-    this.addWebUIListener(
+    this.addWebUiListener(
         'sync-status-changed',
         (syncStatus: SyncStatus) => this.onSyncStatusChanged_(syncStatus));
     this.syncBrowserProxy_.getSyncStatus().then(
         (syncStatus: SyncStatus) => this.onSyncStatusChanged_(syncStatus));
-    this.addWebUIListener(
+    this.addWebUiListener(
         'is-managed-changed', this.onIsManagedChanged_.bind(this));
   }
 
@@ -183,11 +183,6 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
     if (newRoute !== routes.PRIVACY_GUIDE || this.exitIfNecessary()) {
       return;
     }
-    // Set the pref that the user has viewed the Privacy guide.
-    CrSettingsPrefs.initialized.then(() => {
-      this.setPrefValue('privacy_guide.viewed', true);
-    });
-
     this.updateStateFromQueryParameters_();
   }
 
@@ -350,8 +345,16 @@ export class SettingsPrivacyGuidePageElement extends PrivacyGuideBase {
   }
 
   /** Sets the privacy guide step from the URL parameter. */
-  private updateStateFromQueryParameters_() {
+  private async updateStateFromQueryParameters_() {
     assert(Router.getInstance().getCurrentRoute() === routes.PRIVACY_GUIDE);
+
+    // Tasks in the privacy guide UI and in multiple fragments rely on prefs
+    // being loaded. Instead of individually delaying those tasks, await prefs
+    // once when a navigation to the privacy guide happens.
+    await CrSettingsPrefs.initialized;
+    // Set the pref that the user has viewed the Privacy guide.
+    this.setPrefValue('privacy_guide.viewed', true);
+
     const step = Router.getInstance().getQueryParameters().get('step') as
         PrivacyGuideStep;
 

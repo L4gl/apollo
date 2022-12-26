@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -95,6 +95,7 @@ void DownloadNativeTaskImpl::OnDownloadProgress(int64_t bytes_received,
   total_bytes_ = total_bytes;
   received_bytes_ = bytes_received;
   percent_complete_ = static_cast<int>(fraction_complete * 100);
+  OnDownloadUpdated();
 }
 
 void DownloadNativeTaskImpl::OnResponseReceived(int http_error_code,

@@ -1,22 +1,21 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_mediator.h"
 
-#include <memory>
+#import <memory>
 
-#include "base/mac/foundation_util.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "components/ntp_snippets/content_suggestions_service.h"
-#include "components/ntp_snippets/features.h"
+#import "base/mac/foundation_util.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "components/ntp_snippets/content_suggestions_service.h"
+#import "components/ntp_snippets/features.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
-#include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/chrome_url_constants.h"
-#include "ios/chrome/browser/discover_feed/discover_feed_service.h"
-#include "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
+#import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/discover_feed/discover_feed_service.h"
+#import "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/policy/policy_util.h"
@@ -24,36 +23,37 @@
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cells_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_return_to_recent_tab_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizer.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_consumer.h"
 #import "ios/chrome/browser/ui/content_suggestions/user_account_image_update_delegate.h"
-#import "ios/chrome/browser/ui/ntp/discover_feed_wrapper_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
-#import "ios/chrome/browser/ui/ntp/feed_metrics_recorder.h"
+#import "ios/chrome/browser/ui/ntp/feed_wrapper_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/logo_vendor.h"
-#include "ios/chrome/browser/ui/ntp/metrics.h"
+#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
+#import "ios/chrome/browser/ui/ntp/metrics/metrics.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view_controller.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
-#import "ios/chrome/browser/voice/voice_search_availability.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#include "ios/web/public/navigation/referrer.h"
+#import "ios/web/public/navigation/referrer.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_observer_bridge.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "url/gurl.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -77,8 +77,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 @interface NTPHomeMediator () <ChromeAccountManagerServiceObserver,
                                CRWWebStateObserver,
                                IdentityManagerObserverBridgeDelegate,
-                               SearchEngineObserving,
-                               VoiceSearchAvailabilityObserver> {
+                               SearchEngineObserving> {
   std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
       _accountManagerServiceObserver;
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
@@ -98,8 +97,6 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 @property(nonatomic, assign) AuthenticationService* authService;
 // Logo vendor to display the doodle on the NTP.
 @property(nonatomic, strong) id<LogoVendor> logoVendor;
-// The voice search availability.
-@property(nonatomic, assign) VoiceSearchAvailability* voiceSearchAvailability;
 // This is the object that knows how to update the Identity Disc UI.
 @property(nonatomic, weak) id<UserAccountImageUpdateDelegate> imageUpdater;
 
@@ -108,14 +105,14 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 @implementation NTPHomeMediator
 
 - (instancetype)
-           initWithWebState:(web::WebState*)webState
-         templateURLService:(TemplateURLService*)templateURLService
-                  URLLoader:(UrlLoadingBrowserAgent*)URLLoader
-                authService:(AuthenticationService*)authService
-            identityManager:(signin::IdentityManager*)identityManager
-      accountManagerService:(ChromeAccountManagerService*)accountManagerService
-                 logoVendor:(id<LogoVendor>)logoVendor
-    voiceSearchAvailability:(VoiceSearchAvailability*)voiceSearchAvailability {
+            initWithWebState:(web::WebState*)webState
+          templateURLService:(TemplateURLService*)templateURLService
+                   URLLoader:(UrlLoadingBrowserAgent*)URLLoader
+                 authService:(AuthenticationService*)authService
+             identityManager:(signin::IdentityManager*)identityManager
+       accountManagerService:(ChromeAccountManagerService*)accountManagerService
+                  logoVendor:(id<LogoVendor>)logoVendor
+    identityDiscImageUpdater:(id<UserAccountImageUpdateDelegate>)imageUpdater {
   self = [super init];
   if (self) {
     _webState = webState;
@@ -132,7 +129,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
     _searchEngineObserver = std::make_unique<SearchEngineObserverBridge>(
         self, self.templateURLService);
     _logoVendor = logoVendor;
-    _voiceSearchAvailability = voiceSearchAvailability;
+    _imageUpdater = imageUpdater;
   }
   return self;
 }
@@ -153,28 +150,20 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
     self.webState->AddObserver(_webStateObserver.get());
   }
 
-  self.voiceSearchAvailability->AddObserver(self);
-
   [self.consumer setLogoVendor:self.logoVendor];
-  [self.consumer setVoiceSearchIsEnabled:self.voiceSearchAvailability
-                                             ->IsVoiceSearchAvailable()];
+  [self.consumer setVoiceSearchIsEnabled:ios::provider::IsVoiceSearchEnabled()];
 
   self.templateURLService->Load();
   [self searchEngineChanged];
+
+  [self updateAccountImage];
 }
 
 - (void)shutdown {
   _searchEngineObserver.reset();
   if (_webState && _webStateObserver) {
-    if (!IsSingleNtpEnabled()) {
-      [self saveContentOffsetForWebState:_webState];
-    }
     _webState->RemoveObserver(_webStateObserver.get());
     _webStateObserver.reset();
-  }
-  if (_voiceSearchAvailability) {
-    _voiceSearchAvailability->RemoveObserver(self);
-    _voiceSearchAvailability = nullptr;
   }
   _identityObserverBridge.reset();
   _accountManagerServiceObserver.reset();
@@ -190,16 +179,10 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 }
 
 - (void)saveContentOffsetForWebState:(web::WebState*)webState {
-  if (!IsSingleNtpEnabled() &&
-      webState->GetLastCommittedURL().DeprecatedGetOriginAsURL() !=
+  if (webState->GetLastCommittedURL().DeprecatedGetOriginAsURL() !=
+          kChromeUINewTabURL &&
+      webState->GetVisibleURL().DeprecatedGetOriginAsURL() !=
           kChromeUINewTabURL) {
-    return;
-  }
-  if (IsSingleNtpEnabled() &&
-      (webState->GetLastCommittedURL().DeprecatedGetOriginAsURL() !=
-           kChromeUINewTabURL &&
-       webState->GetVisibleURL().DeprecatedGetOriginAsURL() !=
-           kChromeUINewTabURL)) {
     // Do nothing if the current page is not the NTP.
     return;
   }
@@ -210,7 +193,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
     // Return to Recent tab tile is only shown one time, so subtract it's
     // vertical space to preserve relative scroll position from top.
     CGFloat tileSectionHeight =
-        [ContentSuggestionsReturnToRecentTabCell defaultSize].height +
+        ReturnToRecentTabHeight() +
         content_suggestions::kReturnToRecentTabSectionBottomMargin;
     if (scrollPosition >
         tileSectionHeight +
@@ -232,10 +215,6 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 
 // Opens web page for a menu item in the NTP.
 - (void)openMenuItemWebPage:(GURL)URL {
-  NewTabPageTabHelper* NTPHelper =
-      NewTabPageTabHelper::FromWebState(self.webState);
-  if (NTPHelper && NTPHelper->IgnoreLoadRequests())
-    return;
   _URLLoader->Load(UrlLoadParams::InCurrentTab(URL));
   // TODO(crbug.com/1085419): Add metrics.
 }
@@ -260,32 +239,34 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
   [self.feedMetricsRecorder recordHeaderMenuLearnMoreTapped];
 }
 
+- (void)handleVisitSiteFromFollowManagementList:(const GURL&)url {
+  // TODO(crbug.com/1331102): Add metrics.
+  [self openMenuItemWebPage:url];
+}
+
 #pragma mark - Properties.
 
 - (void)setWebState:(web::WebState*)webState {
   if (_webState && _webStateObserver) {
     _webState->RemoveObserver(_webStateObserver.get());
-    if (IsSingleNtpEnabled()) {
-      [self saveContentOffsetForWebState:_webState];
-    }
+    [self saveContentOffsetForWebState:_webState];
   }
   _webState = webState;
-  if (IsSingleNtpEnabled()) {
-    [self.logoVendor setWebState:webState];
-  }
+  [self.logoVendor setWebState:webState];
   if (_webState && _webStateObserver) {
-    if (IsSingleNtpEnabled()) {
-      [self setContentOffsetForWebState:webState];
-    }
+    [self setContentOffsetForWebState:webState refreshFeedIfNeeded:NO];
     _webState->AddObserver(_webStateObserver.get());
   }
 }
 
 #pragma mark - CRWWebStateObserver
 
+// Remove this once NTPCoordinator is started upon creation so
+// setContentOffsetForWebState: can be called when the NTPCoordinator's WebState
+// changes.
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
   DCHECK_EQ(_webState, webState);
-  [self setContentOffsetForWebState:webState];
+  [self setContentOffsetForWebState:webState refreshFeedIfNeeded:YES];
 }
 
 - (void)webStateWasHidden:(web::WebState*)webState {
@@ -300,28 +281,8 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 
 #pragma mark - ChromeAccountManagerServiceObserver
 
-- (void)identityChanged:(ChromeIdentity*)identity {
+- (void)identityUpdated:(id<SystemIdentity>)identity {
   [self updateAccountImage];
-}
-
-#pragma mark - ContentSuggestionsHeaderViewControllerDelegate
-
-- (BOOL)isScrolledToMinimumHeight {
-  return [self.ntpViewController isScrolledToMinimumHeight];
-}
-
-- (void)registerImageUpdater:(id<UserAccountImageUpdateDelegate>)imageUpdater {
-  self.imageUpdater = imageUpdater;
-  [self updateAccountImage];
-}
-
-- (BOOL)ignoreLoadRequests {
-  NewTabPageTabHelper* NTPHelper =
-      NewTabPageTabHelper::FromWebState(self.webState);
-  if (NTPHelper && NTPHelper->IgnoreLoadRequests()) {
-    return YES;
-  }
-  return NO;
 }
 
 #pragma mark - SearchEngineObserving
@@ -352,17 +313,12 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
   }
 }
 
-#pragma mark - VoiceSearchAvailabilityObserver
-
-- (void)voiceSearchAvailability:(VoiceSearchAvailability*)availability
-            updatedAvailability:(BOOL)available {
-  [self.consumer setVoiceSearchIsEnabled:available];
-}
-
 #pragma mark - Private
 
-// Set the NTP scroll offset for the current navigation item.
-- (void)setContentOffsetForWebState:(web::WebState*)webState {
+// Set the NTP scroll offset for the current navigation item. If
+// `refreshFeedIfNeeded` is YES a feed refresh will be attempted.
+- (void)setContentOffsetForWebState:(web::WebState*)webState
+                refreshFeedIfNeeded:(BOOL)refreshFeedIfNeeded {
   if (webState->GetVisibleURL().DeprecatedGetOriginAsURL() !=
       kChromeUINewTabURL) {
     return;
@@ -380,7 +336,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
   CGFloat minimumOffset = -[self.ntpViewController heightAboveFeed];
   if (offsetFromSavedState > minimumOffset) {
     [self.ntpViewController setSavedContentOffset:offsetFromSavedState];
-  } else if (IsSingleNtpEnabled()) {
+  } else {
     // Remove this if NTPs are ever scoped back to the WebState.
     [self.ntpViewController setContentOffsetToTop];
     // Refresh NTP content if there is is no saved scrolled state or when a new
@@ -389,7 +345,8 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
     [self.suggestionsMediator refreshMostVisitedTiles];
 
     // Refresh DiscoverFeed unless in off-the-record NTP.
-    if (!self.browser->GetBrowserState()->IsOffTheRecord()) {
+    if (!self.browser->GetBrowserState()->IsOffTheRecord() &&
+        refreshFeedIfNeeded) {
       DiscoverFeedServiceFactory::GetForBrowserState(
           self.browser->GetBrowserState())
           ->RefreshFeedIfNeeded();
@@ -402,7 +359,7 @@ const char kFeedLearnMoreURL[] = "https://support.google.com/chrome/"
 - (void)updateAccountImage {
   UIImage* image = nil;
   // Fetches user's identity from Authentication Service.
-  ChromeIdentity* identity =
+  id<SystemIdentity> identity =
       self.authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   if (identity) {
     // Only show an avatar if the user is signed in.

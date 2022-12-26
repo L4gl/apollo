@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -418,7 +418,7 @@ void MultiBuffer::OnDataProviderEvent(DataProvider* provider_tmp) {
     Interval<BlockId> expanded_range = present_.find(start_pos).interval();
     NotifyAvailableRange(expanded_range, expanded_range);
     lru_->IncrementDataSize(blocks_added);
-    Prune(blocks_added * kMaxFreesPerAdd + 1);
+    Prune(static_cast<size_t>(blocks_added) * kMaxFreesPerAdd + 1);
   } else {
     // Make sure to give progress reports even when there
     // aren't any new blocks yet.
@@ -560,7 +560,7 @@ void MultiBuffer::PinRanges(const IntervalMap<BlockId, int32_t>& ranges) {
   }
 }
 
-void MultiBuffer::IncrementMaxSize(int32_t size) {
+void MultiBuffer::IncrementMaxSize(int64_t size) {
   max_size_ += size;
   lru_->IncrementMaxSize(size);
   DCHECK_GE(max_size_, 0);

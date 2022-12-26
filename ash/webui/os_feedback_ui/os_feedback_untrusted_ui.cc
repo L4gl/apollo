@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,6 +28,11 @@ void AddLocalizedStrings(content::WebUIDataSource* source) {
       {"suggestedHelpContent", IDS_FEEDBACK_TOOL_SUGGESTED_HELP_CONTENT},
       {"popularHelpContent", IDS_FEEDBACK_TOOL_POPULAR_HELP_CONTENT},
       {"noMatchedResults", IDS_FEEDBACK_TOOL_NO_MATCHED_RESULTS},
+      {"helpContentOfflineMessage",
+       IDS_FEEDBACK_TOOL_HELP_CONTENT_OFFLINE_MESSAGE},
+      {"helpContentOfflineAltText",
+       IDS_FEEDBACK_TOOL_HELP_CONTENT_OFFLINE_ALT_TEXT},
+      {"helpContentLabelTooltip", IDS_FEEDBACK_TOOL_HELP_CONTENT_LABEL_TOOLTIP},
   };
 
   source->AddLocalizedStrings(kLocalizedStrings);
@@ -60,6 +65,12 @@ OsFeedbackUntrustedUI::OsFeedbackUntrustedUI(content::WebUI* web_ui)
                                     IDR_ASH_OS_FEEDBACK_HELP_CONTENT_JS);
   untrusted_source->AddResourcePath("feedback_types.js",
                                     IDR_ASH_OS_FEEDBACK_FEEDBACK_TYPES_JS);
+  untrusted_source->AddResourcePath(
+      "file_path.mojom-lite.js",
+      IDR_ASH_OS_FEEDBACK_MOJO_PUBLIC_MOJOM_BASE_FILE_PATH_MOJOM_LITE_JS);
+  untrusted_source->AddResourcePath(
+      "safe_base_name.mojom-lite.js",
+      IDR_ASH_OS_FEEDBACK_MOJO_PUBLIC_MOJOM_BASE_SAFE_BASE_NAME_MOJOM_LITE_JS);
   untrusted_source->AddResourcePath(
       "help_resources_icons.js", IDR_ASH_OS_FEEDBACK_HELP_RESOURCES_ICONS_JS);
   untrusted_source->AddResourcePath(

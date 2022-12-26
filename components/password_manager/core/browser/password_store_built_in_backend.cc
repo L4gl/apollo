@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,9 @@
 #include "base/task/thread_pool.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/login_database_async_helper.h"
+#include "components/password_manager/core/browser/password_store_backend.h"
 #include "components/password_manager/core/browser/password_store_backend_metrics_recorder.h"
+#include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/password_store_util.h"
 #include "components/sync/model/proxy_model_type_controller_delegate.h"
 
@@ -18,7 +20,6 @@ namespace password_manager {
 
 namespace {
 
-using OptionalChangeList = absl::optional<PasswordStoreChangeList>;
 using SuccessStatus = PasswordStoreBackendMetricsRecorder::SuccessStatus;
 
 // Template function to create a callback which accepts LoginsResultOrError or
@@ -42,14 +43,6 @@ base::OnceCallback<Result(Result)> ReportMetricsForResultCallback(
       std::move(metrics_reporter));
 }
 
-// TODO(crbug.com/1321051): Consider moving error handling into PasswordStore.
-OptionalChangeList MakeEmptyListOnError(PasswordChangesOrError result) {
-  if (absl::holds_alternative<PasswordStoreBackendError>(result)) {
-    return PasswordStoreChangeList();
-  }
-  return absl::get<PasswordStoreChangeList>(std::move(result));
-}
-
 }  // namespace
 
 PasswordStoreBuiltInBackend::PasswordStoreBuiltInBackend(
@@ -61,7 +54,7 @@ PasswordStoreBuiltInBackend::PasswordStoreBuiltInBackend(
   DCHECK(background_task_runner_);
   helper_ = std::make_unique<LoginDatabaseAsyncHelper>(
       std::move(login_db), std::move(notifier),
-      base::SequencedTaskRunnerHandle::Get());
+      base::SequencedTaskRunner::GetCurrentDefault());
 }
 
 PasswordStoreBuiltInBackend::~PasswordStoreBuiltInBackend() {
@@ -128,13 +121,13 @@ void PasswordStoreBuiltInBackend::GetAllLoginsForAccountAsync(
 }
 
 void PasswordStoreBuiltInBackend::FillMatchingLoginsAsync(
-    LoginsReply callback,
+    LoginsOrErrorReply callback,
     bool include_psl,
     const std::vector<PasswordFormDigest>& forms) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(helper_);
   if (forms.empty()) {
-    std::move(callback).Run({});
+    std::move(callback).Run(LoginsResult());
     return;
   }
 
@@ -152,7 +145,7 @@ void PasswordStoreBuiltInBackend::FillMatchingLoginsAsync(
 
 void PasswordStoreBuiltInBackend::AddLoginAsync(
     const PasswordForm& form,
-    PasswordStoreChangeListReply callback) {
+    PasswordChangesOrErrorReply callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(helper_);
   background_task_runner_->PostTaskAndReplyWithResult(
@@ -161,13 +154,12 @@ void PasswordStoreBuiltInBackend::AddLoginAsync(
                      base::Unretained(helper_.get()), form),
       ReportMetricsForResultCallback<PasswordChangesOrError>(
           MetricInfix("AddLoginAsync"))
-          .Then(base::BindOnce(&MakeEmptyListOnError))
           .Then(std::move(callback)));
 }
 
 void PasswordStoreBuiltInBackend::UpdateLoginAsync(
     const PasswordForm& form,
-    PasswordStoreChangeListReply callback) {
+    PasswordChangesOrErrorReply callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(helper_);
   background_task_runner_->PostTaskAndReplyWithResult(
@@ -176,13 +168,12 @@ void PasswordStoreBuiltInBackend::UpdateLoginAsync(
                      base::Unretained(helper_.get()), form),
       ReportMetricsForResultCallback<PasswordChangesOrError>(
           MetricInfix("UpdateLoginAsync"))
-          .Then(base::BindOnce(&MakeEmptyListOnError))
           .Then(std::move(callback)));
 }
 
 void PasswordStoreBuiltInBackend::RemoveLoginAsync(
     const PasswordForm& form,
-    PasswordStoreChangeListReply callback) {
+    PasswordChangesOrErrorReply callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(helper_);
   background_task_runner_->PostTaskAndReplyWithResult(
@@ -193,14 +184,13 @@ void PasswordStoreBuiltInBackend::RemoveLoginAsync(
           form),
       ReportMetricsForResultCallback<PasswordChangesOrError>(
           MetricInfix("RemoveLoginAsync"))
-          .Then(base::BindOnce(&MakeEmptyListOnError))
           .Then(std::move(callback)));
 }
 
 void PasswordStoreBuiltInBackend::RemoveLoginsCreatedBetweenAsync(
     base::Time delete_begin,
     base::Time delete_end,
-    PasswordStoreChangeListReply callback) {
+    PasswordChangesOrErrorReply callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(helper_);
   background_task_runner_->PostTaskAndReplyWithResult(
@@ -211,7 +201,6 @@ void PasswordStoreBuiltInBackend::RemoveLoginsCreatedBetweenAsync(
           delete_begin, delete_end),
       ReportMetricsForResultCallback<PasswordChangesOrError>(
           MetricInfix("RemoveLoginsCreatedBetweenAsync"))
-          .Then(base::BindOnce(&MakeEmptyListOnError))
           .Then(std::move(callback)));
 }
 
@@ -220,7 +209,7 @@ void PasswordStoreBuiltInBackend::RemoveLoginsByURLAndTimeAsync(
     base::Time delete_begin,
     base::Time delete_end,
     base::OnceCallback<void(bool)> sync_completion,
-    PasswordStoreChangeListReply callback) {
+    PasswordChangesOrErrorReply callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(helper_);
   background_task_runner_->PostTaskAndReplyWithResult(
@@ -231,7 +220,6 @@ void PasswordStoreBuiltInBackend::RemoveLoginsByURLAndTimeAsync(
           url_filter, delete_begin, delete_end, std::move(sync_completion)),
       ReportMetricsForResultCallback<PasswordChangesOrError>(
           MetricInfix("RemoveLoginsByURLAndTimeAsync"))
-          .Then(base::BindOnce(&MakeEmptyListOnError))
           .Then(std::move(callback)));
 }
 

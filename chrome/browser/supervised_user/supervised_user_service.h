@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,7 +58,7 @@ class Extension;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
-}
+}  // namespace user_prefs
 
 #if !BUILDFLAG(IS_ANDROID)
 class Browser;
@@ -81,9 +81,8 @@ class SupervisedUserService : public KeyedService,
   class Delegate {
    public:
     virtual ~Delegate() {}
-    // Returns true to indicate that the delegate handled the (de)activation, or
-    // false to indicate that the SupervisedUserService itself should handle it.
-    virtual bool SetActive(bool active) = 0;
+    // Allows the delegate to handle the (de)activation in a custom way.
+    virtual void SetActive(bool active) = 0;
   };
 
   // These enum values represent the source from which the supervised user's

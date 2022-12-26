@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,6 +51,8 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#include "components/account_manager_core/account_manager_facade.h"
+#include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -180,14 +182,6 @@ std::u16string GetAuthenticatedUsername(Profile* profile) {
   return base::UTF8ToUTF16(user_display_name);
 }
 
-void InitializePrefsForProfile(Profile* profile) {
-  if (profile->IsNewProfile()) {
-    // Suppresses the upgrade tutorial for a new profile.
-    profile->GetPrefs()->SetInteger(prefs::kProfileAvatarTutorialShown,
-                                    kUpgradeWelcomeTutorialShowMax + 1);
-  }
-}
-
 void ShowSigninErrorLearnMorePage(Profile* profile) {
   static const char kSigninErrorLearnMoreUrl[] =
       "https://support.google.com/chrome/answer/1181420?";
@@ -198,24 +192,42 @@ void ShowSigninErrorLearnMorePage(Profile* profile) {
 }
 
 void ShowReauthForPrimaryAccountWithAuthError(
-    Browser* browser,
+    Profile* profile,
     signin_metrics::AccessPoint access_point) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // On ChromeOS, sync errors are fixed by re-signing into the OS.
   NOTREACHED();
 #else
   signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(browser->profile());
+      IdentityManagerFactory::GetForProfile(profile);
   CoreAccountInfo primary_account_info =
       identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
   DCHECK(!primary_account_info.IsEmpty());
   DCHECK(identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
       primary_account_info.account_id));
-  GetSigninUiDelegate()->ShowReauthUI(
-      browser, browser->profile(), primary_account_info.email,
-      /*enable_sync=*/true, access_point,
-      signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
+  ShowReauthForAccount(profile, primary_account_info.email, access_point);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+
+void ShowReauthForAccount(Profile* profile,
+                          const std::string& email,
+                          signin_metrics::AccessPoint access_point) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Only `ACCESS_POINT_WEB_SIGNIN` is supported, because `kContentAreaReauth`
+  // is hardcoded.
+  DCHECK_EQ(access_point, signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN);
+  ::GetAccountManagerFacade(profile->GetPath().value())
+      ->ShowReauthAccountDialog(account_manager::AccountManagerFacade::
+                                    AccountAdditionSource::kContentAreaReauth,
+                                email, base::OnceClosure());
+#else
+  // Pass `false` for `enable_sync`, as this function is not expected to start a
+  // sync setup flow after the reauth.
+  GetSigninUiDelegate()->ShowReauthUI(
+      profile, email,
+      /*enable_sync=*/false, access_point,
+      signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
+#endif
 }
 
 void ShowExtensionSigninPrompt(Profile* profile,
@@ -242,7 +254,7 @@ void ShowExtensionSigninPrompt(Profile* profile,
   if (email_hint.empty()) {
     // Add a new account.
     GetSigninUiDelegate()->ShowSigninUI(
-        nullptr, profile, enable_sync,
+        profile, enable_sync,
         signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS,
         signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
     return;
@@ -250,28 +262,26 @@ void ShowExtensionSigninPrompt(Profile* profile,
 
   // Re-authenticate an existing account.
   GetSigninUiDelegate()->ShowReauthUI(
-      nullptr, profile, email_hint, enable_sync,
+      profile, email_hint, enable_sync,
       signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 void EnableSyncFromSingleAccountPromo(
-    Browser* browser,
+    Profile* profile,
     const CoreAccountInfo& account,
     signin_metrics::AccessPoint access_point) {
-  EnableSyncFromMultiAccountPromo(browser, account, access_point,
+  EnableSyncFromMultiAccountPromo(profile, account, access_point,
                                   /*is_default_promo_account=*/true);
 }
 
-void EnableSyncFromMultiAccountPromo(Browser* browser,
+void EnableSyncFromMultiAccountPromo(Profile* profile,
                                      const CoreAccountInfo& account,
                                      signin_metrics::AccessPoint access_point,
                                      bool is_default_promo_account) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
-  DCHECK(browser);
   DCHECK_NE(signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN, access_point);
-  Profile* profile = browser->profile();
   DCHECK(!profile->IsOffTheRecord());
 
   signin::IdentityManager* identity_manager =
@@ -288,7 +298,7 @@ void EnableSyncFromMultiAccountPromo(Browser* browser,
                   PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT
             : signin_metrics::PromoAction::
                   PROMO_ACTION_NEW_ACCOUNT_EXISTING_ACCOUNT;
-    GetSigninUiDelegate()->ShowSigninUI(browser, profile, /*enable_sync=*/true,
+    GetSigninUiDelegate()->ShowSigninUI(profile, /*enable_sync=*/true,
                                         access_point, new_account_promo_action);
     return;
   }
@@ -308,7 +318,7 @@ void EnableSyncFromMultiAccountPromo(Browser* browser,
       identity_manager->HasAccountWithRefreshTokenInPersistentErrorState(
           account.account_id);
   if (needs_reauth_before_enable_sync) {
-    GetSigninUiDelegate()->ShowReauthUI(browser, profile, account.email,
+    GetSigninUiDelegate()->ShowReauthUI(profile, account.email,
                                         /*enable_sync=*/true, access_point,
                                         existing_account_promo_action);
     return;
@@ -316,10 +326,9 @@ void EnableSyncFromMultiAccountPromo(Browser* browser,
 
   signin_metrics::LogSigninAccessPointStarted(access_point,
                                               existing_account_promo_action);
-  signin_metrics::RecordSigninUserActionForAccessPoint(
-      access_point, existing_account_promo_action);
+  signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
   GetSigninUiDelegate()->ShowTurnSyncOnUI(
-      browser, profile, access_point, existing_account_promo_action,
+      profile, access_point, existing_account_promo_action,
       signin_metrics::Reason::kSigninPrimaryAccount, account.account_id,
       TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT);
 #else
@@ -358,9 +367,9 @@ std::vector<AccountInfo> GetOrderedAccountsForDisplay(
   return accounts;
 }
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 
-AccountInfo GetSingleAccountForDicePromos(Profile* profile) {
+AccountInfo GetSingleAccountForPromos(Profile* profile) {
   std::vector<AccountInfo> accounts = GetOrderedAccountsForDisplay(
       profile, /*restrict_to_accounts_eligible_for_sync=*/true);
   if (!accounts.empty())
@@ -368,7 +377,7 @@ AccountInfo GetSingleAccountForDicePromos(Profile* profile) {
   return AccountInfo();
 }
 
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 std::u16string GetShortProfileIdentityToDisplay(
     const ProfileAttributesEntry& profile_attributes_entry,
@@ -476,13 +485,6 @@ void RecordProfileMenuViewShown(Profile* profile) {
     base::RecordAction(base::UserMetricsAction("ProfileMenu_Opened_Guest"));
   } else if (profile->IsIncognitoProfile()) {
     base::RecordAction(base::UserMetricsAction("ProfileMenu_Opened_Incognito"));
-  }
-
-  base::TimeTicks last_shown =
-      AvatarButtonUserData::GetAnimatedIdentityLastShown(profile);
-  if (!last_shown.is_null()) {
-    base::UmaHistogramLongTimes("Profile.Menu.OpenedAfterAvatarAnimation",
-                                base::TimeTicks::Now() - last_shown);
   }
 }
 

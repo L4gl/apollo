@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,6 +10,7 @@
 #include "chrome/browser/ash/login/enrollment/enterprise_enrollment_helper_mock.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/active_directory/active_directory_join_delegate.h"
+#include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
 
 namespace ash {
 namespace test {
@@ -78,6 +79,14 @@ void EnrollmentHelperMixin::ExpectSuccessfulOAuthEnrollment() {
   EXPECT_CALL(*mock_, EnrollUsingAuthCode(kTestAuthCode))
       .WillOnce(InvokeWithoutArgs(
           [this]() { mock_->status_consumer()->OnDeviceEnrolled(); }));
+}
+
+void EnrollmentHelperMixin::ExpectOAuthEnrollmentError(
+    policy::EnrollmentStatus status) {
+  EXPECT_CALL(*mock_, EnrollUsingAuthCode(kTestAuthCode))
+      .WillOnce(InvokeWithoutArgs([this, status]() {
+        mock_->status_consumer()->OnEnrollmentError(status);
+      }));
 }
 
 void EnrollmentHelperMixin::ExpectAttestationEnrollmentSuccess() {

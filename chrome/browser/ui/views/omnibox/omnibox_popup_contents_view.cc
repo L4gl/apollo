@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@
 #include "base/feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_row_view.h"
@@ -33,6 +33,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/cascading_property.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 
 class OmniboxPopupContentsView::AutocompletePopupWidget
@@ -179,10 +180,6 @@ OmniboxPopupContentsView::OmniboxPopupContentsView(
             &OmniboxPopupContentsView::OnSuggestionGroupVisibilityUpdate,
             base::Unretained(this)));
   }
-
-  views::SetCascadingThemeProviderColor(
-      this, views::kCascadingBackgroundColor,
-      ThemeProperties::COLOR_OMNIBOX_RESULTS_BG);
 }
 
 OmniboxPopupContentsView::~OmniboxPopupContentsView() {
@@ -200,8 +197,14 @@ void OmniboxPopupContentsView::OpenMatch(
     base::TimeTicks match_selection_timestamp) {
   DCHECK(HasMatchAt(index));
 
-  omnibox_view_->OpenMatch(edit_model_->result().match_at(index), disposition,
-                           GURL(), std::u16string(), index,
+  // This is needed for mouse clicks and gestures to respect takeover actions.
+  auto& match = edit_model_->result().match_at(index);
+  if (match.action && match.action->TakesOverMatch()) {
+    return edit_model_->ExecuteAction(match, index, match_selection_timestamp,
+                                      disposition);
+  }
+
+  omnibox_view_->OpenMatch(match, disposition, GURL(), std::u16string(), index,
                            match_selection_timestamp);
 }
 
@@ -323,23 +326,23 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     popup_->SetVisibilityAnimationTransition(views::Widget::ANIMATE_NONE);
     popup_->SetPopupContentsView(this);
     popup_->AddObserver(this);
-    popup_->StackAbove(omnibox_view_->GetRelativeWindowForPopup());
-    // For some IMEs GetRelativeWindowForPopup triggers the omnibox to lose
-    // focus, thereby closing (and destroying) the popup. TODO(sky): this won't
-    // be needed once we close the omnibox on input window showing.
-    if (!popup_)
-      return;
+
+    if (!base::FeatureList::IsEnabled(views::features::kWidgetLayering)) {
+      popup_->StackAbove(omnibox_view_->GetRelativeWindowForPopup());
+      // For some IMEs GetRelativeWindowForPopup triggers the omnibox to lose
+      // focus, thereby closing (and destroying) the popup. TODO(sky): this
+      // won't be needed once we close the omnibox on input window showing.
+      if (!popup_)
+        return;
+    }
 
     popup_created = true;
   }
 
-  // Fix-up any matches due to tail suggestions, before display below.
-  edit_model_->autocomplete_controller()->SetTailSuggestContentPrefixes();
-
   // Update the match cached by each row, in the process of doing so make sure
   // we have enough row views.
   const size_t result_size = edit_model_->result().size();
-  absl::optional<int> previous_row_group_id = absl::nullopt;
+  std::u16string previous_row_header = u"";
   PrefService* const pref_service = GetPrefService();
   for (size_t i = 0; i < result_size; ++i) {
     // Create child views lazily.  Since especially the first result view may
@@ -358,22 +361,26 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
 
     // Show the header if it's distinct from the previous match's header.
     const AutocompleteMatch& match = GetMatchAtIndex(i);
-    if (match.suggestion_group_id.has_value() &&
-        match.suggestion_group_id != previous_row_group_id) {
+    std::u16string current_row_header =
+        match.suggestion_group_id.has_value()
+            ? edit_model_->result().GetHeaderForSuggestionGroup(
+                  match.suggestion_group_id.value())
+            : u"";
+    if (!current_row_header.empty() &&
+        current_row_header != previous_row_header) {
       row_view->ShowHeader(match.suggestion_group_id.value(),
-                           edit_model_->result().GetHeaderForGroupId(
-                               match.suggestion_group_id.value()));
+                           current_row_header);
     } else {
       row_view->HideHeader();
     }
-    previous_row_group_id = match.suggestion_group_id;
+    previous_row_header = current_row_header;
 
     OmniboxResultView* const result_view = row_view->result_view();
     result_view->SetMatch(match);
 
     // Set visibility of the result view based on whether the group is hidden.
     bool match_hidden = pref_service && match.suggestion_group_id.has_value() &&
-                        edit_model_->result().IsSuggestionGroupIdHidden(
+                        edit_model_->result().IsSuggestionGroupHidden(
                             pref_service, match.suggestion_group_id.value());
     result_view->SetVisible(!match_hidden);
 
@@ -562,7 +569,7 @@ void OmniboxPopupContentsView::OnSuggestionGroupVisibilityUpdate() {
     const AutocompleteMatch& match = edit_model_->result().match_at(i);
     bool match_hidden =
         match.suggestion_group_id.has_value() &&
-        edit_model_->result().IsSuggestionGroupIdHidden(
+        edit_model_->result().IsSuggestionGroupHidden(
             GetPrefService(), match.suggestion_group_id.value());
     if (OmniboxResultView* result_view = result_view_at(i))
       result_view->SetVisible(!match_hidden);

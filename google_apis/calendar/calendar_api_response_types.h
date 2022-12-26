@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,7 +28,7 @@ namespace google_apis {
 
 namespace calendar {
 
-// Parses the time filed in the calendar Events.list response.
+// Parses the time field in the calendar Events.list response.
 class DateTime {
  public:
   DateTime();
@@ -117,6 +117,11 @@ class CalendarEvent {
   const DateTime& end_time() const { return end_time_; }
   void set_end_time(const DateTime& end_time) { end_time_ = end_time; }
 
+  const bool& all_day_event() const { return all_day_event_; }
+  void set_all_day_event(const bool& all_day_event) {
+    all_day_event_ = all_day_event;
+  }
+
   // Return the approximate size of this event, in bytes.
   int GetApproximateSizeInBytes() const;
 
@@ -129,6 +134,7 @@ class CalendarEvent {
   ResponseStatus self_response_status_ = ResponseStatus::kUnknown;
   DateTime start_time_;
   DateTime end_time_;
+  bool all_day_event_;
 };
 
 // Parses a list of calendar events.

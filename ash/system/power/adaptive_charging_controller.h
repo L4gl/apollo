@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,6 +39,7 @@ class ASH_EXPORT AdaptiveChargingController
   void PowerChanged(const power_manager::PowerSupplyProperties& proto) override;
 
   bool is_adaptive_delaying_charge_ = false;
+  bool is_on_charger_ = false;
 
   base::ScopedObservation<chromeos::PowerManagerClient,
                           chromeos::PowerManagerClient::Observer>

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -20,10 +20,10 @@ extern const char kBorealisDiskStartupAvailableSpaceHistogram[];
 extern const char kBorealisDiskStartupExpandableSpaceHistogram[];
 extern const char kBorealisDiskStartupResultHistogram[];
 extern const char kBorealisDiskStartupTotalSpaceHistogram[];
-extern const char kBorealisGameModeResultHistogram[];
 extern const char kBorealisInstallNumAttemptsHistogram[];
 extern const char kBorealisInstallResultHistogram[];
 extern const char kBorealisInstallOverallTimeHistogram[];
+extern const char kBorealisInstallRetriesHistogram[];
 extern const char kBorealisShutdownNumAttemptsHistogram[];
 extern const char kBorealisShutdownResultHistogram[];
 extern const char kBorealisStabilityHistogram[];
@@ -132,17 +132,10 @@ enum class BorealisShutdownResult {
   kMaxValue = kFailed,
 };
 
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class BorealisGameModeResult {
-  kAttempted = 0,
-  kFailed = 1,
-  kMaxValue = kFailed,
-};
-
 void RecordBorealisInstallNumAttemptsHistogram();
 void RecordBorealisInstallResultHistogram(BorealisInstallResult install_result);
 void RecordBorealisInstallOverallTimeHistogram(base::TimeDelta install_time);
+void RecordBorealisInstallRetries(int retry_count);
 void RecordBorealisUninstallNumAttemptsHistogram();
 void RecordBorealisUninstallResultHistogram(
     BorealisUninstallResult uninstall_result);
@@ -169,8 +162,6 @@ void RecordBorealisDiskStartupExpandableSpaceHistogram(
 void RecordBorealisDiskStartupTotalSpaceHistogram(uint64_t total_bytes);
 void RecordBorealisDiskStartupResultHistogram(
     BorealisSyncDiskSizeResult disk_result);
-void RecordBorealisGameModeResultHistogram(
-    BorealisGameModeResult game_mode_result);
 
 }  // namespace borealis
 

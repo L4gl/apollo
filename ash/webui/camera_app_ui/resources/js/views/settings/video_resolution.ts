@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,9 +9,9 @@ import {
   VideoResolutionOptionGroup,
 } from '../../device/type.js';
 import * as dom from '../../dom.js';
+import * as expert from '../../expert.js';
 import {I18nString} from '../../i18n_string.js';
 import * as loadTimeData from '../../models/load_time_data.js';
-import * as state from '../../state.js';
 import {Facing, Resolution, ViewName} from '../../type.js';
 import {instantiateTemplate, setupI18nElements} from '../../util.js';
 
@@ -49,6 +49,10 @@ export class VideoResolutionSettings extends BaseSettings {
 
     this.cameraManager.addVideoResolutionOptionListener(
         (groups) => this.onOptionsUpdate(groups));
+
+    expert.addObserver(
+        expert.ExpertOption.ENABLE_FPS_PICKER_FOR_BUILTIN,
+        () => this.toggleFPSPickerVisiblity);
   }
 
   private onOptionsUpdate(groups: VideoResolutionOptionGroup[]): void {
@@ -80,7 +84,7 @@ export class VideoResolutionSettings extends BaseSettings {
 
     let text;
     const label = util.toVideoResoloutionOptionLabel(option.resolutionLevel);
-    if (state.get(state.State.SHOW_ALL_RESOLUTIONS)) {
+    if (expert.isEnabled(expert.ExpertOption.SHOW_ALL_RESOLUTIONS)) {
       const mpInfo = loadTimeData.getI18nMessage(
           I18nString.LABEL_RESOLUTION_MP,
           option.fpsOptions[0].resolutions[0].mp);
@@ -99,11 +103,17 @@ export class VideoResolutionSettings extends BaseSettings {
             SUPPORTED_CONSTANT_FPS.some((fps) => fps === fpsOption.constFps));
     const showFpsButton =
         constFpsOptions.length > 1 && facing === Facing.EXTERNAL;
+    const isFPSEnabled =
+        expert.isEnabled(expert.ExpertOption.ENABLE_FPS_PICKER_FOR_BUILTIN);
     let resolution = new Resolution();
     for (const fps of SUPPORTED_CONSTANT_FPS) {
       const fpsButton =
           dom.getFrom(optionElement, `.fps-${fps}`, HTMLButtonElement);
-      fpsButton.hidden = !showFpsButton;
+      if (!isFPSEnabled) {
+        fpsButton.hidden = true;
+      } else if (!showFpsButton) {
+        fpsButton.classList.add('invisible');
+      }
 
       const fpsOption =
           option.fpsOptions.find((fpsOption) => fpsOption.constFps === fps);
@@ -134,7 +144,7 @@ export class VideoResolutionSettings extends BaseSettings {
       input.addEventListener('click', (event) => {
         this.focusedDeviceId = deviceId;
         this.menuScrollTop = this.menu.scrollTop;
-        if (state.get(state.State.SHOW_ALL_RESOLUTIONS)) {
+        if (expert.isEnabled(expert.ExpertOption.SHOW_ALL_RESOLUTIONS)) {
           this.cameraManager.setPrefVideoResolution(deviceId, resolution);
         } else {
           this.cameraManager.setPrefVideoResolutionLevel(
@@ -149,6 +159,16 @@ export class VideoResolutionSettings extends BaseSettings {
 
     if (input.checked && this.focusedDeviceId === deviceId) {
       input.focus();
+    }
+  }
+
+  private toggleFPSPickerVisiblity(): void {
+    const isFPSEnabled =
+        expert.isEnabled(expert.ExpertOption.ENABLE_FPS_PICKER_FOR_BUILTIN);
+    const fpsButtons = dom.getAllFrom(
+      this.menu, '.fps-buttons button', HTMLButtonElement);
+    for (const fpsButton of fpsButtons) {
+      fpsButton.hidden = !isFPSEnabled;
     }
   }
 }

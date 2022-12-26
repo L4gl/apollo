@@ -1,8 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {SAChildNode, SARootNode} from '/switch_access/nodes/switch_access_node.js';
+import {constants} from '../common/constants.js';
+
+import {SAChildNode, SARootNode} from './nodes/switch_access_node.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
 

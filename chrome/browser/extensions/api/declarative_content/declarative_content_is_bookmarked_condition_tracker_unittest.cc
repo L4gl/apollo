@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -41,8 +41,8 @@ scoped_refptr<const Extension> CreateExtensionWithBookmarksPermission(
                        .Set("name", "Test extension")
                        .Set("version", "1.0")
                        .Set("manifest_version", 2)
-                       .Set("permissions", permissions.Build())
-                       .Build())
+                       .Set("permissions", permissions.BuildList())
+                       .BuildDict())
       .Build();
 }
 

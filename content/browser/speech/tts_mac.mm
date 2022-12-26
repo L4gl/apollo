@@ -1,6 +1,8 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#include "base/memory/raw_ptr.h"
 
 #import "content/browser/speech/tts_mac.h"
 
@@ -260,7 +262,7 @@ std::vector<content::VoiceData>& TtsPlatformImplMac::VoicesRefForTesting() {
 
 @implementation ChromeTtsDelegate {
  @private
-  TtsPlatformImplMac* _ttsImplMac;  // weak.
+  raw_ptr<TtsPlatformImplMac> _ttsImplMac;  // weak.
 }
 
 - (id)initWithPlatformImplMac:(TtsPlatformImplMac*)ttsImplMac {

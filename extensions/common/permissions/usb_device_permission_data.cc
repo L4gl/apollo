@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -28,10 +28,10 @@ const char kInterfaceIdKey[] = "interfaceId";
 const char kInterfaceClassKey[] = "interfaceClass";
 
 bool ExtractFromDict(const std::string& key,
-                     const base::DictionaryValue* dict_value,
+                     const base::Value::Dict* dict_value,
                      int max,
                      int* value) {
-  absl::optional<int> temp = dict_value->FindIntKey(key);
+  absl::optional<int> temp = dict_value->FindInt(key);
   if (!temp) {
     *value = UsbDevicePermissionData::SPECIAL_VALUE_ANY;
     return true;
@@ -46,7 +46,7 @@ bool ExtractFromDict(const std::string& key,
 
 }  // namespace
 
-UsbDevicePermissionData::UsbDevicePermissionData() {}
+UsbDevicePermissionData::UsbDevicePermissionData() = default;
 
 UsbDevicePermissionData::UsbDevicePermissionData(int vendor_id,
                                                  int product_id,
@@ -97,8 +97,8 @@ bool UsbDevicePermissionData::FromValue(const base::Value* value) {
   if (!value)
     return false;
 
-  const base::DictionaryValue* dict_value;
-  if (!value->GetAsDictionary(&dict_value))
+  const base::Value::Dict* dict_value = value->GetIfDict();
+  if (!dict_value)
     return false;
 
   const int kMaxId = std::numeric_limits<uint16_t>::max();

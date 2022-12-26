@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 package org.chromium.chrome.browser.password_manager;
@@ -29,38 +29,19 @@ public class PasswordCheckupLauncher {
     }
 
     @CalledByNative
-    // TODO(crbug.com/1311952): Merge with launchLocalCheckupFromPhishGuardWarningDialog.
-    private static void launchLocalCheckup(WindowAndroid windowAndroid) {
+    private static void launchLocalCheckup(
+            WindowAndroid windowAndroid, @PasswordCheckReferrer int passwordCheckReferrer) {
         if (windowAndroid.getContext().get() == null) return; // Window not available yet/anymore.
-        PasswordCheckupClientHelper checkupHelper =
-                PasswordCheckupClientHelperFactory.getInstance().createHelper();
-        if (checkupHelper != null && PasswordManagerHelper.usesUnifiedPasswordManagerUI()) {
-            PasswordManagerHelper.showPasswordCheckup(windowAndroid.getContext().get(),
-                    PasswordCheckReferrer.LEAK_DIALOG,
-                    PasswordCheckupClientHelperFactory.getInstance().createHelper(),
-                    SyncService.get(), getModalDialogManagerSupplier(windowAndroid));
-            return;
-        }
-        PasswordCheckFactory.getOrCreate(new SettingsLauncherImpl())
-                .showUi(windowAndroid.getContext().get(), PasswordCheckReferrer.LEAK_DIALOG);
-    }
 
-    @CalledByNative
-    // TODO(crbug.com/1311952): Merge with launchLocalCheckup.
-    private static void launchLocalCheckupFromPhishGuardWarningDialog(WindowAndroid windowAndroid) {
-        if (windowAndroid.getContext().get() == null) return; // Window not available yet/anymore.
-        PasswordCheckupClientHelper checkupHelper =
-                PasswordCheckupClientHelperFactory.getInstance().createHelper();
-        if (checkupHelper != null && PasswordManagerHelper.usesUnifiedPasswordManagerUI()) {
+        if (PasswordManagerHelper.canUseUpm()) {
             PasswordManagerHelper.showPasswordCheckup(windowAndroid.getContext().get(),
-                    PasswordCheckReferrer.PHISHED_WARNING_DIALOG,
-                    PasswordCheckupClientHelperFactory.getInstance().createHelper(),
-                    SyncService.get(), getModalDialogManagerSupplier(windowAndroid));
+                    passwordCheckReferrer, SyncService.get(),
+                    getModalDialogManagerSupplier(windowAndroid));
             return;
         }
+
         PasswordCheckFactory.getOrCreate(new SettingsLauncherImpl())
-                .showUi(windowAndroid.getContext().get(),
-                        PasswordCheckReferrer.PHISHED_WARNING_DIALOG);
+                .showUi(windowAndroid.getContext().get(), passwordCheckReferrer);
     }
 
     @CalledByNative

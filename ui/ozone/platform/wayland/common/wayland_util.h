@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -21,7 +21,6 @@ class SkBitmap;
 class SkPath;
 
 namespace ui {
-class WaylandConnection;
 class WaylandShmBuffer;
 class WaylandWindow;
 }  // namespace ui
@@ -41,10 +40,16 @@ using OnRequestBufferCallback =
 using BufferFormatsWithModifiersMap =
     base::flat_map<gfx::BufferFormat, std::vector<uint64_t>>;
 
+// Constants used to determine how pointer/touch events are processed and
+// dispatched.
+enum class EventDispatchPolicy {
+  kImmediate,
+  kOnFrame,
+};
+
 // Identifies the direction of the "hittest" for Wayland. |connection|
 // is used to identify whether values from shell v5 or v6 must be used.
-uint32_t IdentifyDirection(const ui::WaylandConnection& connection,
-                           int hittest);
+uint32_t IdentifyDirection(int hittest);
 
 // Draws |bitmap| into |out_buffer|. Returns if no errors occur, and false
 // otherwise. It assumes the bitmap fits into the buffer and buffer is
@@ -103,6 +108,9 @@ SkPath ConvertPathToDIP(const SkPath& path_in_pixels, float scale);
 
 // Converts SkColor into wl_array.
 void SkColorToWlArray(const SkColor& color, wl_array& array);
+
+// Converts SkColor4f into wl_array.
+void SkColorToWlArray(const SkColor4f& color, wl_array& array);
 
 }  // namespace wl
 

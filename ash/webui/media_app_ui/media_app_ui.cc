@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -51,68 +51,54 @@ content::WebUIDataSource* CreateHostDataSource() {
   source->AddResourcePath("launch.js", IDR_MEDIA_APP_LAUNCH_JS);
   source->AddResourcePath("viewpdfhost.html", IDR_MEDIA_APP_VIEWPDFHOST_HTML);
   source->AddResourcePath("viewpdfhost.js", IDR_MEDIA_APP_VIEWPDFHOST_JS);
+  source->AddResourcePath("first_message_received.js",
+                          IDR_MEDIA_APP_FIRST_MESSAGE_RECEIVED_JS);
 
   source->AddLocalizedStrings(kLocalizedStrings);
   source->UseStringsJs();
 
   // Redirects "system_assets/*" (from manifest.json) to the icons for the
   // gallery app.
-  bool app_icons_added = false;
-  if (base::FeatureList::IsEnabled(chromeos::features::kMediaAppHandlesPdf)) {
-#if BUILDFLAG(ENABLE_CROS_MEDIA_APP)
-    source->AddResourcePath("system_assets/app_icon_16.png",
-                            IDR_MEDIA_APP_APP_ICON_16_PNG);
-    source->AddResourcePath("system_assets/app_icon_32.png",
-                            IDR_MEDIA_APP_APP_ICON_32_PNG);
-    source->AddResourcePath("system_assets/app_icon_48.png",
-                            IDR_MEDIA_APP_APP_ICON_48_PNG);
-    source->AddResourcePath("system_assets/app_icon_64.png",
-                            IDR_MEDIA_APP_APP_ICON_64_PNG);
-    source->AddResourcePath("system_assets/app_icon_96.png",
-                            IDR_MEDIA_APP_APP_ICON_96_PNG);
-    source->AddResourcePath("system_assets/app_icon_128.png",
-                            IDR_MEDIA_APP_APP_ICON_128_PNG);
-    source->AddResourcePath("system_assets/app_icon_192.png",
-                            IDR_MEDIA_APP_APP_ICON_192_PNG);
-    source->AddResourcePath("system_assets/app_icon_256.png",
-                            IDR_MEDIA_APP_APP_ICON_256_PNG);
-    source->AddResourcePath("system_assets/app_icon.svg",
-                            IDR_MEDIA_APP_APP_ICON_192_SVG);  // App favicon.
-    app_icons_added = true;
-#endif  // BUILDFLAG(ENABLE_CROS_MEDIA_APP)
-  }
-  if (!app_icons_added) {
-    source->AddResourcePath("system_assets/app_icon_16.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_16_PNG);
-    source->AddResourcePath("system_assets/app_icon_32.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_32_PNG);
-    source->AddResourcePath("system_assets/app_icon_48.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_48_PNG);
-    source->AddResourcePath("system_assets/app_icon_64.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_64_PNG);
-    source->AddResourcePath("system_assets/app_icon_96.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_96_PNG);
-    source->AddResourcePath("system_assets/app_icon_128.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_128_PNG);
-    source->AddResourcePath("system_assets/app_icon_192.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_192_PNG);
-    source->AddResourcePath("system_assets/app_icon_256.png",
-                            IDR_MEDIA_APP_GALLERY_ICON_256_PNG);
-    source->AddResourcePath("system_assets/app_icon.svg",
-                            IDR_MEDIA_APP_APP_ICON_SVG);  // App favicon.
-  }
+  source->AddResourcePath("system_assets/app_icon_16.png",
+                          IDR_MEDIA_APP_APP_ICON_16_PNG);
+  source->AddResourcePath("system_assets/app_icon_32.png",
+                          IDR_MEDIA_APP_APP_ICON_32_PNG);
+  source->AddResourcePath("system_assets/app_icon_48.png",
+                          IDR_MEDIA_APP_APP_ICON_48_PNG);
+  source->AddResourcePath("system_assets/app_icon_64.png",
+                          IDR_MEDIA_APP_APP_ICON_64_PNG);
+  source->AddResourcePath("system_assets/app_icon_96.png",
+                          IDR_MEDIA_APP_APP_ICON_96_PNG);
+  source->AddResourcePath("system_assets/app_icon_128.png",
+                          IDR_MEDIA_APP_APP_ICON_128_PNG);
+  source->AddResourcePath("system_assets/app_icon_192.png",
+                          IDR_MEDIA_APP_APP_ICON_192_PNG);
+  source->AddResourcePath("system_assets/app_icon_256.png",
+                          IDR_MEDIA_APP_APP_ICON_256_PNG);
+  source->AddResourcePath("system_assets/app_icon.svg",
+                          IDR_MEDIA_APP_APP_ICON_192_SVG);  // App favicon.
 
   // File-type favicons.
   source->AddResourcePath("system_assets/pdf_icon.svg",
                           IDR_MEDIA_APP_PDF_ICON_SVG);
+  source->AddResourcePath("system_assets/pdf_icon_dark.svg",
+                          IDR_MEDIA_APP_PDF_ICON_DARK_SVG);
   source->AddResourcePath("system_assets/video_icon.svg",
                           IDR_MEDIA_APP_VIDEO_ICON_SVG);
+  source->AddResourcePath("system_assets/video_icon_dark.svg",
+                          IDR_MEDIA_APP_VIDEO_ICON_DARK_SVG);
   source->AddResourcePath("system_assets/image_icon.svg",
                           IDR_MEDIA_APP_IMAGE_ICON_SVG);
+  source->AddResourcePath("system_assets/image_icon_dark.svg",
+                          IDR_MEDIA_APP_IMAGE_ICON_DARK_SVG);
   source->AddResourcePath("system_assets/audio_icon.svg",
                           IDR_MEDIA_APP_AUDIO_ICON_SVG);
+  source->AddResourcePath("system_assets/audio_icon_dark.svg",
+                          IDR_MEDIA_APP_AUDIO_ICON_DARK_SVG);
   source->AddResourcePath("system_assets/file_icon.svg",
                           IDR_MEDIA_APP_FILE_ICON_SVG);
+  source->AddResourcePath("system_assets/file_icon_dark.svg",
+                          IDR_MEDIA_APP_FILE_ICON_DARK_SVG);
   return source;
 }
 

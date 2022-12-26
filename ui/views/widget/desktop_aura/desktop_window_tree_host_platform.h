@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "ui/aura/window_tree_host_platform.h"
@@ -26,6 +27,10 @@ class PaintContext;
 }  // namespace ui
 
 namespace views {
+
+namespace corewm {
+class TooltipController;
+}
 
 class VIEWS_EXPORT DesktopWindowTreeHostPlatform
     : public aura::WindowTreeHostPlatform,
@@ -79,6 +84,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   void SetSize(const gfx::Size& size) override;
   void StackAbove(aura::Window* window) override;
   void StackAtTop() override;
+  bool IsStackedAbove(aura::Window* window) override;
   void CenterWindow(const gfx::Size& size) override;
   void GetWindowPlacement(gfx::Rect* bounds,
                           ui::WindowShowState* show_state) const override;
@@ -114,7 +120,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   bool ShouldUseNativeFrame() const override;
   bool ShouldWindowContentsBeTransparent() const override;
   void FrameTypeChanged() override;
-  void SetFullscreen(bool fullscreen) override;
+  void SetFullscreen(bool fullscreen, int64_t display_id) override;
   bool IsFullscreen() const override;
   void SetOpacity(float opacity) override;
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
@@ -129,11 +135,14 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   bool ShouldUseDesktopNativeCursorManager() const override;
   bool ShouldCreateVisibilityController() const override;
   void UpdateWindowShapeIfNeeded(const ui::PaintContext& context) override;
+  void SetBoundsInDIP(const gfx::Rect& bounds) override;
 
   // WindowTreeHost:
   gfx::Transform GetRootTransform() const override;
   void ShowImpl() override;
   void HideImpl() override;
+  gfx::Rect CalculateRootWindowBounds() const override;
+  gfx::Rect GetBoundsInDIP() const override;
 
   // PlatformWindowDelegate:
   void OnClosed() override;
@@ -147,7 +156,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   absl::optional<gfx::Size> GetMaximumSizeForWindow() override;
   SkPath GetWindowMaskForWindowShapeInPixels() override;
   absl::optional<ui::MenuType> GetMenuType() override;
-  absl::optional<ui::OwnedWindowAnchor> GetOwnedWindowAnchorAndRectInPx()
+  absl::optional<ui::OwnedWindowAnchor> GetOwnedWindowAnchorAndRectInDIP()
       override;
   gfx::Rect ConvertRectToPixels(const gfx::Rect& rect_in_dip) const override;
   gfx::Rect ConvertRectToDIP(const gfx::Rect& rect_in_pixels) const override;
@@ -185,6 +194,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   Widget* GetWidget();
   const Widget* GetWidget() const;
 
+  views::corewm::TooltipController* tooltip_controller();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(DesktopWindowTreeHostPlatformTest,
                            UpdateWindowShapeFromWindowMask);
@@ -208,8 +219,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   // Helper method that returns the display for the |window()|.
   display::Display GetDisplayNearestRootWindow() const;
 
-  internal::NativeWidgetDelegate* const native_widget_delegate_;
-  DesktopNativeWidgetAura* const desktop_native_widget_aura_;
+  const base::WeakPtr<internal::NativeWidgetDelegate> native_widget_delegate_;
+  const raw_ptr<DesktopNativeWidgetAura> desktop_native_widget_aura_;
 
   bool is_active_ = false;
 
@@ -217,7 +228,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
 
   // We can optionally have a parent which can order us to close, or own
   // children who we're responsible for closing when we CloseNow().
-  DesktopWindowTreeHostPlatform* window_parent_ = nullptr;
+  raw_ptr<DesktopWindowTreeHostPlatform> window_parent_ = nullptr;
   std::set<DesktopWindowTreeHostPlatform*> window_children_;
 
   // Used for tab dragging in move loop requests.

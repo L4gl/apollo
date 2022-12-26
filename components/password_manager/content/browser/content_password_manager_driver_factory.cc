@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,8 +45,8 @@ void ContentPasswordManagerDriverFactory::BindPasswordManagerDriver(
     content::RenderFrameHost* render_frame_host) {
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
-  // We try to bind to the driver of this render frame host,
-  // but if driver is not ready for this render frame host for now,
+  // We try to bind to the driver of this RenderFrameHost,
+  // but if driver is not ready for this RenderFrameHost for now,
   // the request will be just dropped, this would cause closing the message pipe
   // which would raise connection error to peer side.
   // Peer side could reconnect later when needed.
@@ -109,8 +109,18 @@ void ContentPasswordManagerDriverFactory::RenderFrameDeleted(
 
 void ContentPasswordManagerDriverFactory::DidFinishNavigation(
     content::NavigationHandle* navigation) {
-  if (!navigation->IsInPrimaryMainFrame() || navigation->IsSameDocument() ||
-      !navigation->HasCommitted()) {
+  if (navigation->IsSameDocument() || !navigation->HasCommitted()) {
+    return;
+  }
+
+  // Unbind receiver if the frame is anonymous, noted that anonymous frames are
+  // always iframes.
+  if (!navigation->IsInPrimaryMainFrame()) {
+    if (auto* driver = GetDriverForFrame(navigation->GetRenderFrameHost())) {
+      if (navigation->GetRenderFrameHost()->IsCredentialless()) {
+        driver->UnbindReceiver();
+      }
+    }
     return;
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -65,14 +65,11 @@ class CreditCardFIDOAuthenticator
   // The response of FIDO authentication, including necessary information needed
   // by the subclasses.
   struct FidoAuthenticationResponse {
-    FidoAuthenticationResponse() = default;
-    ~FidoAuthenticationResponse() = default;
-
     // Whether the authentication was successful.
     bool did_succeed = false;
     // The fetched credit card if the authentication was successful. Can be
     // nullptr if authentication failed.
-    const CreditCard* card = nullptr;
+    raw_ptr<const CreditCard> card = nullptr;
     // The CVC of the fetched credit card. Can be empty string.
     std::u16string cvc = std::u16string();
     // The type of the failure of the full card request.
@@ -206,6 +203,7 @@ class CreditCardFIDOAuthenticator
       const CreditCard& card,
       const std::u16string& cvc) override;
   void OnFullCardRequestFailed(
+      CreditCard::RecordType card_type,
       payments::FullCardRequest::FailureType failure_type) override;
 
   // Converts |request_options| from JSON to mojom pointer.
@@ -243,6 +241,11 @@ class CreditCardFIDOAuthenticator
   // Updates the user preference to the value of |user_is_opted_in_|.
   void UpdateUserPref();
 
+  // Helper functions to handle the GetAssertion result.
+  void HandleGetAssertionSuccess(
+      blink::mojom::GetAssertionAuthenticatorResponsePtr assertion_response);
+  void HandleGetAssertionFailure();
+
   // Gets or creates Authenticator pointer to facilitate WebAuthn.
   webauthn::InternalAuthenticator* authenticator();
 
@@ -266,7 +269,7 @@ class CreditCardFIDOAuthenticator
   const raw_ptr<payments::PaymentsClient> payments_client_;
 
   // Authenticator pointer to facilitate WebAuthn.
-  raw_ptr<webauthn::InternalAuthenticator> authenticator_ = nullptr;
+  std::unique_ptr<webauthn::InternalAuthenticator> authenticator_;
 
   // Responsible for getting the full card details, including the PAN and the
   // CVC.

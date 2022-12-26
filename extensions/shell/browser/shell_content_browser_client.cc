@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -228,26 +228,29 @@ void ShellContentBrowserClient::ExposeInterfacesToRenderer(
     service_manager::BinderRegistry* registry,
     blink::AssociatedInterfaceRegistry* associated_registry,
     content::RenderProcessHost* render_process_host) {
-  associated_registry->AddInterface(base::BindRepeating(
+  associated_registry->AddInterface<mojom::EventRouter>(base::BindRepeating(
       &EventRouter::BindForRenderer, render_process_host->GetID()));
-  associated_registry->AddInterface(base::BindRepeating(
-      &ExtensionsGuestView::CreateForComponents, render_process_host->GetID()));
-  associated_registry->AddInterface(base::BindRepeating(
-      &ExtensionsGuestView::CreateForExtensions, render_process_host->GetID()));
+  associated_registry->AddInterface<guest_view::mojom::GuestViewHost>(
+      base::BindRepeating(&ExtensionsGuestView::CreateForComponents,
+                          render_process_host->GetID()));
+  associated_registry->AddInterface<extensions::mojom::GuestView>(
+      base::BindRepeating(&ExtensionsGuestView::CreateForExtensions,
+                          render_process_host->GetID()));
 }
 
 void ShellContentBrowserClient::
     RegisterAssociatedInterfaceBindersForRenderFrameHost(
         content::RenderFrameHost& render_frame_host,
         blink::AssociatedInterfaceRegistry& associated_registry) {
-  associated_registry.AddInterface(base::BindRepeating(
-      [](content::RenderFrameHost* render_frame_host,
-         mojo::PendingAssociatedReceiver<extensions::mojom::LocalFrameHost>
-             receiver) {
-        ExtensionWebContentsObserver::BindLocalFrameHost(std::move(receiver),
-                                                         render_frame_host);
-      },
-      &render_frame_host));
+  associated_registry.AddInterface<extensions::mojom::LocalFrameHost>(
+      base::BindRepeating(
+          [](content::RenderFrameHost* render_frame_host,
+             mojo::PendingAssociatedReceiver<extensions::mojom::LocalFrameHost>
+                 receiver) {
+            ExtensionWebContentsObserver::BindLocalFrameHost(
+                std::move(receiver), render_frame_host);
+          },
+          &render_frame_host));
 }
 
 std::vector<std::unique_ptr<content::NavigationThrottle>>

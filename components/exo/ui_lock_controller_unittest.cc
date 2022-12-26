@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -86,7 +86,7 @@ class MockPointerConstraintDelegate : public PointerConstraintDelegate {
     });
   }
 
-  ~MockPointerConstraintDelegate() {
+  ~MockPointerConstraintDelegate() override {
     // Notifying destruction here removes some boilerplate from tests.
     pointer_->OnPointerConstraintDelegateDestroying(this);
   }
@@ -138,10 +138,6 @@ class UILockControllerTest : public test::ExoTestBase {
   void SetUp() override {
     test::ExoTestBase::SetUp();
     seat_ = std::make_unique<Seat>();
-    scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kExoLockNotification,
-         chromeos::features::kExoPointerLock},
-        {});
     WMHelper::GetInstance()->RegisterAppPropertyResolver(
         std::make_unique<TestPropertyResolver>());
   }

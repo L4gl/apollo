@@ -1,19 +1,19 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/crostini/ansible/ansible_management_service.h"
 
 #include "base/test/bind.h"
-#include "base/test/mock_callback.h"
 #include "chrome/browser/ash/crostini/ansible/ansible_management_test_helper.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_test_util.h"
+#include "chrome/browser/ui/views/crostini/crostini_ansible_software_config_view.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/dbus/chunneld/chunneld_client.h"
+#include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
-#include "chromeos/dbus/cicerone/cicerone_client.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -34,9 +34,9 @@ class AnsibleManagementServiceTest : public testing::Test,
                                      public AnsibleManagementService::Observer {
  public:
   AnsibleManagementServiceTest() {
-    chromeos::DBusThreadManager::Initialize();
-    chromeos::CiceroneClient::InitializeFake();
-    chromeos::ConciergeClient::InitializeFake();
+    ash::ChunneldClient::InitializeFake();
+    ash::CiceroneClient::InitializeFake();
+    ash::ConciergeClient::InitializeFake();
     ash::SeneschalClient::InitializeFake();
 
     profile_ = std::make_unique<TestingProfile>();
@@ -55,9 +55,8 @@ class AnsibleManagementServiceTest : public testing::Test,
       delete;
 
   ~AnsibleManagementServiceTest() override {
-    crostini::CloseCrostiniAnsibleSoftwareConfigViewForTesting();
-    // Wait for view triggered to be closed.
     base::RunLoop().RunUntilIdle();
+
     TearDownViewsEnvironmentForTesting();
 
     test_helper_.reset();
@@ -66,9 +65,9 @@ class AnsibleManagementServiceTest : public testing::Test,
     profile_.reset();
 
     ash::SeneschalClient::Shutdown();
-    chromeos::ConciergeClient::Shutdown();
-    chromeos::CiceroneClient::Shutdown();
-    chromeos::DBusThreadManager::Shutdown();
+    ash::ConciergeClient::Shutdown();
+    ash::CiceroneClient::Shutdown();
+    ash::ChunneldClient::Shutdown();
   }
 
   void SetUp() override {
@@ -93,19 +92,40 @@ class AnsibleManagementServiceTest : public testing::Test,
     run_loop()->Quit();
   }
 
+  CrostiniAnsibleSoftwareConfigView* ActiveView(
+      const guest_os::GuestId& container_id) {
+    if (ansible_management_service_->GetDialogWidgetForTesting(container_id)) {
+      return (CrostiniAnsibleSoftwareConfigView*)ansible_management_service_
+          ->GetDialogWidgetForTesting(container_id)
+          ->widget_delegate();
+    } else {
+      return nullptr;
+    }
+  }
+
   // AnsibleManagementService::Observer
   void OnAnsibleSoftwareConfigurationStarted(
-      const ContainerId& container_id) override {}
-  void OnAnsibleSoftwareConfigurationFinished(const ContainerId& container_id,
-                                              bool success) override {}
-  void OnAnsibleSoftwareInstall(const ContainerId& container_id) override {
+      const guest_os::GuestId& container_id) override {}
+  void OnAnsibleSoftwareConfigurationFinished(
+      const guest_os::GuestId& container_id,
+      bool success) override {}
+  void OnAnsibleSoftwareConfigurationUiPrompt(
+      const guest_os::GuestId& container_id,
+      bool interactive) override {
+    if (interactive) {
+      // Press retry/ok on dialog if it's waiting for input.
+      ActiveView(container_id)->Accept();
+    }
+  }
+  void OnAnsibleSoftwareInstall(
+      const guest_os::GuestId& container_id) override {
     if (is_install_ansible_success_) {
       test_helper_->SendSucceededInstallSignal();
     } else {
       test_helper_->SendFailedInstallSignal();
     }
   }
-  void OnApplyAnsiblePlaybook(const ContainerId& container_id) override {
+  void OnApplyAnsiblePlaybook(const guest_os::GuestId& container_id) override {
     if (is_apply_ansible_success_) {
       test_helper_->SendSucceededApplySignal();
     } else {
@@ -148,7 +168,7 @@ TEST_F(AnsibleManagementServiceTest, ConfigureContainerSuccess) {
       vm_tools::cicerone::ApplyAnsiblePlaybookResponse::STARTED);
 
   ansible_management_service()->ConfigureContainer(
-      ContainerId::GetDefault(),
+      DefaultContainerId(),
       profile_->GetPrefs()->GetFilePath(
           prefs::kCrostiniAnsiblePlaybookFilePath),
       base::BindOnce(&AnsibleManagementServiceTest::ExpectTrueResult,
@@ -161,7 +181,7 @@ TEST_F(AnsibleManagementServiceTest, ConfigureContainerInstallFail) {
       vm_tools::cicerone::InstallLinuxPackageResponse::FAILED);
 
   ansible_management_service()->ConfigureContainer(
-      ContainerId::GetDefault(),
+      DefaultContainerId(),
       profile_->GetPrefs()->GetFilePath(
           prefs::kCrostiniAnsiblePlaybookFilePath),
       base::BindOnce(&AnsibleManagementServiceTest::ExpectFalseResult,
@@ -175,7 +195,7 @@ TEST_F(AnsibleManagementServiceTest, ConfigureContainerInstallSignalFail) {
   SetInstallAnsibleStatus(false);
 
   ansible_management_service()->ConfigureContainer(
-      ContainerId::GetDefault(),
+      DefaultContainerId(),
       profile_->GetPrefs()->GetFilePath(
           prefs::kCrostiniAnsiblePlaybookFilePath),
       base::BindOnce(&AnsibleManagementServiceTest::ExpectFalseResult,
@@ -190,7 +210,7 @@ TEST_F(AnsibleManagementServiceTest, ConfigureContainerApplyFail) {
       vm_tools::cicerone::ApplyAnsiblePlaybookResponse::FAILED);
 
   ansible_management_service()->ConfigureContainer(
-      ContainerId::GetDefault(),
+      DefaultContainerId(),
       profile_->GetPrefs()->GetFilePath(
           prefs::kCrostiniAnsiblePlaybookFilePath),
       base::BindOnce(&AnsibleManagementServiceTest::ExpectFalseResult,
@@ -206,7 +226,7 @@ TEST_F(AnsibleManagementServiceTest, ConfigureContainerApplySignalFail) {
   SetApplyAnsibleStatus(false);
 
   ansible_management_service()->ConfigureContainer(
-      ContainerId::GetDefault(),
+      DefaultContainerId(),
       profile_->GetPrefs()->GetFilePath(
           prefs::kCrostiniAnsiblePlaybookFilePath),
       base::BindOnce(&AnsibleManagementServiceTest::ExpectFalseResult,
@@ -222,12 +242,12 @@ TEST_F(AnsibleManagementServiceTest,
       vm_tools::cicerone::ApplyAnsiblePlaybookResponse::STARTED);
 
   ansible_management_service()->ConfigureContainer(
-      ContainerId::GetDefault(),
+      DefaultContainerId(),
       profile_->GetPrefs()->GetFilePath(
           prefs::kCrostiniAnsiblePlaybookFilePath),
       base::BindOnce(&ExpectResult, base::BindLambdaForTesting([&]() {
         ansible_management_service()->ConfigureContainer(
-            ContainerId::GetDefault(),
+            DefaultContainerId(),
             profile_->GetPrefs()->GetFilePath(
                 prefs::kCrostiniAnsiblePlaybookFilePath),
             base::BindOnce(&AnsibleManagementServiceTest::ExpectFalseResult,
@@ -244,7 +264,7 @@ TEST_F(AnsibleManagementServiceTest,
 
   // Unsuccessful sequence of events.
   ansible_management_service()->ConfigureContainer(
-      ContainerId::GetDefault(),
+      DefaultContainerId(),
       profile_->GetPrefs()->GetFilePath(
           prefs::kCrostiniAnsiblePlaybookFilePath),
       base::BindOnce(&ExpectResult, base::BindLambdaForTesting([&]() {
@@ -254,15 +274,13 @@ TEST_F(AnsibleManagementServiceTest,
         test_helper_->SetUpPlaybookApplication(
             vm_tools::cicerone::ApplyAnsiblePlaybookResponse::STARTED);
         ansible_management_service()->ConfigureContainer(
-            ContainerId::GetDefault(),
+            DefaultContainerId(),
             profile_->GetPrefs()->GetFilePath(
                 prefs::kCrostiniAnsiblePlaybookFilePath),
             base::BindOnce(&AnsibleManagementServiceTest::ExpectTrueResult,
                            weak_ptr_factory_.GetWeakPtr()));
       }),
                      false));
-  CloseCrostiniAnsibleSoftwareConfigViewForTesting();
-
   run_loop()->Run();
 }
 

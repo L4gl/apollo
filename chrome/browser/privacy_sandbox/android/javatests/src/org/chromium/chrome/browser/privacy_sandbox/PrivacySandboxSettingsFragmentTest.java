@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,6 +32,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.metrics.HistogramTestRule;
 import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -75,7 +76,10 @@ public final class PrivacySandboxSettingsFragmentTest {
 
     @Test
     @SmallTest
-    public void testChangeSetting() throws ExecutionException {
+    @DisabledTest(
+            message = "crbug.com/1378703 - Test only applicable for superseded feature code paths")
+    public void
+    testChangeSetting() throws ExecutionException {
         Matcher<View> sandboxCheckboxMatcher = allOf(withId(R.id.switchWidget),
                 withParent(withParent(hasDescendant(withText(R.string.privacy_sandbox_toggle)))));
         // Initially setting is on.

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,19 +6,23 @@
 
 #include <utility>
 
+#include "ipcz/driver_memory.h"
 #include "ipcz/link_side.h"
 #include "ipcz/link_type.h"
+#include "ipcz/node_link_memory.h"
+#include "ipcz/operation_context.h"
 #include "ipcz/remote_router_link.h"
 #include "ipcz/router.h"
 #include "ipcz/sublink_id.h"
-#include "reference_drivers/single_process_reference_driver.h"
+#include "reference_drivers/sync_reference_driver.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/base/macros.h"
 #include "util/ref_counted.h"
 
 namespace ipcz {
 namespace {
 
-const IpczDriver& kDriver = reference_drivers::kSingleProcessReferenceDriver;
+const IpczDriver& kDriver = reference_drivers::kSyncReferenceDriver;
 
 std::pair<Ref<NodeLink>, Ref<NodeLink>> LinkNodes(Ref<Node> broker,
                                                   Ref<Node> non_broker) {
@@ -29,20 +33,24 @@ std::pair<Ref<NodeLink>, Ref<NodeLink>> LinkNodes(Ref<Node> broker,
                                      nullptr, &handle0, &handle1));
 
   auto transport0 =
-      MakeRefCounted<DriverTransport>(DriverObject(broker, handle0));
+      MakeRefCounted<DriverTransport>(DriverObject(kDriver, handle0));
   auto transport1 =
-      MakeRefCounted<DriverTransport>(DriverObject(non_broker, handle1));
+      MakeRefCounted<DriverTransport>(DriverObject(kDriver, handle1));
+
+  DriverMemoryWithMapping buffer = NodeLinkMemory::AllocateMemory(kDriver);
+  ABSL_ASSERT(buffer.mapping.is_valid());
 
   const NodeName non_broker_name = broker->GenerateRandomName();
-  auto link0 =
-      NodeLink::Create(broker, LinkSide::kA, broker->GetAssignedName(),
-                       non_broker_name, Node::Type::kNormal, 0, transport0);
-  auto link1 = NodeLink::Create(non_broker, LinkSide::kB, non_broker_name,
-                                broker->GetAssignedName(), Node::Type::kNormal,
-                                0, transport1);
-
-  transport0->Activate();
-  transport1->Activate();
+  auto link0 = NodeLink::CreateInactive(
+      broker, LinkSide::kA, broker->GetAssignedName(), non_broker_name,
+      Node::Type::kNormal, 0, transport0,
+      NodeLinkMemory::Create(broker, std::move(buffer.mapping)));
+  auto link1 = NodeLink::CreateInactive(
+      non_broker, LinkSide::kB, non_broker_name, broker->GetAssignedName(),
+      Node::Type::kNormal, 0, transport1,
+      NodeLinkMemory::Create(non_broker, buffer.memory.Map()));
+  link0->Activate();
+  link1->Activate();
   return {link0, link1};
 }
 
@@ -54,18 +62,30 @@ TEST_F(NodeLinkTest, BasicTransmission) {
   Ref<Node> node1 = MakeRefCounted<Node>(Node::Type::kNormal, kDriver,
                                          IPCZ_INVALID_DRIVER_HANDLE);
 
+  // The choice of OperationContext is arbitrary and irrelevant for this test.
+  const OperationContext context{OperationContext::kTransportNotification};
   auto [link0, link1] = LinkNodes(node0, node1);
   auto router0 = MakeRefCounted<Router>();
   auto router1 = MakeRefCounted<Router>();
-  router0->SetOutwardLink(link0->AddRemoteRouterLink(
-      SublinkId(0), LinkType::kCentral, LinkSide::kA, router0));
-  router1->SetOutwardLink(link1->AddRemoteRouterLink(
-      SublinkId(0), LinkType::kCentral, LinkSide::kB, router1));
+  FragmentRef<RouterLinkState> link_state =
+      link0->memory().GetInitialRouterLinkState(0);
+  router0->SetOutwardLink(
+      context,
+      link0->AddRemoteRouterLink(context, SublinkId(0), link_state,
+                                 LinkType::kCentral, LinkSide::kA, router0));
+  router1->SetOutwardLink(
+      context,
+      link1->AddRemoteRouterLink(context, SublinkId(0), link_state,
+                                 LinkType::kCentral, LinkSide::kB, router1));
+  link_state->status = RouterLinkState::kStable;
 
   EXPECT_FALSE(router1->IsPeerClosed());
   router0->CloseRoute();
   EXPECT_TRUE(router1->IsPeerClosed());
   router1->CloseRoute();
+
+  link0->Deactivate(context);
+  link1->Deactivate(context);
 }
 
 }  // namespace

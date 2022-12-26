@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -25,12 +25,10 @@ class IdentityManager;
 @property(nonatomic, weak) id<SafeBrowsingStandardProtectionConsumer> consumer;
 
 // Designated initializer. All the parameters should not be null.
-// |userPrefService|: preference service from the browser state.
-// |localPrefService|: preference service from the application context.
-// |authService|: authentication service from browser state.
-// |identityManager|: identity manager from browser state.
+// `userPrefService`: preference service from the browser state.
+// `authService`: authentication service from browser state.
+// `identityManager`: identity manager from browser state.
 - (instancetype)initWithUserPrefService:(PrefService*)userPrefService
-                       localPrefService:(PrefService*)localPrefService
                             authService:(AuthenticationService*)authService
                         identityManager:
                             (signin::IdentityManager*)identityManager

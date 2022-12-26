@@ -83,7 +83,7 @@
       </div>
     </div>
 
-<if expr="chromeos_ash or chromeos_lacros">
+<if expr="is_chromeos">
     <!-- TODO(crbug.com/1231500): Remove this warning after Lacros side-by-side
       rollout stage. -->
     <template is="dom-if" if="[[shouldShowLacrosSideBySideWarning_()]]">
@@ -99,8 +99,8 @@
         <div id="existingPassphraseTitle" class="list-item">
             <div class="start cr-padded-text">
               <div>$i18n{existingPassphraseTitle}</div>
-              <div class="secondary"
-                  inner-h-t-m-l="[[existingPassphraseLabel_]]">
+              <div id="enterPassphraseLabel" class="secondary"
+                  inner-h-t-m-l="[[enterPassphraseLabel_]]">
               </div>
             </div>
         </div>
@@ -144,7 +144,6 @@
 
           <cr-link-row class="hr"
               label="$i18n{personalizeGoogleServicesTitle}"
-              hidden="[[!showActivityControls_()]]"
               on-click="onActivityControlsClick_" external></cr-link-row>
 
           <cr-link-row id="syncDashboardLink" class="hr"

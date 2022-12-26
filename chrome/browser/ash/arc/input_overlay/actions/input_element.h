@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,8 +15,7 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/types/event_type.h"
 
-namespace arc {
-namespace input_overlay {
+namespace arc::input_overlay {
 
 // About Json strings.
 constexpr char kMouseAction[] = "mouse_action";
@@ -27,7 +26,7 @@ constexpr char kPrimaryDragMove[] = "primary_drag_move";
 constexpr char kSecondaryDragMove[] = "secondary_drag_move";
 
 // Total key size for ActionMoveKey.
-constexpr int kActionMoveKeysSize = 4;
+constexpr size_t kActionMoveKeysSize = 4;
 // Gets the event flags for the modifier domcode. Return ui::DomCode::NONE if
 // |code| is not modifier DomCode.
 int ModifierDomCodeToEventFlag(ui::DomCode code);
@@ -64,22 +63,26 @@ class InputElement {
   // Return true if there is key overlapped or the mouse action is overlapped.
   bool IsOverlapped(const InputElement& input_element) const;
   // Set key in the |keys_| list at the |index| to |code|.
-  void SetKey(int index, ui::DomCode code);
+  void SetKey(size_t index, ui::DomCode code);
   // Set keys to |keys|.
   void SetKeys(std::vector<ui::DomCode>& keys);
+  // If it is keyboard-binded input and there is |key| binded, return the index
+  // of the |key|. Otherwise, return -1;
+  int GetIndexOfKey(ui::DomCode key) const;
   std::unique_ptr<InputElementProto> ConvertToProto();
 
   int input_sources() const { return input_sources_; }
   void set_input_sources(int input_sources) { input_sources_ = input_sources; }
   const std::vector<ui::DomCode>& keys() const { return keys_; }
   bool is_modifier_key() { return is_modifier_key_; }
-  const MouseAction mouse_action() const { return mouse_action_; }
+  MouseAction mouse_action() const { return mouse_action_; }
   const base::flat_set<ui::EventType>& mouse_types() const {
     return mouse_types_;
   }
   int mouse_flags() const { return mouse_flags_; }
 
   bool operator==(const InputElement& other) const;
+  bool operator!=(const InputElement& other) const;
 
  private:
   // Input source for this input element, could be keyboard or mouse or both.
@@ -112,7 +115,6 @@ class InputElement {
   int mouse_flags_ = 0;
 };
 
-}  // namespace input_overlay
-}  // namespace arc
+}  // namespace arc::input_overlay
 
 #endif  // CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_ACTIONS_INPUT_ELEMENT_H_

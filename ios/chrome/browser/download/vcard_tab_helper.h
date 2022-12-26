@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,8 +24,6 @@ class WebState;
 class VcardTabHelper : public web::DownloadTaskObserver,
                        public web::WebStateUserData<VcardTabHelper> {
  public:
-  explicit VcardTabHelper(web::WebState* web_state);
-
   VcardTabHelper(const VcardTabHelper&) = delete;
   VcardTabHelper& operator=(const VcardTabHelper&) = delete;
 
@@ -33,14 +31,18 @@ class VcardTabHelper : public web::DownloadTaskObserver,
 
   id<VcardTabHelperDelegate> delegate() { return delegate_; }
 
-  // |delegate| is not retained by this instance.
+  // `delegate` is not retained by this instance.
   void set_delegate(id<VcardTabHelperDelegate> delegate) {
     delegate_ = delegate;
   }
 
-  // Asynchronously downloads the Vcard file using the given |task|. Asks
+  // Asynchronously downloads the Vcard file using the given `task`. Asks
   // delegate to open the Vcard when the download is complete.
   virtual void Download(std::unique_ptr<web::DownloadTask> task);
+
+ protected:
+  // Allow subclassing from VcardTabHelper for testing purposes.
+  explicit VcardTabHelper(web::WebState* web_state);
 
  private:
   friend class web::WebStateUserData<VcardTabHelper>;

@@ -1,8 +1,9 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
+#include "chrome/browser/ui/login/login_handler.h"
+
 #include <list>
 #include <map>
 #include <tuple>
@@ -10,6 +11,7 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -22,8 +24,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/login/login_handler_test_utils.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -705,9 +707,8 @@ void MultiRealmLoginPromptBrowserTest::RunTest(const F& for_each_realm_func) {
   // Now confirm or cancel auth once per realm.
   std::set<std::string> seen_realms;
   for (int i = 0; i < kMultiRealmTestRealmCount; ++i) {
-    auto it = std::find_if(
-        login_prompt_observer_.handlers().begin(),
-        login_prompt_observer_.handlers().end(),
+    auto it = base::ranges::find_if(
+        login_prompt_observer_.handlers(),
         [&seen_realms](LoginHandler* handler) {
           return seen_realms.count(handler->auth_info().realm) == 0;
         });
@@ -1749,7 +1750,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest,
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), broken_ssl_page));
     ASSERT_EQ("127.0.0.1", contents->GetLastCommittedURL().host());
     ASSERT_TRUE(contents->GetLastCommittedURL().SchemeIs("https"));
-    ASSERT_TRUE(WaitForRenderFrameReady(contents->GetMainFrame()));
+    ASSERT_TRUE(WaitForRenderFrameReady(contents->GetPrimaryMainFrame()));
   }
 
   // An overrideable SSL interstitial is now being displayed. Navigate to the
@@ -1978,8 +1979,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest, PromptWithOnlyInitialEntry) {
   content::WebContents* opened_contents =
       browser()->tab_strip_model()->GetWebContentsAt(1);
   NavigationController* opened_controller = &opened_contents->GetController();
-  ASSERT_TRUE(!opened_controller->GetVisibleEntry() ||
-              opened_controller->GetVisibleEntry()->IsInitialEntry());
+  ASSERT_TRUE(opened_controller->GetVisibleEntry()->IsInitialEntry());
   LoginPromptBrowserTestObserver observer;
   observer.Register(content::Source<NavigationController>(opened_controller));
   WindowedAuthNeededObserver auth_needed_waiter(opened_controller);
@@ -2208,7 +2208,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptExtensionBrowserTest,
   GURL test_page = embedded_test_server()->GetURL(kSlowResponse);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_page));
 
-  console_observer.Wait();
+  ASSERT_TRUE(console_observer.Wait());
   ASSERT_EQ(1u, console_observer.messages().size());
   EXPECT_EQ(u"onAuthRequired " + base::ASCIIToUTF16(test_page.spec()),
             console_observer.messages()[0].message);
@@ -2422,7 +2422,7 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest,
   // contents is destroyed but it passes the empty credential info and
   // triggers CancelAuth().
   browser()->tab_strip_model()->CloseWebContentsAt(1,
-                                                   TabStripModel::CLOSE_NONE);
+                                                   TabCloseTypes::CLOSE_NONE);
 
   // It has one tab left.
   EXPECT_EQ(1, browser()->tab_strip_model()->count());

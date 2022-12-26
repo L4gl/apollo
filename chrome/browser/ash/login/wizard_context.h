@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,11 +33,24 @@ class WizardContext {
     kEnterprise,
   };
 
+  struct RecoverySetup {
+    // Whether the recovery auth factor is supported. Used for metrics.
+    bool is_supported = false;
+
+    // Controls if user should be asked about recovery factor setup
+    // on the consolidated consent screen.
+    bool ask_about_recovery_consent = false;
+
+    // User's choice about using recovery factor. Filled by
+    // consolidated consent screen, used by auth_factors_setup screen.
+    bool recovery_factor_opted_in = false;
+  };
+
   // Configuration for automating OOBE screen actions, e.g. during device
   // version rollback.
   // Set by WizardController.
   // Used by multiple screens.
-  base::Value configuration{base::Value::Type::DICTIONARY};
+  base::Value::Dict configuration;
 
   // Indicates that enterprise enrollment was triggered early in the OOBE
   // process, so Update screen should be skipped and Enrollment start right
@@ -97,6 +110,9 @@ class WizardContext {
   EnrollmentPreference enrollment_preference_ =
       WizardContext::EnrollmentPreference::kEnterprise;
 
+  // The data for recovery setup flow.
+  RecoverySetup recovery_setup;
+
   // Authorization data that is required by PinSetup screen to add PIN as
   // another possible auth factor. Can be empty (if PIN is not supported).
   // In future will be replaced by AuthSession.
@@ -118,7 +134,13 @@ class WizardContext {
   // current user is an owner of the device we reuse this value. It is set
   // during ConsolidatedConsentScreen.
   absl::optional<bool> is_owner_flow;
+
+  // True when gesture navigation screen was shown during the OOBE.
+  bool is_gesture_navigation_screen_was_shown = false;
 };
+
+// Returns |true| if this is an OOBE flow after enterprise enrollment.
+bool IsRollbackFlow(const WizardContext& context);
 
 }  // namespace ash
 

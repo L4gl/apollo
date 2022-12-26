@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "base/component_export.h"
+#include "base/observer_list.h"
 #include "chromeos/dbus/common/dbus_client.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
 #include "third_party/cros_system_api/dbus/rgbkbd/dbus-constants.h"
@@ -22,7 +23,17 @@ namespace ash {
 class COMPONENT_EXPORT(RGBKBD_CLIENT) RgbkbdClient {
  public:
   using GetRgbKeyboardCapabilitiesCallback =
-      DBusMethodCallback<rgbkbd::RgbKeyboardCapabilities>;
+      chromeos::DBusMethodCallback<rgbkbd::RgbKeyboardCapabilities>;
+
+  class Observer : public base::CheckedObserver {
+   public:
+    ~Observer() override = default;
+    virtual void OnCapabilityUpdatedForTesting(
+        rgbkbd::RgbKeyboardCapabilities capability) = 0;
+  };
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   RgbkbdClient(const RgbkbdClient&) = delete;
   RgbkbdClient& operator=(const RgbkbdClient&) = delete;
@@ -46,12 +57,18 @@ class COMPONENT_EXPORT(RGBKBD_CLIENT) RgbkbdClient {
 
   virtual void SetStaticBackgroundColor(uint8_t r, uint8_t g, uint8_t b) = 0;
 
+  virtual void SetZoneColor(int zone, uint8_t r, uint8_t g, uint8_t b) = 0;
+
   virtual void SetRainbowMode() = 0;
+
+  virtual void SetAnimationMode(rgbkbd::RgbAnimationMode mode) = 0;
 
  protected:
   // Initialize/Shutdown should be used instead.
   RgbkbdClient();
   virtual ~RgbkbdClient();
+
+  base::ObserverList<Observer> observers_;
 };
 
 }  // namespace ash

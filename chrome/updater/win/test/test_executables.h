@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,9 +13,6 @@ class CommandLine;
 }  // namespace base
 
 namespace updater {
-
-// The name of the service executable used for tests.
-extern const wchar_t kTestServiceExecutableName[];
 
 // The name of the executable used for tests.
 extern const wchar_t kTestProcessExecutableName[];

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "build/build_config.h"
+#include "content/public/browser/audio_stream_broker.h"
 #include "content/public/browser/color_chooser.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
@@ -154,6 +155,12 @@ void WebContentsDelegate::CreateSmsPrompt(
 
 bool WebContentsDelegate::IsFullscreenForTabOrPending(
     const WebContents* web_contents) {
+  return IsFullscreenForTabOrPending(web_contents, /*display_id=*/nullptr);
+}
+
+bool WebContentsDelegate::IsFullscreenForTabOrPending(
+    const WebContents* web_contents,
+    int64_t* display_id) {
   return false;
 }
 
@@ -220,7 +227,7 @@ void WebContentsDelegate::RequestMediaAccessPermission(
     content::MediaResponseCallback callback) {
   LOG(ERROR) << "WebContentsDelegate::RequestMediaAccessPermission: "
              << "Not supported.";
-  std::move(callback).Run(blink::mojom::StreamDevices(),
+  std::move(callback).Run(blink::mojom::StreamDevicesSet(),
                           blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED,
                           std::unique_ptr<content::MediaStreamUI>());
 }
@@ -243,6 +250,11 @@ std::string WebContentsDelegate::GetDefaultMediaDeviceID(
 std::string WebContentsDelegate::GetTitleForMediaControls(
     WebContents* web_contents) {
   return {};
+}
+
+std::unique_ptr<AudioStreamBrokerFactory>
+WebContentsDelegate::CreateAudioStreamBrokerFactory(WebContents* web_contents) {
+  return nullptr;
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -319,6 +331,10 @@ bool WebContentsDelegate::ShouldAnimateBrowserControlsHeightChanges() {
 bool WebContentsDelegate::DoBrowserControlsShrinkRendererSize(
     WebContents* web_contents) {
   return false;
+}
+
+int WebContentsDelegate::GetVirtualKeyboardHeight(WebContents* web_contents) {
+  return 0;
 }
 
 bool WebContentsDelegate::OnlyExpandTopControlsAtPageTop() {

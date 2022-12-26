@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,6 @@
 #include "base/containers/flat_map.h"
 #include "base/files/safe_base_name.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -24,6 +23,9 @@ struct IntentFile {
   IntentFile(const IntentFile&) = delete;
   IntentFile& operator=(const IntentFile&) = delete;
   ~IntentFile();
+
+  bool operator==(const IntentFile& other) const;
+  bool operator!=(const IntentFile& other) const;
 
   std::unique_ptr<IntentFile> Clone() const;
 
@@ -70,6 +72,9 @@ struct Intent {
   Intent& operator=(const Intent&) = delete;
   ~Intent();
 
+  bool operator==(const Intent& other) const;
+  bool operator!=(const Intent& other) const;
+
   std::unique_ptr<Intent> Clone() const;
 
   // Gets the field that need to be checked/matched based on `condition_type`.
@@ -84,6 +89,15 @@ struct Intent {
 
   // Returns true if matches all existing conditions in the filter.
   bool MatchFilter(const IntentFilterPtr& filter);
+
+  // Returns true if `intent` corresponds to a share intent.
+  bool IsShareIntent();
+
+  // Check if the intent only mean to share to Google Drive.
+  bool OnlyShareToDrive();
+
+  // Check the if the intent is valid, e.g. action matches content.
+  bool IsIntentValid();
 
   // Intent action. e.g. view, send.
   std::string action;
@@ -117,19 +131,6 @@ struct Intent {
 };
 
 using IntentPtr = std::unique_ptr<Intent>;
-
-// TODO(crbug.com/1253250): Remove these functions after migrating to non-mojo
-// AppService.
-IntentFilePtr ConvertMojomIntentFileToIntentFile(
-    const apps::mojom::IntentFilePtr& mojom_intent_file);
-
-apps::mojom::IntentFilePtr ConvertIntentFileToMojomIntentFile(
-    const IntentFilePtr& intent_file);
-
-IntentPtr ConvertMojomIntentToIntent(
-    const apps::mojom::IntentPtr& mojom_intent);
-
-apps::mojom::IntentPtr ConvertIntentToMojomIntent(const IntentPtr& intent);
 
 }  // namespace apps
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,6 @@
 
 struct AccountInfo;
 struct CoreAccountInfo;
-class Browser;
 class Profile;
 class ProfileAttributesEntry;
 class ProfileAttributesStorage;
@@ -29,15 +28,9 @@ class ProfileAttributesStorage;
 namespace signin_ui_util {
 class SigninUiDelegate;
 
-// The maximum number of times to show the welcome tutorial for an upgrade user.
-const int kUpgradeWelcomeTutorialShowMax = 1;
-
 // Returns the username of the primary account or an empty string if there is
 // no primary account or the account has not consented to browser sync.
 std::u16string GetAuthenticatedUsername(Profile* profile);
-
-// Initializes signin-related preferences.
-void InitializePrefsForProfile(Profile* profile);
 
 // Shows a learn more page for signin errors.
 void ShowSigninErrorLearnMorePage(Profile* profile);
@@ -45,8 +38,13 @@ void ShowSigninErrorLearnMorePage(Profile* profile);
 // Shows a reauth page/dialog to reauthanticate a primary account in error
 // state.
 void ShowReauthForPrimaryAccountWithAuthError(
-    Browser* browser,
+    Profile* profile,
     signin_metrics::AccessPoint access_point);
+
+// Shows a reauth page/dialog to reauthanticate an account.
+void ShowReauthForAccount(Profile* profile,
+                          const std::string& email,
+                          signin_metrics::AccessPoint access_point);
 
 // Delegates to an existing sign-in tab if one exists. If not, a new sign-in tab
 // is created.
@@ -61,7 +59,7 @@ void ShowExtensionSigninPrompt(Profile* profile,
 //   then it presents the Chrome sign-in page with |account.emil| prefilled.
 // * If token service has a valid refresh token for |account|, then it
 //   enables sync for |account|.
-void EnableSyncFromSingleAccountPromo(Browser* browser,
+void EnableSyncFromSingleAccountPromo(Profile* profile,
                                       const CoreAccountInfo& account,
                                       signin_metrics::AccessPoint access_point);
 
@@ -72,7 +70,7 @@ void EnableSyncFromSingleAccountPromo(Browser* browser,
 //
 // |is_default_promo_account| is true if |account| corresponds to the default
 // account in the promo. It is ignored if |account| is empty.
-void EnableSyncFromMultiAccountPromo(Browser* browser,
+void EnableSyncFromMultiAccountPromo(Profile* profile,
                                      const CoreAccountInfo& account,
                                      signin_metrics::AccessPoint access_point,
                                      bool is_default_promo_account);
@@ -85,9 +83,9 @@ std::vector<AccountInfo> GetOrderedAccountsForDisplay(
     Profile* profile,
     bool restrict_to_accounts_eligible_for_sync);
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// Returns single account to use in Dice promos.
-AccountInfo GetSingleAccountForDicePromos(Profile* profile);
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+// Returns single account to use in promos.
+AccountInfo GetSingleAccountForPromos(Profile* profile);
 
 #endif
 

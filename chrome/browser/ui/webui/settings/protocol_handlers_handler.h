@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,6 +56,7 @@ class ProtocolHandlersHandler
 
   // web_app::AppRegistrarObserver:
   void OnWebAppProtocolSettingsChanged() override;
+  void OnAppRegistrarDestroyed() override;
 
  private:
   // Called to fetch the state of the protocol handlers. If the full list of
@@ -84,11 +85,10 @@ class ProtocolHandlersHandler
 
   // Populates a JSON object describing the set of protocol handlers for the
   // given protocol.
-  void GetHandlersForProtocol(const std::string& protocol,
-                              base::Value::Dict* value);
+  base::Value::Dict GetHandlersForProtocol(const std::string& protocol);
 
   // Returns a JSON list of the ignored protocol handlers.
-  void GetIgnoredHandlers(base::ListValue* handlers);
+  base::Value::List GetIgnoredHandlers();
 
   // Called when the JS PasswordManager object is initialized.
   void UpdateHandlerList();
@@ -113,9 +113,9 @@ class ProtocolHandlersHandler
   custom_handlers::ProtocolHandler ParseAppHandlerFromArgs(
       const base::Value::List& args) const;
 
-  // Returns a DictionaryValue describing the set of app protocol handlers for
+  // Returns a Value::Dict describing the set of app protocol handlers for
   // the given |protocol| in the given |handlers| list.
-  std::unique_ptr<base::DictionaryValue> GetAppHandlersForProtocol(
+  base::Value::Dict GetAppHandlersForProtocol(
       const std::string& protocol,
       custom_handlers::ProtocolHandlerRegistry::ProtocolHandlerList handlers);
 
@@ -125,13 +125,9 @@ class ProtocolHandlersHandler
   // Called when OnWebAppProtocolSettingsChanged() is notified or on page load.
   void UpdateAllDisallowedLaunchProtocols();
 
-  // Remove an approved app handler.
+  // Used to remove a protocol handler from the approved or disapproved list.
   // |args| is a list of [protocol, url, app_id].
-  void HandleRemoveAllowedAppHandler(const base::Value::List& args);
-
-  // Remove a disallowed app handler.
-  // |args| is a list of [protocol, url, app_id].
-  void HandleRemoveDisallowedAppHandler(const base::Value::List& args);
+  void ResetProtocolHandlerUserApproval(const base::Value::List& args);
 
   const raw_ptr<Profile> profile_;
   const raw_ptr<web_app::WebAppProvider> web_app_provider_;

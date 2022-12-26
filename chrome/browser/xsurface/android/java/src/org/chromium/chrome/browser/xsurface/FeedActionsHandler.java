@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -142,44 +142,57 @@ public interface FeedActionsHandler {
      */
     default void reportNoticeDismissed(String key) {}
 
-    /** Types of feeds that can be invalidated. */
-    @IntDef({FeedIdentifier.ALL_FEEDS, FeedIdentifier.MAIN_FEED, FeedIdentifier.FOLLOWING_FEED})
+    /**
+     * Types of feeds that can be invalidated. These values must match the privately defined values
+     * of InvalidateCacheData.FeedType.
+     */
+    @IntDef({FeedIdentifier.UNSPECIFIED, FeedIdentifier.MAIN_FEED, FeedIdentifier.FOLLOWING_FEED,
+            FeedIdentifier.CHANNEL_FEED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface FeedIdentifier {
-        int ALL_FEEDS = 0;
+        int UNSPECIFIED = 0;
         int MAIN_FEED = 1;
         int FOLLOWING_FEED = 2;
+        int CHANNEL_FEED = 3;
     }
 
     /**
-     * Requests that the cache of one or all feeds should be invalidated so that that their contents
-     * are re-fetched the next time the feed is shown.
-     * @param toInvalidate Identifies which feed or feeds should have their caches invalidated.
+     * Requests that the cache a feed be invalidated so that its contents are re-fetched the next
+     * time the feed is shown/loaded.
+     * @param feedToInvalidate Identifies which feed should have its cache invalidated. The request
+     *         will be dropped if set to FeedIdentifier.UNSPECIFIED.
      */
-    default void invalidateContentCacheFor(@FeedIdentifier int toInvalidate) {}
-
-    /** Actions that could occur for an info card. */
-    @IntDef({InfoCardAction.INFO_CARD_TRACK_VIEW_STARTED, InfoCardAction.INFO_CARD_VIEWED,
-            InfoCardAction.INFO_CARD_CLICKED, InfoCardAction.INFO_CARD_DISMISSED_EXPLIICITLY,
-            InfoCardAction.TRACK_VIEW_WITH_STATE_RESET})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface InfoCardAction {
-        // The info card is being tracked for its full visibility.
-        int INFO_CARD_TRACK_VIEW_STARTED = 0;
-        // The info card is fully visible in the viewport.
-        int INFO_CARD_VIEWED = 1;
-        // The user tapps the info card.
-        int INFO_CARD_CLICKED = 2;
-        // The user dismisses the info card explicitly by tapping the close button.
-        int INFO_CARD_DISMISSED_EXPLIICITLY = 3;
-        // The info card's state should be reset.
-        int TRACK_VIEW_WITH_STATE_RESET = 4;
-    }
+    default void invalidateContentCacheFor(@FeedIdentifier int feedToInvalidate) {}
 
     /**
-     * Reports that an action has occurred for an info card.
+     * Reports that the info card is being tracked for its full visibility.
      * @param type Type of the info card.
-     * @param action Action that occurred.
      */
-    default void reportInfoCardAction(int type, @InfoCardAction int action) {}
+    default void reportInfoCardTrackViewStarted(int type) {}
+
+    /**
+     * Reports that the info card is fully visible in the viewport.
+     * @param type Type of the info card.
+     * @param minimumViewIntervalSeconds The minimum interval in seconds from the last time the info
+     * card is viewed in order for it to be considered viewed again.
+     */
+    default void reportInfoCardViewed(int type, int minimumViewIntervalSeconds) {}
+
+    /**
+     * Reports that the user tapps the info card.
+     * @param type Type of the info card.
+     */
+    default void reportInfoCardClicked(int type) {}
+
+    /**
+     * Reports that the user dismisses the info card explicitly by tapping the close button.
+     * @param type Type of the info card.
+     */
+    default void reportInfoCardDismissedExplicitly(int type) {}
+
+    /**
+     * Resets all the states of the info card.
+     * @param type Type of the info card.
+     */
+    default void resetInfoCardStates(int type) {}
 }

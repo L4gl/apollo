@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,14 @@
 
 #include "base/feature_list.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/reputation/reputation_web_contents_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -283,7 +284,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
     run_loop.Run();
     // The UKM isn't recorded until the page is destroyed.
     ASSERT_TRUE(browser()->tab_strip_model()->CloseWebContentsAt(
-        1, TabStripModel::CLOSE_NONE));
+        1, TabCloseTypes::CLOSE_NONE));
 
     histogram_tester.ExpectTotalCount(
         kSiteEngagementHistogramPrefix +
@@ -572,7 +573,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
   // Ensure that the tab is open for more than 0 ms, even in the face of bots
   // with bad clocks.
   base::RunLoop run_loop;
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), kMinForegroundTime);
   run_loop.Run();
   CloseAllTabs();
@@ -645,10 +646,8 @@ IN_PROC_BROWSER_TEST_F(
   prerender_helper()->NavigatePrimaryPage(prerender_url);
   EXPECT_TRUE(host_observer.was_activated());
 
-  // Prerendering doesn't invoke OnCommit method of PageLoadMetricsObserver
-  // even after activating the prerendered page. So,
-  // Security.SecurityLevel.OnCommit metric's count should not be changed.
-  histogram_tester()->ExpectTotalCount("Security.SecurityLevel.OnCommit", 1);
+  // Prerendering records it on DidActivatePrerenderedPage.
+  histogram_tester()->ExpectTotalCount("Security.SecurityLevel.OnCommit", 2);
 }
 
 class SecurityStatePageLoadMetricsFencedFrameBrowserTest
@@ -665,11 +664,8 @@ class SecurityStatePageLoadMetricsFencedFrameBrowserTest
   content::test::FencedFrameTestHelper fenced_frame_helper_;
 };
 
-// TODO(crbug.com/1301880): This test will be enabled after toyoshim@'s CL
-// restricts call to SecurityStatePageLoadMetricsObserver::OnCommit for fenced
-// frames"
 IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsFencedFrameBrowserTest,
-                       DISABLED_DoNotRecordOnCommitSecurityLevelHistogram) {
+                       DoNotRecordOnCommitSecurityLevelHistogram) {
   StartHttpsServer(net::EmbeddedTestServer::CERT_OK);
 
   GURL https_url = https_test_server()->GetURL("/title1.html");
@@ -682,7 +678,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsFencedFrameBrowserTest,
       https_test_server()->GetURL("/fenced_frames/title1.html"));
   content::RenderFrameHost* fenced_frame_host =
       fenced_frame_test_helper().CreateFencedFrame(
-          GetWebContents()->GetMainFrame(), fenced_frame_url);
+          GetWebContents()->GetPrimaryMainFrame(), fenced_frame_url);
   ASSERT_TRUE(fenced_frame_host);
 
   histogram_tester()->ExpectTotalCount("Security.SecurityLevel.OnCommit", 1);

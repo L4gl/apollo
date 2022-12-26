@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -96,9 +96,6 @@ void ReportOpenStatus(IndexedDBBackingStoreOpenResult result,
 
 void ReportInternalError(const char* type,
                          IndexedDBBackingStoreErrorSource location);
-
-void ReportSchemaVersion(int version,
-                         const storage::BucketLocator& bucket_locator);
 
 void ReportLevelDBError(const std::string& histogram_name,
                         const leveldb::Status& s);

@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,7 +43,7 @@ class GraphicsDelegateWin : public GraphicsDelegate {
 
   // Called on background GL thread.
   void InitializeOnGLThread();
-  void SetVRDisplayInfo(device::mojom::VRDisplayInfoPtr info);
+  void SetXrViews(const std::vector<device::mojom::XRViewPtr>& views);
   bool PreRender();
   void PostRender();
   mojo::PlatformHandle GetTexture();

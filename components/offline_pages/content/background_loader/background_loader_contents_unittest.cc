@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "url/gurl.h"
 
 namespace background_loader {
@@ -37,9 +38,10 @@ class BackgroundLoaderContentsTest : public testing::Test,
   bool download() { return download_; }
   bool can_download_delegate_called() { return delegate_called_; }
 
-  void MediaAccessCallback(const blink::mojom::StreamDevices& devices,
-                           blink::mojom::MediaStreamRequestResult result,
-                           std::unique_ptr<content::MediaStreamUI> ui);
+  void MediaAccessCallback(
+      const blink::mojom::StreamDevicesSet& stream_devices_set,
+      blink::mojom::MediaStreamRequestResult result,
+      std::unique_ptr<content::MediaStreamUI> ui);
   blink::mojom::StreamDevices& devices() { return devices_; }
   blink::mojom::MediaStreamRequestResult request_result() {
     return request_result_;
@@ -91,10 +93,15 @@ void BackgroundLoaderContentsTest::SetDelegate() {
 }
 
 void BackgroundLoaderContentsTest::MediaAccessCallback(
-    const blink::mojom::StreamDevices& devices,
+    const blink::mojom::StreamDevicesSet& stream_devices_set,
     blink::mojom::MediaStreamRequestResult result,
     std::unique_ptr<content::MediaStreamUI> ui) {
-  devices_ = devices;
+  if (result == blink::mojom::MediaStreamRequestResult::OK) {
+    ASSERT_FALSE(stream_devices_set.stream_devices.empty());
+    devices_ = *stream_devices_set.stream_devices[0];
+  } else {
+    ASSERT_TRUE(stream_devices_set.stream_devices.empty());
+  }
   request_result_ = result;
   media_stream_ui_.reset(ui.get());
   waiter_.Signal();
@@ -148,8 +155,8 @@ TEST_F(BackgroundLoaderContentsTest, ShouldNotAddNewContents) {
       std::unique_ptr<content::WebContents>() /* new_contents */,
       GURL() /* target_url */,
       WindowOpenDisposition::CURRENT_TAB /* disposition */,
-      gfx::Rect() /* initial_rect */, false /* user_gesture */,
-      &blocked /* was_blocked */);
+      blink::mojom::WindowFeatures() /* window_features */,
+      false /* user_gesture */, &blocked /* was_blocked */);
   ASSERT_TRUE(blocked);
 }
 

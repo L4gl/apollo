@@ -1,12 +1,13 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {cancelPreviewWallpaper, DefaultImageSymbol, fetchCollections, fetchGooglePhotosAlbum, fetchLocalData, getDefaultImageThumbnail, getImageKey, getLocalImages, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, initializeBackdropData, initializeGooglePhotosData, isFilePath, kDefaultImageSymbol, selectWallpaper, WallpaperImage} from 'chrome://personalization/trusted/personalization_app.js';
-import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {cancelPreviewWallpaper, DefaultImageSymbol, DisplayableImage, fetchCollections, fetchGooglePhotosAlbum, fetchGooglePhotosAlbums, fetchLocalData, getDefaultImageThumbnail, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, initializeBackdropData, initializeGooglePhotosData, isDefaultImage, isFilePath, isGooglePhotosPhoto, isWallpaperImage, kDefaultImageSymbol, selectGooglePhotosAlbum, selectWallpaper, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
+import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
@@ -53,16 +54,9 @@ suite('Personalization app controller', () => {
 
       await initializeGooglePhotosData(wallpaperProvider, personalizationStore);
 
-      let expectedEnabled, expectedAlbums, expectedPhotos;
-      if (isGooglePhotosIntegrationEnabled) {
-        expectedEnabled = GooglePhotosEnablementState.kEnabled;
-        expectedAlbums = [];
-        expectedPhotos = [];
-      } else {
-        expectedEnabled = GooglePhotosEnablementState.kError;
-        expectedAlbums = null;
-        expectedPhotos = null;
-      }
+      const expectedEnabled = isGooglePhotosIntegrationEnabled ?
+          GooglePhotosEnablementState.kEnabled :
+          GooglePhotosEnablementState.kError;
 
       assertDeepEquals(
           [
@@ -72,22 +66,6 @@ suite('Personalization app controller', () => {
             {
               name: 'set_google_photos_enabled',
               enabled: expectedEnabled,
-            },
-            {
-              name: 'begin_load_google_photos_albums',
-            },
-            {
-              name: 'begin_load_google_photos_photos',
-            },
-            {
-              name: 'append_google_photos_albums',
-              albums: expectedAlbums,
-              resumeToken: null,
-            },
-            {
-              name: 'append_google_photos_photos',
-              photos: expectedPhotos,
-              resumeToken: null,
             },
           ],
           personalizationStore.actions);
@@ -126,70 +104,6 @@ suite('Personalization app controller', () => {
                 resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
               },
             },
-            // BEGIN_LOAD_GOOGLE_PHOTOS_ALBUMS.
-            {
-              'wallpaper.loading.googlePhotos': {
-                enabled: false,
-                albums: true,
-                photos: false,
-                photosByAlbumId: {},
-              },
-              'wallpaper.googlePhotos': {
-                enabled: expectedEnabled,
-                albums: undefined,
-                photos: undefined,
-                photosByAlbumId: {},
-                resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
-              },
-            },
-            // BEGIN_LOAD_GOOGLE_PHOTOS_PHOTOS.
-            {
-              'wallpaper.loading.googlePhotos': {
-                enabled: false,
-                albums: true,
-                photos: true,
-                photosByAlbumId: {},
-              },
-              'wallpaper.googlePhotos': {
-                enabled: expectedEnabled,
-                albums: undefined,
-                photos: undefined,
-                photosByAlbumId: {},
-                resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
-              },
-            },
-            // APPEND_GOOGLE_PHOTOS_ALBUMS.
-            {
-              'wallpaper.loading.googlePhotos': {
-                enabled: false,
-                albums: false,
-                photos: true,
-                photosByAlbumId: {},
-              },
-              'wallpaper.googlePhotos': {
-                enabled: expectedEnabled,
-                albums: expectedAlbums,
-                photos: undefined,
-                photosByAlbumId: {},
-                resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
-              },
-            },
-            // APPEND_GOOGLE_PHOTOS_PHOTOS.
-            {
-              'wallpaper.loading.googlePhotos': {
-                enabled: false,
-                albums: false,
-                photos: false,
-                photosByAlbumId: {},
-              },
-              'wallpaper.googlePhotos': {
-                enabled: expectedEnabled,
-                albums: expectedAlbums,
-                photos: expectedPhotos,
-                photosByAlbumId: {},
-                resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
-              },
-            },
           ],
           personalizationStore.states.map(filterAndFlattenState(
               ['wallpaper.googlePhotos', 'wallpaper.loading.googlePhotos'])));
@@ -205,19 +119,20 @@ suite('Personalization app controller', () => {
 
     const photos: GooglePhotosPhoto[] = [{
       id: '9bd1d7a3-f995-4445-be47-53c5b58ce1cb',
+      dedupKey: '2d0d1595-14af-4471-b2db-b9c8eae3a491',
       name: 'foo',
       date: {data: []},
       url: {url: 'foo.com'},
-      location: 'home'
+      location: 'home',
     }];
 
     wallpaperProvider.setGooglePhotosAlbums([album]);
-    wallpaperProvider.setGooglePhotosPhotos(photos);
     wallpaperProvider.setGooglePhotosPhotosByAlbumId(album.id, photos);
 
     // Attempts to `fetchGooglePhotosAlbum()` will fail unless the entire list
     // of Google Photos albums has already been fetched and saved to the store.
     await initializeGooglePhotosData(wallpaperProvider, personalizationStore);
+    await fetchGooglePhotosAlbums(wallpaperProvider, personalizationStore);
     personalizationStore.reset(personalizationStore.data);
 
     await fetchGooglePhotosAlbum(
@@ -262,7 +177,7 @@ suite('Personalization app controller', () => {
                   preview: album.preview,
                 },
               ],
-              photos: photos,
+              photos: undefined,
               photosByAlbumId: {},
               resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
             },
@@ -285,7 +200,7 @@ suite('Personalization app controller', () => {
                   preview: album.preview,
                 },
               ],
-              photos: photos,
+              photos: undefined,
               photosByAlbumId: {
                 [album.id]: photos,
               },
@@ -318,12 +233,12 @@ suite('Personalization app controller', () => {
           {
             name: 'set_local_image_data',
             id: 'LocalImage0.png',
-            data: 'data://localimage0data',
+            data: {url: 'data:image/png;base64,localimage0data'},
           },
           {
             name: 'set_local_image_data',
             id: 'LocalImage1.png',
-            data: 'data://localimage1data',
+            data: {url: 'data:image/png;base64,localimage1data'},
           },
         ],
         personalizationStore.actions);
@@ -333,7 +248,7 @@ suite('Personalization app controller', () => {
           // Begin loading local image list.
           {
             'wallpaper.loading.local': {images: true, data: {}},
-            'wallpaper.local': {images: null, data: {}}
+            'wallpaper.local': {images: null, data: {}},
           },
           // Done loading local image data.
           {
@@ -343,8 +258,8 @@ suite('Personalization app controller', () => {
                 {path: 'LocalImage0.png'},
                 {path: 'LocalImage1.png'},
               ],
-              data: {}
-            }
+              data: {},
+            },
           },
           // Mark image 0 as loading.
           {
@@ -369,7 +284,7 @@ suite('Personalization app controller', () => {
                 {path: 'LocalImage1.png'},
               ],
               data: {},
-            }
+            },
           },
           // Finish loading image 0.
           {
@@ -382,8 +297,12 @@ suite('Personalization app controller', () => {
                 {path: 'LocalImage0.png'},
                 {path: 'LocalImage1.png'},
               ],
-              data: {'LocalImage0.png': 'data://localimage0data'},
-            }
+              data: {
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+              },
+            },
           },
           // Finish loading image 1.
           {
@@ -397,11 +316,15 @@ suite('Personalization app controller', () => {
                 {path: 'LocalImage1.png'},
               ],
               data: {
-                'LocalImage0.png': 'data://localimage0data',
-                'LocalImage1.png': 'data://localimage1data',
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+                'LocalImage1.png': {
+                  url: 'data:image/png;base64,localimage1data',
+                },
               },
-            }
-          }
+            },
+          },
         ],
         personalizationStore.states.map(filterAndFlattenState(
             ['wallpaper.local', 'wallpaper.loading.local'])));
@@ -438,8 +361,12 @@ suite('Personalization app controller', () => {
             'wallpaper.local': {
               images: [{path: 'LocalImage0.png'}, {path: 'LocalImage1.png'}],
               data: {
-                'LocalImage0.png': 'data://localimage0data',
-                'LocalImage1.png': 'data://localimage1data',
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+                'LocalImage1.png': {
+                  url: 'data:image/png;base64,localimage1data',
+                },
               },
             },
           },
@@ -450,7 +377,11 @@ suite('Personalization app controller', () => {
                 {data: {'LocalImage0.png': false}, images: false},
             'wallpaper.local': {
               images: [{path: 'LocalImage0.png'}],
-              data: {'LocalImage0.png': 'data://localimage0data'},
+              data: {
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+              },
             },
           },
         ],
@@ -472,7 +403,7 @@ suite('Personalization app controller', () => {
 
     wallpaperProvider.localImageData = {
       ...wallpaperProvider.localImageData,
-      'NewPath.png': 'data://newpath',
+      'NewPath.png': {url: 'data:image/png;base64,newpath'},
     };
 
     await fetchLocalData(wallpaperProvider, personalizationStore);
@@ -495,11 +426,11 @@ suite('Personalization app controller', () => {
           {
             name: 'set_local_image_data',
             id: 'NewPath.png',
-            data: 'data://newpath',
-          }
+            data: {url: 'data:image/png;base64,newpath'},
+          },
         ],
         personalizationStore.actions,
-    );
+        JSON.stringify(personalizationStore.actions));
 
     assertDeepEquals(
         [
@@ -515,8 +446,12 @@ suite('Personalization app controller', () => {
                 {'path': 'LocalImage1.png'},
               ],
               'data': {
-                'LocalImage0.png': 'data://localimage0data',
-                'LocalImage1.png': 'data://localimage1data',
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+                'LocalImage1.png': {
+                  url: 'data:image/png;base64,localimage1data',
+                },
               },
             },
           },
@@ -528,7 +463,11 @@ suite('Personalization app controller', () => {
             },
             'wallpaper.local': {
               'images': [{'path': 'LocalImage0.png'}, {'path': 'NewPath.png'}],
-              'data': {'LocalImage0.png': 'data://localimage0data'},
+              'data': {
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+              },
             },
           },
           // Begin loading NewPath.png data.
@@ -539,7 +478,11 @@ suite('Personalization app controller', () => {
             },
             'wallpaper.local': {
               'images': [{'path': 'LocalImage0.png'}, {'path': 'NewPath.png'}],
-              'data': {'LocalImage0.png': 'data://localimage0data'},
+              'data': {
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+              },
             },
           },
           // Done loading NewPath.png data.
@@ -551,11 +494,13 @@ suite('Personalization app controller', () => {
             'wallpaper.local': {
               'images': [{'path': 'LocalImage0.png'}, {'path': 'NewPath.png'}],
               'data': {
-                'LocalImage0.png': 'data://localimage0data',
-                'NewPath.png': 'data://newpath',
+                'LocalImage0.png': {
+                  url: 'data:image/png;base64,localimage0data',
+                },
+                'NewPath.png': {url: 'data:image/png;base64,newpath'},
               },
             },
-          }
+          },
         ],
         personalizationStore.states.map(filterAndFlattenState(
             ['wallpaper.local', 'wallpaper.loading.local'])));
@@ -563,7 +508,7 @@ suite('Personalization app controller', () => {
 
   test('clears local images when fetching new image list fails', async () => {
     // No default image on this device.
-    wallpaperProvider.defaultImageThumbnail = '';
+    wallpaperProvider.defaultImageThumbnail = {url: ''};
     await getDefaultImageThumbnail(wallpaperProvider, personalizationStore);
     await fetchLocalData(wallpaperProvider, personalizationStore);
 
@@ -574,9 +519,10 @@ suite('Personalization app controller', () => {
         null, personalizationStore.data.wallpaper.local.images,
         'local images set to null');
     assertDeepEquals({}, personalizationStore.data.wallpaper.local.data);
-    assertEquals(
-        '', personalizationStore.data.wallpaper.local.data[kDefaultImageSymbol],
-        'default image still present but set to empty string');
+    assertDeepEquals(
+        {url: ''},
+        personalizationStore.data.wallpaper.local.data[kDefaultImageSymbol],
+        'default image still present but set to empty url');
     assertDeepEquals(
         {}, personalizationStore.data.wallpaper.loading.local.data,
         'local images not loading');
@@ -597,7 +543,6 @@ suite('full screen mode', () => {
     wallpaperProvider = new TestWallpaperProvider();
     personalizationStore = new TestPersonalizationStore({});
     personalizationStore.setReducersEnabled(true);
-    loadTimeData.resetForTesting({[fullscreenPreviewFeature]: true});
   });
 
   test(
@@ -799,68 +744,40 @@ suite('local images available but no internet connection', () => {
     personalizationStore.setReducersEnabled(true);
   });
 
-  test(
-      'error displays when fetch collections failed but local images loaded',
-      async () => {
-        loadTimeData.overrideValues({['networkError']: 'someError'});
+  test('error displays when fetch collections failed', async () => {
+    // Set collections to null to simulate collections failure.
+    wallpaperProvider.setCollectionsToFail();
 
-        // Set collections to null to simulate collections failure.
-        wallpaperProvider.setCollectionsToFail();
+    // Assume that collections are loaded before local images.
+    const collectionsPromise =
+        fetchCollections(wallpaperProvider, personalizationStore);
 
-        // Assume that collections are loaded before local images.
-        const collectionsPromise =
-            fetchCollections(wallpaperProvider, personalizationStore);
-        const localImagesPromise =
-            getLocalImages(wallpaperProvider, personalizationStore);
+    await collectionsPromise;
 
-        await collectionsPromise;
+    assertFalse(personalizationStore.data.wallpaper.loading.collections);
+    assertEquals(
+        null, personalizationStore.data.wallpaper.backdrop.collections);
 
-        assertFalse(personalizationStore.data.wallpaper.loading.collections);
-        assertEquals(
-            null, personalizationStore.data.wallpaper.backdrop.collections);
+    assertDeepEquals(
+        [
+          {
+            name: 'set_collections',
+            collections: null,
+          },
+        ],
+        personalizationStore.actions,
+    );
 
-        await localImagesPromise;
-
-        assertFalse(personalizationStore.data.wallpaper.loading.local.images);
-        assertDeepEquals(
-            wallpaperProvider.localImages,
-            personalizationStore.data.wallpaper.local.images);
-
-        assertDeepEquals(
-            [
-              {
-                name: 'begin_load_local_images',
-              },
-              {
-                name: 'set_collections',
-                collections: null,
-              },
-              {name: 'set_local_images', images: wallpaperProvider.localImages},
-            ],
-            personalizationStore.actions,
-        );
-
-
-        assertDeepEquals(
-            [
-              // Begin load local images
-              {
-                'error': null,
-              },
-              // Set collections.
-              // Collections are completed loading with null value
-              // but local images are not yet done, no error displays.
-              {
-                'error': null,
-              },
-              // Set local images.
-              // Error displays once local images are loaded.
-              {
-                'error': {message: loadTimeData.getString('networkError')},
-              },
-            ],
-            personalizationStore.states.map(filterAndFlattenState(['error'])));
-      });
+    assertDeepEquals(
+        [
+          // Set collections.
+          // Collections are completed loading with null value. Error displays.
+          {
+            'error': {message: loadTimeData.getString('wallpaperNetworkError')},
+          },
+        ],
+        personalizationStore.states.map(filterAndFlattenState(['error'])));
+  });
 });
 
 suite('does not respond to re-selecting the current wallpaper', () => {
@@ -874,10 +791,41 @@ suite('does not respond to re-selecting the current wallpaper', () => {
     wallpaperProvider.isInTabletModeResponse = false;
   });
 
+  function getImageKey(image: DisplayableImage): string|undefined {
+    if (isDefaultImage(image)) {
+      return undefined;
+    }
+    if (isGooglePhotosPhoto(image)) {
+      return image.dedupKey ? image.dedupKey : image.id;
+    }
+    if (isWallpaperImage(image)) {
+      return image.assetId.toString();
+    }
+    if (isFilePath(image)) {
+      return image.path;
+    }
+    assertNotReached('unknown wallpaper type');
+  }
+
+  function getImageType(image: DisplayableImage): WallpaperType {
+    if (isDefaultImage(image)) {
+      return WallpaperType.kDefault;
+    }
+    if (isGooglePhotosPhoto(image)) {
+      return WallpaperType.kOnceGooglePhotos;
+    }
+    if (isWallpaperImage(image)) {
+      return WallpaperType.kOnline;
+    }
+    if (isFilePath(image)) {
+      return WallpaperType.kCustomized;
+    }
+    assertNotReached('unknown wallpaper type');
+  }
+
   // Selects `image` as the wallpaper twice and verifies that the second attempt
   // quits early because there is no work to do.
-  async function testReselectWallpaper(image: WallpaperImage|FilePath|
-                                       GooglePhotosPhoto) {
+  async function testReselectWallpaper(image: DisplayableImage) {
     const selectWallpaperActions = [
       {
         name: 'begin_select_image',
@@ -898,11 +846,13 @@ suite('does not respond to re-selecting the current wallpaper', () => {
     assertDeepEquals(personalizationStore.actions, selectWallpaperActions);
 
     // Complete the pending selection as would happen in production code.
-    const selected = personalizationStore.data.wallpaper.pendingSelected;
-    assertEquals(selected, image);
+    const pendingSelected = personalizationStore.data.wallpaper.pendingSelected;
+    assertEquals(pendingSelected, image);
     personalizationStore.data.wallpaper.currentSelected = {
-      key: getImageKey(image)
+      key: getImageKey(image),
+      type: getImageType(image),
     };
+    personalizationStore.data.wallpaper.pendingSelected = null;
 
     // Select the same wallpaper and verify that no further actions are taken.
     await selectWallpaper(image, wallpaperProvider, personalizationStore);
@@ -935,19 +885,29 @@ suite('does not respond to re-selecting the current wallpaper', () => {
     await testReselectWallpaper(image);
   });
 
-  test('re-selects Google Photos wallpaper', async () => {
-    const image: GooglePhotosPhoto = {
-      id: '9bd1d7a3-f995-4445-be47-53c5b58ce1cb',
-      name: 'foo',
-      date: {data: []},
-      url: {url: 'foo.com'},
-      location: 'home'
-    };
+  // Check with both |dedupKey| absent and present for backwards compatibility
+  // with older clients that do not support the latter.
+  [undefined, '2d0d1595-14af-4471-b2db-b9c8eae3a491'].forEach(
+      dedupKey => test('re-selects Google Photos wallpaper', async () => {
+        const image: GooglePhotosPhoto = {
+          id: '9bd1d7a3-f995-4445-be47-53c5b58ce1cb',
+          dedupKey: dedupKey,
+          name: 'foo',
+          date: {data: []},
+          url: {url: 'foo.com'},
+          location: 'home',
+        };
+        // Reset the history of actions and prior states, but keep the current
+        // state.
+        personalizationStore.reset(personalizationStore.data);
+        await testReselectWallpaper(image);
+      }));
+
+  test('re-selects default image', async () => {
     // Reset the history of actions and prior states, but keep the current
     // state.
     personalizationStore.reset(personalizationStore.data);
-
-    await testReselectWallpaper(image);
+    await testReselectWallpaper(kDefaultImageSymbol);
   });
 });
 
@@ -981,7 +941,7 @@ suite('updates default image', () => {
         [
           {name: 'begin_load_default_image'},
           {
-            thumbnail: 'data://default_image_thumbnail',
+            thumbnail: {url: 'data:image/png;base64,default_image_thumbnail'},
             name: 'set_default_image',
           },
         ],
@@ -996,7 +956,7 @@ suite('updates default image', () => {
             state => state.wallpaper.loading.local.data[kDefaultImageSymbol]),
         'expected loading state while fetching default thumbnail',
     );
-    assertEquals(
+    assertDeepEquals(
         wallpaperProvider.defaultImageThumbnail,
         personalizationStore.data.wallpaper.local.data[kDefaultImageSymbol],
         'default image thumbnail is set');
@@ -1010,7 +970,7 @@ suite('updates default image', () => {
     // state.
     personalizationStore.reset(personalizationStore.data);
 
-    assertEquals(
+    assertDeepEquals(
         wallpaperProvider.defaultImageThumbnail,
         personalizationStore.data.wallpaper.local.data[kDefaultImageSymbol],
         'default image thumbnail is set');
@@ -1036,5 +996,17 @@ suite('updates default image', () => {
         wallpaperProvider.defaultImageThumbnail,
         personalizationStore.data.wallpaper.local.data[kDefaultImageSymbol],
         'default image thumbnail is still set');
+  });
+
+  test('enable Google Photos daily refresh triggers loading UI', async () => {
+    await selectGooglePhotosAlbum(
+        'albumId', wallpaperProvider, personalizationStore);
+    // Reset the history of actions and prior states, but keep the current
+    // state.
+    personalizationStore.reset(personalizationStore.data);
+
+    assertTrue(
+        personalizationStore.data.wallpaper.loading.refreshWallpaper,
+        'loading refresh wallpaper.');
   });
 });

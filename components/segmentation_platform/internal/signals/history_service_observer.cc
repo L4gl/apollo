@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,12 +36,10 @@ HistoryServiceObserver::~HistoryServiceObserver() = default;
 
 void HistoryServiceObserver::OnURLVisited(
     history::HistoryService* history_service,
-    ui::PageTransition transition,
-    const history::URLRow& row,
-    const history::RedirectList& redirects,
-    base::Time visit_time) {
-  url_signal_handler_->OnHistoryVisit(row.url());
-  history_delegate_->OnUrlAdded(row.url());
+    const history::URLRow& url_row,
+    const history::VisitRow& new_visit) {
+  url_signal_handler_->OnHistoryVisit(url_row.url());
+  history_delegate_->OnUrlAdded(url_row.url());
 }
 
 void HistoryServiceObserver::OnURLsDeleted(
@@ -71,8 +69,7 @@ void HistoryServiceObserver::OnURLsDeleted(
 }
 
 void HistoryServiceObserver::SetHistoryBasedSegments(
-    base::flat_set<optimization_guide::proto::OptimizationTarget>&&
-        history_based_segments) {
+    base::flat_set<proto::SegmentId>&& history_based_segments) {
   history_based_segments_ = std::move(history_based_segments);
   // If a delete is pending, clear the results now.
   if (pending_deletion_based_on_history_based_segments_) {
@@ -104,7 +101,7 @@ void HistoryServiceObserver::DeleteResultsForHistoryBasedSegments() {
   }
   posted_model_refresh_task_ = std::make_unique<base::CancelableOnceClosure>(
       base::BindOnce(models_refresh_callback_));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, posted_model_refresh_task_->callback(), base::Minutes(1));
 }
 

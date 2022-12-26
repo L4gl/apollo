@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,7 +107,8 @@ void DrmThreadProxy::CreateBufferAsync(gfx::AcceleratedWidget widget,
       &DrmThread::CreateBufferAsync, base::Unretained(&drm_thread_), widget,
       size, format, usage, flags,
       base::BindOnce(OnBufferCreatedOnDrmThread,
-                     base::ThreadTaskRunnerHandle::Get(), std::move(callback)));
+                     base::SingleThreadTaskRunner::GetCurrentDefault(),
+                     std::move(callback)));
   drm_thread_.task_runner()->PostTask(
       FROM_HERE,
       base::BindOnce(&DrmThread::RunTaskAfterDeviceReady,

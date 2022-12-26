@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -132,6 +132,28 @@ TEST_F(SyntheticTrialRegistryTest, RegisterSyntheticTrial) {
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial2", "Group2"));
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial3", "Group3"));
   EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial4", "Group4"));
+}
+
+TEST_F(SyntheticTrialRegistryTest, GetSyntheticFieldTrialsOlderThanSuffix) {
+  SyntheticTrialRegistry registry;
+  SyntheticTrialGroup trial("TestTrial", "Group",
+                            SyntheticTrialAnnotationMode::kCurrentLog);
+  registry.RegisterSyntheticFieldTrial(trial);
+
+  std::vector<ActiveGroupId> synthetic_trials;
+  // Get list of synthetic trials, but with no added suffixes to the trial and
+  // group names.
+  registry.GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(),
+                                            &synthetic_trials);
+  ASSERT_EQ(1U, synthetic_trials.size());
+  EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrial", "Group"));
+
+  // Get list of synthetic trials, but with "UKM" suffixed to the trial and
+  // group names.
+  registry.GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(),
+                                            &synthetic_trials, "UKM");
+  ASSERT_EQ(1U, synthetic_trials.size());
+  EXPECT_TRUE(HasSyntheticTrial(synthetic_trials, "TestTrialUKM", "GroupUKM"));
 }
 
 TEST_F(SyntheticTrialRegistryTest, RegisterExternalExperiments_NoAllowlist) {

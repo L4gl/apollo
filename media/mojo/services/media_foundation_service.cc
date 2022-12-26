@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/check.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -16,12 +17,15 @@
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/content_decryption_module.h"
 #include "media/base/encryption_scheme.h"
 #include "media/base/key_systems.h"
+#include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
 #include "media/cdm/cdm_capability.h"
 #include "media/cdm/win/media_foundation_cdm_module.h"
@@ -73,10 +77,15 @@ constexpr VideoCodec kAllVideoCodecs[] = {
 
 constexpr AudioCodec kAllAudioCodecs[] = {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-    AudioCodec::kAAC,        AudioCodec::kEAC3, AudioCodec::kAC3,
+    AudioCodec::kAAC,
+#if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
+    AudioCodec::kEAC3, AudioCodec::kAC3,
+#endif  // BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
+#if BUILDFLAG(ENABLE_PLATFORM_MPEG_H_AUDIO)
     AudioCodec::kMpegHAudio,
-#endif
-    AudioCodec::kVorbis,     AudioCodec::kFLAC, AudioCodec::kOpus};
+#endif  // BUILDFLAG(ENABLE_PLATFORM_MPEG_H_AUDIO)
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+    AudioCodec::kVorbis, AudioCodec::kFLAC, AudioCodec::kOpus};
 
 constexpr EncryptionScheme kAllEncryptionSchemes[] = {EncryptionScheme::kCenc,
                                                       EncryptionScheme::kCbcs};
@@ -210,6 +219,20 @@ std::string GetTypeString(VideoCodec video_codec,
       /*offsets=*/nullptr);
 }
 
+// Consolidates the information to construct the type string in only one place.
+// This will help us avoid errors in faulty creation of the type string, and
+// centralize from where we call IsTypeSupportedInternal()
+bool IsTypeSupported(VideoCodec video_codec,
+                     absl::optional<AudioCodec> audio_codec,
+                     const FeatureMap& extra_features,
+                     ComPtr<IMFContentDecryptionModuleFactory> cdm_factory,
+                     const std::string& key_system,
+                     bool is_hw_secure) {
+  auto type = GetTypeString(video_codec, audio_codec, extra_features);
+
+  return IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type);
+}
+
 base::flat_set<EncryptionScheme> GetSupportedEncryptionSchemes(
     ComPtr<IMFContentDecryptionModuleFactory> cdm_factory,
     const std::string& key_system,
@@ -218,14 +241,16 @@ base::flat_set<EncryptionScheme> GetSupportedEncryptionSchemes(
     const std::string& robustness) {
   base::flat_set<EncryptionScheme> supported_schemes;
   for (const auto scheme : kAllEncryptionSchemes) {
-    auto type = GetTypeString(
-        video_codec, /*audio_codec=*/absl::nullopt,
-        {{kEncryptionSchemeQueryName, GetName(scheme)},
-         {kEncryptionIvQueryName, base::NumberToString(GetIvSize(scheme))},
-         {kRobustnessQueryName, robustness.c_str()}});
+    const FeatureMap extra_features = {
+        {kEncryptionSchemeQueryName, GetName(scheme)},
+        {kEncryptionIvQueryName, base::NumberToString(GetIvSize(scheme))},
+        {kRobustnessQueryName, robustness.c_str()}};
 
-    if (IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type))
+    if (IsTypeSupported(video_codec, /*audio_codec=*/absl::nullopt,
+                        extra_features, cdm_factory, key_system,
+                        is_hw_secure)) {
       supported_schemes.insert(scheme);
+    }
   }
   return supported_schemes;
 }
@@ -260,12 +285,14 @@ HRESULT CreateDummyMediaFoundationCdm(
   DLOG_IF(ERROR, FAILED(hr)) << __func__ << ": Failed for " << key_system;
   mf_cdm.Reset();
 
-  // Delete the dummy CDM store folder so we don't leave files behind.
-  // This may fail since the CDM and related objects may still have the file
-  // open. But it will be cleaned next time so files will not accumulate.
-  // TODO(crbug.com/1309741): Consider update GetDeletePathRecursivelyCallback()
-  // to support retry and use it here.
-  std::ignore = base::DeletePathRecursively(dummy_cdm_store_path_root);
+  // Delete the dummy CDM store folder so we don't leave files behind. This may
+  // fail since the CDM and related objects may have the files open longer than
+  // the total delete retry period or before the process terminates. This is
+  // fine since they will be cleaned next time so files will not accumulate.
+  // Ignore the `reply_callback` since nothing can be done with the result.
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+      base::GetDeletePathRecursivelyCallback(dummy_cdm_store_path_root));
 
   return hr;
 }
@@ -292,14 +319,54 @@ absl::optional<CdmCapability> GetCdmCapability(
 
   // Query video codecs.
   for (const auto video_codec : kAllVideoCodecs) {
-    auto type = GetTypeString(video_codec, /*audio_codec=*/absl::nullopt,
-                              {{kRobustnessQueryName, robustness}});
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+    // Only query encrypted HEVC when the feature is enabled.
+    if (video_codec == VideoCodec::kHEVC &&
+        !base::FeatureList::IsEnabled(kPlatformHEVCDecoderSupport)) {
+      continue;
+    }
+#endif
 
-    if (IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type)) {
-      // IsTypeSupported() does not support querying profiling, so specify {}
-      // to indicate all relevant profiles should be considered supported.
-      const std::vector<media::VideoCodecProfile> kAllProfiles = {};
-      capability.video_codecs.emplace(video_codec, kAllProfiles);
+#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
+    // Only query encrypted Dolby Vision when the feature is enabled.
+    if (video_codec == VideoCodec::kDolbyVision &&
+        !base::FeatureList::IsEnabled(kPlatformEncryptedDolbyVision)) {
+      continue;
+    }
+#endif
+
+    const FeatureMap extra_features = {{kRobustnessQueryName, robustness}};
+
+    if (IsTypeSupported(video_codec, /*audio_codec=*/absl::nullopt,
+                        extra_features, cdm_factory, key_system,
+                        is_hw_secure)) {
+      // IsTypeSupported() does not support querying profiling, in general
+      // assume all relevant profiles are supported.
+      VideoCodecInfo video_codec_info;
+
+      // `supports_clear_lead` should be set to false until detection for clear
+      // lead support is fixed and the query works as expected.
+      video_codec_info.supports_clear_lead = false;
+
+#if BUILDFLAG(ENABLE_PLATFORM_DOLBY_VISION)
+      // Dolby Vision on Windows only support profile 4/5/8 now.
+      if (video_codec == VideoCodec::kDolbyVision) {
+        video_codec_info.supported_profiles = {
+            VideoCodecProfile::DOLBYVISION_PROFILE4,
+            VideoCodecProfile::DOLBYVISION_PROFILE5,
+            VideoCodecProfile::DOLBYVISION_PROFILE8};
+      }
+#endif
+
+      // We check for `!is_hw_secure` because clear lead should always be
+      // supported for software security. When clear lead is supported
+      // for hardware security (b/219818166), we will add a query to
+      // set supports_clear_lead.
+      if (!is_hw_secure) {
+        video_codec_info.supports_clear_lead = true;
+      }
+
+      capability.video_codecs.emplace(video_codec, video_codec_info);
     }
   }
 
@@ -315,11 +382,12 @@ absl::optional<CdmCapability> GetCdmCapability(
   // supported video codecs> + <audio codec> to query the audio capability.
   for (const auto audio_codec : kAllAudioCodecs) {
     const auto& video_codec = capability.video_codecs.begin()->first;
-    auto type = GetTypeString(video_codec, audio_codec,
-                              {{kRobustnessQueryName, robustness}});
+    const FeatureMap extra_features = {{kRobustnessQueryName, robustness}};
 
-    if (IsTypeSupportedInternal(cdm_factory, key_system, is_hw_secure, type))
-      capability.audio_codecs.push_back(audio_codec);
+    if (IsTypeSupported(video_codec, audio_codec, extra_features, cdm_factory,
+                        key_system, is_hw_secure)) {
+      capability.audio_codecs.emplace(audio_codec);
+    }
   }
 
   // Query encryption scheme.
@@ -331,9 +399,9 @@ absl::optional<CdmCapability> GetCdmCapability(
   // of the encryption schemes which work for all codecs.
   base::flat_set<EncryptionScheme> intersection(
       std::begin(kAllEncryptionSchemes), std::end(kAllEncryptionSchemes));
-  for (auto codec : capability.video_codecs) {
+  for (const auto& [video_codec, _] : capability.video_codecs) {
     const auto schemes = GetSupportedEncryptionSchemes(
-        cdm_factory, key_system, is_hw_secure, codec.first, robustness);
+        cdm_factory, key_system, is_hw_secure, video_codec, robustness);
     intersection = base::STLSetIntersection<base::flat_set<EncryptionScheme>>(
         intersection, schemes);
   }

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,7 +6,7 @@
 
 #include <math.h>
 #include <stddef.h>
-#include <algorithm>
+
 #include <memory>
 #include <utility>
 
@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/power_monitor/power_monitor.h"
-#include "base/task/single_thread_task_runner.h"
+#include "base/ranges/algorithm.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -42,15 +42,17 @@
 namespace media {
 
 AudioRendererImpl::AudioRendererImpl(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     AudioRendererSink* sink,
     const CreateAudioDecodersCB& create_audio_decoders_cb,
     MediaLog* media_log,
+    MediaPlayerLoggingID media_player_id,
     SpeechRecognitionClient* speech_recognition_client)
     : task_runner_(task_runner),
       expecting_config_changes_(false),
       sink_(sink),
       media_log_(media_log),
+      player_id_(media_player_id),
       client_(nullptr),
       tick_clock_(base::DefaultTickClock::GetInstance()),
       last_audio_memory_usage_(0),
@@ -76,11 +78,10 @@ AudioRendererImpl::AudioRendererImpl(
       speech_recognition_client_(speech_recognition_client) {
 #endif
   DCHECK(create_audio_decoders_cb_);
-
   // PowerObserver's must be added and removed from the same thread, but we
   // won't remove the observer until we're destructed on |task_runner_| so we
   // must post it here if we're on the wrong thread.
-  if (task_runner_->BelongsToCurrentThread()) {
+  if (task_runner_->RunsTasksInCurrentSequence()) {
     base::PowerMonitor::AddPowerSuspendObserver(this);
   } else {
     // Safe to post this without a WeakPtr because this class must be destructed
@@ -97,7 +98,7 @@ AudioRendererImpl::AudioRendererImpl(
 
 AudioRendererImpl::~AudioRendererImpl() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   base::PowerMonitor::RemovePowerSuspendObserver(this);
 
   // If Render() is in progress, this call will wait for Render() to finish.
@@ -112,7 +113,7 @@ AudioRendererImpl::~AudioRendererImpl() {
 
 void AudioRendererImpl::StartTicking() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::AutoLock auto_lock(lock_);
 
@@ -130,7 +131,7 @@ void AudioRendererImpl::StartTicking() {
 
 void AudioRendererImpl::StartRendering_Locked() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, kPlaying);
   DCHECK(!sink_playing_);
   DCHECK_NE(playback_rate_, 0.0);
@@ -147,7 +148,7 @@ void AudioRendererImpl::StartRendering_Locked() {
 
 void AudioRendererImpl::StopTicking() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::AutoLock auto_lock(lock_);
 
@@ -164,7 +165,7 @@ void AudioRendererImpl::StopTicking() {
 }
 
 void AudioRendererImpl::StopRendering_Locked() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(state_, kPlaying);
   DCHECK(sink_playing_);
   lock_.AssertAcquired();
@@ -182,7 +183,7 @@ void AudioRendererImpl::StopRendering_Locked() {
 
 void AudioRendererImpl::SetMediaTime(base::TimeDelta time) {
   DVLOG(1) << __func__ << "(" << time << ")";
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::AutoLock auto_lock(lock_);
   DCHECK(!rendering_);
@@ -277,7 +278,7 @@ TimeSource* AudioRendererImpl::GetTimeSource() {
 
 void AudioRendererImpl::Flush(base::OnceClosure callback) {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("media", "AudioRendererImpl::Flush",
                                     TRACE_ID_LOCAL(this));
 
@@ -304,7 +305,7 @@ void AudioRendererImpl::Flush(base::OnceClosure callback) {
 }
 
 void AudioRendererImpl::DoFlush_Locked() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   lock_.AssertAcquired();
 
   DCHECK(!pending_read_);
@@ -316,7 +317,7 @@ void AudioRendererImpl::DoFlush_Locked() {
 }
 
 void AudioRendererImpl::ResetDecoderDone() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   {
     base::AutoLock auto_lock(lock_);
 
@@ -339,7 +340,7 @@ void AudioRendererImpl::ResetDecoderDone() {
 
 void AudioRendererImpl::StartPlaying() {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::AutoLock auto_lock(lock_);
   DCHECK(!sink_playing_);
@@ -356,7 +357,7 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
                                    RendererClient* client,
                                    PipelineStatusCallback init_cb) {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(client);
   DCHECK(stream);
   DCHECK_EQ(stream->type(), DemuxerStream::AUDIO);
@@ -402,7 +403,7 @@ void AudioRendererImpl::OnDeviceInfoReceived(
     CdmContext* cdm_context,
     OutputDeviceInfo output_device_info) {
   DVLOG(1) << __func__;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(client_);
   DCHECK(stream);
   DCHECK_EQ(stream->type(), DemuxerStream::AUDIO);
@@ -470,6 +471,10 @@ void AudioRendererImpl::OnDeviceInfoReceived(
 
   SampleFormat target_output_sample_format = kUnknownSampleFormat;
   if (is_passthrough_) {
+    ChannelLayout channel_layout =
+        stream->audio_decoder_config().channel_layout();
+    int channels = stream->audio_decoder_config().channels();
+    int bytes_per_frame = stream->audio_decoder_config().bytes_per_frame();
     AudioParameters::Format format = AudioParameters::AUDIO_FAKE;
     // For DTS and Dolby formats, set target_output_sample_format to the
     // respective bit-stream format so that passthrough decoder will be selected
@@ -483,9 +488,11 @@ void AudioRendererImpl::OnDeviceInfoReceived(
     } else if (codec == AudioCodec::kDTS) {
       format = AudioParameters::AUDIO_BITSTREAM_DTS;
       target_output_sample_format = kSampleFormatDts;
-    } else if (codec == AudioCodec::kDTSXP2) {
-      format = AudioParameters::AUDIO_BITSTREAM_DTSX_P2;
-      target_output_sample_format = kSampleFormatDtsxP2;
+      if (hw_params.RequireEncapsulation()) {
+        bytes_per_frame = 1;
+        channel_layout = CHANNEL_LAYOUT_MONO;
+        channels = 1;
+      }
     } else {
       NOTREACHED();
     }
@@ -497,20 +504,18 @@ void AudioRendererImpl::OnDeviceInfoReceived(
     // count for bitstream formats will be carried in additional fields of
     // AudioBus.
     const int buffer_size =
-        AudioParameters::kMaxFramesPerCompressedAudioBuffer *
-        stream->audio_decoder_config().bytes_per_frame();
+        AudioParameters::kMaxFramesPerCompressedAudioBuffer * bytes_per_frame;
 
-    audio_parameters_.Reset(
-        format, stream->audio_decoder_config().channel_layout(),
-        stream->audio_decoder_config().samples_per_second(), buffer_size);
+    audio_parameters_.Reset(format, {channel_layout, channels},
+                            stream->audio_decoder_config().samples_per_second(),
+                            buffer_size);
     buffer_converter_.reset();
   } else if (use_stream_params) {
     audio_parameters_.Reset(AudioParameters::AUDIO_PCM_LOW_LATENCY,
-                            stream->audio_decoder_config().channel_layout(),
+                            {stream->audio_decoder_config().channel_layout(),
+                             stream->audio_decoder_config().channels()},
                             stream->audio_decoder_config().samples_per_second(),
                             preferred_buffer_size);
-    audio_parameters_.set_channels_for_discrete(
-        stream->audio_decoder_config().channels());
     buffer_converter_.reset();
   } else {
     // To allow for seamless sample rate adaptations (i.e. changes from say
@@ -564,12 +569,17 @@ void AudioRendererImpl::OnDeviceInfoReceived(
     //   renderer. Browser-side will down-mix to the hardware config. If the
     //   hardware later changes to equal stream channels, browser-side will stop
     //   down-mixing and use the data from all stream channels.
-    ChannelLayout renderer_channel_layout =
-        hw_channel_count > stream_channel_count
-            ? hw_channel_layout
-            : stream->audio_decoder_config().channel_layout();
 
-    audio_parameters_.Reset(hw_params.format(), renderer_channel_layout,
+    ChannelLayout stream_channel_layout =
+        stream->audio_decoder_config().channel_layout();
+    bool use_stream_channel_layout = hw_channel_count <= stream_channel_count;
+
+    ChannelLayoutConfig renderer_channel_layout_config =
+        use_stream_channel_layout
+            ? ChannelLayoutConfig(stream_channel_layout, stream_channel_count)
+            : ChannelLayoutConfig(hw_channel_layout, hw_channel_count);
+
+    audio_parameters_.Reset(hw_params.format(), renderer_channel_layout_config,
                             sample_rate,
                             AudioLatency::GetHighLatencyBufferSize(
                                 sample_rate, preferred_buffer_size));
@@ -628,7 +638,7 @@ void AudioRendererImpl::OnDeviceInfoReceived(
 
 void AudioRendererImpl::OnAudioDecoderStreamInitialized(bool success) {
   DVLOG(1) << __func__ << ": " << success;
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   base::AutoLock auto_lock(lock_);
 
   if (!success) {
@@ -717,22 +727,22 @@ void AudioRendererImpl::FinishFlush() {
 }
 
 void AudioRendererImpl::OnPlaybackError(PipelineStatus error) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   client_->OnError(error);
 }
 
 void AudioRendererImpl::OnPlaybackEnded() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   client_->OnEnded();
 }
 
 void AudioRendererImpl::OnStatisticsUpdate(const PipelineStatistics& stats) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   client_->OnStatisticsUpdate(stats);
 }
 
 void AudioRendererImpl::OnBufferingStateChange(BufferingState buffering_state) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // "Underflow" is only possible when playing. This avoids noise like blaming
   // the decoder for an "underflow" that is really just a seek.
@@ -751,12 +761,12 @@ void AudioRendererImpl::OnBufferingStateChange(BufferingState buffering_state) {
 }
 
 void AudioRendererImpl::OnWaiting(WaitingReason reason) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   client_->OnWaiting(reason);
 }
 
 void AudioRendererImpl::SetVolume(float volume) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // Only consider audio as unmuted if the volume is set to a non-zero value
   // when the state is kPlaying.
@@ -856,7 +866,7 @@ void AudioRendererImpl::SetPlayDelayCBForTesting(PlayDelayCBForTesting cb) {
 void AudioRendererImpl::DecodedAudioReady(
     AudioDecoderStream::ReadResult result) {
   DVLOG(2) << __func__ << "(" << static_cast<int>(result.code()) << ")";
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::AutoLock auto_lock(lock_);
   DCHECK(state_ != kUninitialized);
@@ -864,7 +874,7 @@ void AudioRendererImpl::DecodedAudioReady(
   CHECK(pending_read_);
   pending_read_ = false;
 
-  if (result.has_error()) {
+  if (!result.has_value()) {
     auto status = PIPELINE_ERROR_DECODE;
     if (result.code() == DecoderStatus::Codes::kAborted)
       status = PIPELINE_OK;
@@ -1079,7 +1089,7 @@ void AudioRendererImpl::AttemptRead() {
 }
 
 void AudioRendererImpl::AttemptRead_Locked() {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   lock_.AssertAcquired();
 
   if (!CanRead_Locked())
@@ -1115,7 +1125,7 @@ bool AudioRendererImpl::CanRead_Locked() {
 
 void AudioRendererImpl::SetPlaybackRate(double playback_rate) {
   DVLOG(1) << __func__ << "(" << playback_rate << ")";
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK_GE(playback_rate, 0);
   DCHECK(sink_);
 
@@ -1156,12 +1166,12 @@ bool AudioRendererImpl::IsBeforeStartTime(const AudioBuffer& buffer) {
 
 int AudioRendererImpl::Render(base::TimeDelta delay,
                               base::TimeTicks delay_timestamp,
-                              int prior_frames_skipped,
+                              const AudioGlitchInfo& glitch_info,
                               AudioBus* audio_bus) {
-  TRACE_EVENT1("media", "AudioRendererImpl::Render", "id", media_log_->id());
+  TRACE_EVENT1("media", "AudioRendererImpl::Render", "id", player_id_);
   int frames_requested = audio_bus->frames();
-  DVLOG(4) << __func__ << " delay:" << delay
-           << " prior_frames_skipped:" << prior_frames_skipped
+  DVLOG(4) << __func__ << " delay:" << delay << " glitch_info:["
+           << glitch_info.ToString() << "]"
            << " frames_requested:" << frames_requested;
 
   // Since this information is coming from the OS or potentially a fake stream,
@@ -1343,7 +1353,7 @@ void AudioRendererImpl::OnRenderError() {
 }
 
 void AudioRendererImpl::HandleAbortedReadOrDecodeError(PipelineStatus status) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   lock_.AssertAcquired();
 
   switch (state_) {
@@ -1382,7 +1392,7 @@ void AudioRendererImpl::ChangeState_Locked(State new_state) {
 }
 
 void AudioRendererImpl::OnConfigChange(const AudioDecoderConfig& config) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   DCHECK(expecting_config_changes_);
   buffer_converter_->ResetTimestampState();
 
@@ -1433,15 +1443,15 @@ void AudioRendererImpl::ConfigureChannelMask() {
   // All channels with a zero mix are muted and can be ignored.
   std::vector<bool> channel_mask(audio_parameters_.channels(), false);
   for (size_t ch = 0; ch < matrix.size(); ++ch) {
-    channel_mask[ch] = std::any_of(matrix[ch].begin(), matrix[ch].end(),
-                                   [](float mix) { return !!mix; });
+    channel_mask[ch] =
+        base::ranges::any_of(matrix[ch], [](float mix) { return !!mix; });
   }
   algorithm_->SetChannelMask(std::move(channel_mask));
 }
 
 void AudioRendererImpl::EnableSpeechRecognition() {
 #if !BUILDFLAG(IS_ANDROID)
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   transcribe_audio_callback_ = base::BindRepeating(
       &AudioRendererImpl::TranscribeAudio, weak_factory_.GetWeakPtr());
 #endif
@@ -1450,7 +1460,7 @@ void AudioRendererImpl::EnableSpeechRecognition() {
 void AudioRendererImpl::TranscribeAudio(
     scoped_refptr<media::AudioBuffer> buffer) {
 #if !BUILDFLAG(IS_ANDROID)
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (speech_recognition_client_)
     speech_recognition_client_->AddAudio(std::move(buffer));
 #endif

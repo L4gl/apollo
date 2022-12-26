@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,17 +10,12 @@
 
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/system_tray_observer.h"
-#include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ui/chrome_web_modal_dialog_manager_delegate.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
-// TODO(https://crbug.com/1164001): use forward declaration.
-#include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
@@ -40,12 +35,12 @@ class Widget;
 
 namespace ash {
 class LoginDisplayHostWebUI;
+class OobeUI;
 
 // View used to render a WebUI supporting Widget. This widget is used for the
 // WebUI based start up and lock screens. It contains a WebView.
 class WebUILoginView : public views::View,
                        public content::WebContentsDelegate,
-                       public content::NotificationObserver,
                        public session_manager::SessionManagerObserver,
                        public ChromeWebModalDialogManagerDelegate,
                        public web_modal::WebContentsModalDialogHost,
@@ -132,16 +127,13 @@ class WebUILoginView : public views::View,
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
-  // Overridden from content::NotificationObserver.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
-
   // session_manager::SessionManagerObserver:
   void OnNetworkErrorScreenShown() override;
   void OnLoginOrLockScreenVisible() override;
 
  private:
+  void OnAppTerminating();
+
   // Map type for the accelerator-to-identifier map.
   typedef std::map<ui::Accelerator, LoginAcceleratorAction> AccelMap;
 
@@ -172,7 +164,7 @@ class WebUILoginView : public views::View,
   // 2. Notifies OOBE/sign classes.
   void OnLoginPromptVisible();
 
-  content::NotificationRegistrar registrar_;
+  base::CallbackListSubscription on_app_terminating_subscription_;
 
   base::ScopedObservation<session_manager::SessionManager,
                           session_manager::SessionManagerObserver>
@@ -213,11 +205,5 @@ class WebUILoginView : public views::View,
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove after the //chrome/browser/chromeos
-// source migration is finished.
-namespace chromeos {
-using ::ash::WebUILoginView;
-}
 
 #endif  // CHROME_BROWSER_ASH_LOGIN_UI_WEBUI_LOGIN_VIEW_H_

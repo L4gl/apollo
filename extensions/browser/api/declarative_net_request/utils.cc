@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/hash/hash.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -67,6 +68,7 @@ int g_static_guaranteed_minimum_for_testing = kInvalidRuleLimit;
 int g_global_static_rule_limit_for_testing = kInvalidRuleLimit;
 int g_regex_rule_limit_for_testing = kInvalidRuleLimit;
 int g_dynamic_and_session_rule_limit_for_testing = kInvalidRuleLimit;
+int g_disabled_static_rule_limit_for_testing = kInvalidRuleLimit;
 
 int GetIndexedRulesetFormatVersion() {
   return g_indexed_ruleset_format_version_for_testing ==
@@ -226,26 +228,66 @@ dnr_api::ResourceType GetDNRResourceType(WebRequestResourceType resource_type) {
   return dnr_api::RESOURCE_TYPE_OTHER;
 }
 
+// Maps dnr_api::ResourceType to WebRequestResourceType.
+WebRequestResourceType GetWebRequestResourceType(
+    dnr_api::ResourceType resource_type) {
+  switch (resource_type) {
+    case dnr_api::RESOURCE_TYPE_OTHER:
+      return WebRequestResourceType::OTHER;
+    case dnr_api::RESOURCE_TYPE_MAIN_FRAME:
+      return WebRequestResourceType::MAIN_FRAME;
+    case dnr_api::RESOURCE_TYPE_CSP_REPORT:
+      return WebRequestResourceType::CSP_REPORT;
+    case dnr_api::RESOURCE_TYPE_SCRIPT:
+      return WebRequestResourceType::SCRIPT;
+    case dnr_api::RESOURCE_TYPE_IMAGE:
+      return WebRequestResourceType::IMAGE;
+    case dnr_api::RESOURCE_TYPE_STYLESHEET:
+      return WebRequestResourceType::STYLESHEET;
+    case dnr_api::RESOURCE_TYPE_OBJECT:
+      return WebRequestResourceType::OBJECT;
+    case dnr_api::RESOURCE_TYPE_XMLHTTPREQUEST:
+      return WebRequestResourceType::XHR;
+    case dnr_api::RESOURCE_TYPE_SUB_FRAME:
+      return WebRequestResourceType::SUB_FRAME;
+    case dnr_api::RESOURCE_TYPE_PING:
+      return WebRequestResourceType::PING;
+    case dnr_api::RESOURCE_TYPE_MEDIA:
+      return WebRequestResourceType::MEDIA;
+    case dnr_api::RESOURCE_TYPE_FONT:
+      return WebRequestResourceType::FONT;
+    case dnr_api::RESOURCE_TYPE_WEBSOCKET:
+      return WebRequestResourceType::WEB_SOCKET;
+    case dnr_api::RESOURCE_TYPE_WEBTRANSPORT:
+      return WebRequestResourceType::WEB_TRANSPORT;
+    case dnr_api::RESOURCE_TYPE_WEBBUNDLE:
+      return WebRequestResourceType::WEBBUNDLE;
+    case dnr_api::RESOURCE_TYPE_NONE:
+      NOTREACHED();
+      return WebRequestResourceType::OTHER;
+  }
+  NOTREACHED();
+  return WebRequestResourceType::OTHER;
+}
+
 dnr_api::RequestDetails CreateRequestDetails(const WebRequestInfo& request) {
   dnr_api::RequestDetails details;
   details.request_id = base::NumberToString(request.id);
   details.url = request.url.spec();
 
   if (request.initiator) {
-    details.initiator =
-        std::make_unique<std::string>(request.initiator->Serialize());
+    details.initiator = request.initiator->Serialize();
   }
 
   details.method = request.method;
   details.frame_id = request.frame_data.frame_id;
   if (request.frame_data.document_id) {
-    details.document_id = std::make_unique<std::string>(
-        request.frame_data.document_id.ToString());
+    details.document_id = request.frame_data.document_id.ToString();
   }
   details.parent_frame_id = request.frame_data.parent_frame_id;
   if (request.frame_data.parent_document_id) {
-    details.parent_document_id = std::make_unique<std::string>(
-        request.frame_data.parent_document_id.ToString());
+    details.parent_document_id =
+        request.frame_data.parent_document_id.ToString();
   }
   details.tab_id = request.frame_data.tab_id;
   details.type = GetDNRResourceType(request.web_request_type);
@@ -348,6 +390,12 @@ int GetRegexRuleLimit() {
              : g_regex_rule_limit_for_testing;
 }
 
+int GetDisabledStaticRuleLimit() {
+  return g_disabled_static_rule_limit_for_testing == kInvalidRuleLimit
+             ? kMaxDisabledStaticRules
+             : g_disabled_static_rule_limit_for_testing;
+}
+
 ScopedRuleLimitOverride CreateScopedStaticGuaranteedMinimumOverrideForTesting(
     int minimum) {
   return base::AutoReset<int>(&g_static_guaranteed_minimum_for_testing,
@@ -368,6 +416,11 @@ ScopedRuleLimitOverride
 CreateScopedDynamicAndSessionRuleLimitOverrideForTesting(int limit) {
   return base::AutoReset<int>(&g_dynamic_and_session_rule_limit_for_testing,
                               limit);
+}
+
+ScopedRuleLimitOverride CreateScopedDisabledStaticRuleLimitOverrideForTesting(
+    int limit) {
+  return base::AutoReset<int>(&g_disabled_static_rule_limit_for_testing, limit);
 }
 
 size_t GetEnabledStaticRuleCount(const CompositeMatcher* composite_matcher) {
@@ -397,6 +450,8 @@ bool HasDNRFeedbackPermission(const Extension* extension,
                    mojom::APIPermissionID::kDeclarativeNetRequestFeedback);
 }
 
+// TODO(crbug.com/1370166): Add a parameter that allows more specific strings
+// for error messages that can pinpoint the error within a single rule.
 std::string GetParseError(ParseResult error_reason, int rule_id) {
   switch (error_reason) {
     case ParseResult::NONE:
@@ -542,8 +597,8 @@ std::string GetParseError(ParseResult error_reason, int rule_id) {
     case ParseResult::ERROR_HEADER_VALUE_PRESENT:
       return ErrorUtils::FormatErrorMessage(kErrorHeaderValuePresent,
                                             base::NumberToString(rule_id));
-    case ParseResult::ERROR_APPEND_REQUEST_HEADER_UNSUPPORTED:
-      return ErrorUtils::FormatErrorMessage(kErrorCannotAppendRequestHeader,
+    case ParseResult::ERROR_APPEND_INVALID_REQUEST_HEADER:
+      return ErrorUtils::FormatErrorMessage(kErrorAppendInvalidRequestHeader,
                                             base::NumberToString(rule_id));
     case ParseResult::ERROR_REGEX_TOO_LARGE:
       return ErrorUtils::FormatErrorMessage(
@@ -677,12 +732,9 @@ flat_rule::RequestMethod GetRequestMethod(bool http_or_https,
            {HttpRequestHeaders::kConnectMethod,
             flat_rule::RequestMethod_CONNECT}});
 
-  DCHECK(std::all_of(kRequestMethods->begin(), kRequestMethods->end(),
-                     [](const auto& key_value) {
-                       auto method = key_value.first;
-                       return std::none_of(method.begin(), method.end(),
-                                           base::IsAsciiLower<char>);
-                     }));
+  DCHECK(base::ranges::all_of(*kRequestMethods, [](const auto& key_value) {
+    return base::ranges::none_of(key_value.first, base::IsAsciiLower<char>);
+  }));
 
   std::string normalized_method = base::ToUpperASCII(method);
   auto it = kRequestMethods->find(normalized_method);

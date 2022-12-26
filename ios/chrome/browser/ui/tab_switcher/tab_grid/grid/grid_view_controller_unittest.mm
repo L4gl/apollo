@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,22 +7,15 @@
 #import "base/mac/foundation_util.h"
 #import "base/numerics/safe_conversions.h"
 #import "base/test/ios/wait_util.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_view_controller+private.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
 #import "ios/chrome/test/root_view_controller_test.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-// Test object that exposes the inner state for test verification.
-@interface GridViewController (Testing)
-@property(nonatomic, readonly) NSMutableArray<TabSwitcherItem*>* items;
-@property(nonatomic, readonly) NSUInteger selectedIndex;
-@property(nonatomic, readonly) UICollectionView* collectionView;
-@property(nonatomic, assign, getter=isViewAppeared) BOOL viewAppeared;
-@end
 
 // Fake object that conforms to GridViewControllerDelegate.
 @interface FakeGridViewControllerDelegate
@@ -79,6 +72,11 @@
   // No-op for unittests.
 }
 
+- (void)gridViewControllerScrollViewDidScroll:
+    (GridViewController*)gridViewController {
+  // No-op for unittests.
+}
+
 @end
 
 class GridViewControllerTest : public RootViewControllerTest {
@@ -121,7 +119,7 @@ TEST_F(GridViewControllerTest, InsertItem) {
   // an itemCount of 2.
   [view_controller_
           insertItem:[[TabSwitcherItem alloc] initWithIdentifier:@"NEW-ITEM"]
-             atIndex:2
+             atIndex:ItemListIndex{2}
       selectedItemID:@"NEW-ITEM"];
   EXPECT_EQ(3U, view_controller_.items.count);
   EXPECT_EQ(2U, view_controller_.selectedIndex);
@@ -197,7 +195,7 @@ TEST_F(GridViewControllerTest, ReplaceItemNotFound) {
 TEST_F(GridViewControllerTest, MoveSelectedItem) {
   // Previously: The grid had 2 items and selectedIndex was 0. The delegate had
   // an itemCount of 2.
-  [view_controller_ moveItemWithID:@"A" toIndex:1];
+  [view_controller_ moveItemWithID:@"A" toIndex:ItemListIndex{1}];
   EXPECT_NSEQ(@"A", view_controller_.items[1].identifier);
   EXPECT_EQ(1U, view_controller_.selectedIndex);
   EXPECT_EQ(2U, delegate_.itemCount);
@@ -207,18 +205,15 @@ TEST_F(GridViewControllerTest, MoveSelectedItem) {
 TEST_F(GridViewControllerTest, MoveUnselectedItem) {
   // Previously: The grid had 2 items and selectedIndex was 0. The delegate had
   // an itemCount of 2.
-  [view_controller_ moveItemWithID:@"B" toIndex:0];
+  [view_controller_ moveItemWithID:@"B" toIndex:ItemListIndex{0}];
   EXPECT_NSEQ(@"A", view_controller_.items[1].identifier);
   EXPECT_EQ(1U, view_controller_.selectedIndex);
   EXPECT_EQ(2U, delegate_.itemCount);
 }
 
-// Tests that |-replaceItemID:withItem:| does not crash when updating an item
+// Tests that `-replaceItemID:withItem:` does not crash when updating an item
 // that is scrolled offscreen.
-// TODO(crbug.com/1104872): On iOS 14 iPhone X, visibleCellsCount is always
-// equal to the total number of cells, so the while loop below never
-// terminates.
-TEST_F(GridViewControllerTest, DISABLED_ReplaceScrolledOffScreenCell) {
+TEST_F(GridViewControllerTest, ReplaceScrolledOffScreenCell) {
   // This test requires that the collection view be placed on the screen.
   SetRootViewController(view_controller_);
   EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
@@ -236,7 +231,11 @@ TEST_F(GridViewControllerTest, DISABLED_ReplaceScrolledOffScreenCell) {
         [NSString stringWithFormat:@"%d", base::checked_cast<int>(items.count)];
     TabSwitcherItem* item =
         [[TabSwitcherItem alloc] initWithIdentifier:uniqueID];
-    [view_controller_ insertItem:item atIndex:0 selectedItemID:@"A"];
+    [view_controller_ insertItem:item
+                         atIndex:ItemListIndex{0}
+                  selectedItemID:@"A"];
+    // Spin the runloop to make sure that the visible cells are updated.
+    base::test::ios::SpinRunLoopWithMinDelay(base::Milliseconds(1));
     visibleCellsCount = view_controller_.collectionView.visibleCells.count;
   }
   // The last item ("B") is scrolled off screen.

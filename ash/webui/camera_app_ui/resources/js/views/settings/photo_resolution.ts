@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,9 @@ import {
   PhotoResolutionOptionGroup,
 } from '../../device/type.js';
 import * as dom from '../../dom.js';
+import * as expert from '../../expert.js';
 import {I18nString} from '../../i18n_string.js';
 import * as loadTimeData from '../../models/load_time_data.js';
-import * as state from '../../state.js';
 import {Facing, Resolution, ViewName} from '../../type.js';
 import {instantiateTemplate, setupI18nElements} from '../../util.js';
 
@@ -77,7 +77,7 @@ export class PhotoResolutionSettings extends BaseSettings {
     const label = util.toPhotoResolutionOptionLabel(option.resolutionLevel);
     const resolution = option.resolutions[0];
     let megaPixels = resolution.mp;
-    if (this.cameraManager.preferSquarePhoto()) {
+    if (this.cameraManager.useSquareResolution()) {
       const croppedEdge = Math.min(resolution.width, resolution.height);
       megaPixels = (new Resolution(croppedEdge, croppedEdge)).mp;
     }
@@ -101,7 +101,7 @@ export class PhotoResolutionSettings extends BaseSettings {
       input.addEventListener('click', (event) => {
         this.focusedDeviceId = deviceId;
         this.menuScrollTop = this.menu.scrollTop;
-        if (state.get(state.State.SHOW_ALL_RESOLUTIONS)) {
+        if (expert.isEnabled(expert.ExpertOption.SHOW_ALL_RESOLUTIONS)) {
           this.cameraManager.setPrefPhotoResolution(deviceId, resolution);
         } else {
           this.cameraManager.setPrefPhotoResolutionLevel(

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -122,6 +122,21 @@ const char kOobeGuestAcceptedTos[] = "oobe.guest_accepted_tos";
 
 // Indicates that the reven board was updated from CloudReady to Flex.
 const char kOobeRevenUpdatedToFlex[] = "OobeRevenUpdatedToFlex";
+
+// This pref should be true if there was a language change from the UI,
+// it's value will be written into the OOBE.WelcomeScreen.UserChangedLocale
+// metric when we exit the WelcomeScreen.
+const char kOobeLocaleChangedOnWelcomeScreen[] =
+    "OobeLocaleChangedOnWelcomeScreen";
+
+// A string pref containing url parameter name which can be used on SAML IdP web
+// page to autofill the username field.
+const char kUrlParameterToAutofillSAMLUsername[] =
+    "saml.UrlParameterToAutofillSAMLUsername";
+
+// List of screens selected from the CHOOBE screen. This list is used to resume
+// CHOOBE flow if it's not completed yet.
+const char kChoobeSelectedScreens[] = "choobe_selected_screens";
 
 }  // namespace prefs
 }  // namespace ash

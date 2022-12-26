@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,6 +73,10 @@ void ClearRendererCacheOnNavigation();
 // Helper to log the |kReadDynamicRulesJSONStatusHistogram| histogram.
 void LogReadDynamicRulesStatus(ReadJSONRulesResult::Status status);
 
+// Maps dnr_api::ResourceType to WebRequestResourceType.
+WebRequestResourceType GetWebRequestResourceType(
+    api::declarative_net_request::ResourceType resource_type);
+
 // Constructs an api::declarative_net_request::RequestDetails from a
 // WebRequestInfo.
 api::declarative_net_request::RequestDetails CreateRequestDetails(
@@ -117,6 +121,9 @@ int GetDynamicAndSessionRuleLimit();
 // static and dynamic rulesets.
 int GetRegexRuleLimit();
 
+// Returns the per-extension maximum amount of disabled static rules.
+int GetDisabledStaticRuleLimit();
+
 // Test helpers to override the various rule limits until the returned value is
 // in scope.
 using ScopedRuleLimitOverride = base::AutoReset<int>;
@@ -127,6 +134,8 @@ ScopedRuleLimitOverride CreateScopedGlobalStaticRuleLimitOverrideForTesting(
 ScopedRuleLimitOverride CreateScopedRegexRuleLimitOverrideForTesting(int limit);
 ScopedRuleLimitOverride
 CreateScopedDynamicAndSessionRuleLimitOverrideForTesting(int limit);
+ScopedRuleLimitOverride CreateScopedDisabledStaticRuleLimitOverrideForTesting(
+    int limit);
 
 // Helper to convert a flatbufffers::String to a string-like object with type T.
 template <typename T>

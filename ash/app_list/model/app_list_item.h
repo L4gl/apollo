@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,6 +18,7 @@
 #include "base/observer_list.h"
 #include "components/sync/model/string_ordinal.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/views/view.h"
 
 namespace ash {
 enum class AppListConfigType;
@@ -57,6 +58,7 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   // and UI would be updated since it also observe ItemIconChanged.
   void SetIconVersion(int icon_version);
 
+  SkColor GetNotificationBadgeColor(views::View* view) const;
   void SetNotificationBadgeColor(const SkColor color);
 
   const std::string& GetDisplayName() const {
@@ -109,14 +111,7 @@ class APP_LIST_MODEL_EXPORT AppListItem {
 
   bool is_folder() const { return metadata_->is_folder; }
 
-  void set_is_page_break(bool is_page_break) {
-    metadata_->is_page_break = is_page_break;
-  }
-  bool is_page_break() const { return metadata_->is_page_break; }
-
   bool has_notification_badge() const { return has_notification_badge_; }
-
-  SkColor notification_badge_color() const { return metadata_->badge_color; }
 
   bool is_new_install() const { return metadata_->is_new_install; }
 
@@ -140,6 +135,7 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   friend class AppListBadgeController;
   friend class AppListItemList;
   friend class AppListItemListTest;
+  friend class AppListItemViewPixelTest;
   friend class AppListItemViewTest;
   friend class AppListModel;
 

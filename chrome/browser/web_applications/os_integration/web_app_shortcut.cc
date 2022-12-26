@@ -1,27 +1,41 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/no_destructor.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/synchronization/lock.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/lazy_thread_pool_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/thread_annotations.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "chrome/browser/web_applications/os_integration/web_app_file_handler_registration.h"
+#include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_constants.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -76,10 +90,11 @@ size_t GetNumDesiredIconSizesForShortcut() {
 }
 
 void DeleteShortcutInfoOnUIThread(std::unique_ptr<ShortcutInfo> shortcut_info,
-                                  base::OnceClosure callback) {
+                                  ResultCallback callback,
+                                  Result result) {
   shortcut_info.reset();
   if (callback)
-    std::move(callback).Run();
+    std::move(callback).Run(result);
 }
 
 void CreatePlatformShortcutsAndPostCallback(
@@ -110,10 +125,16 @@ void DeleteMultiProfileShortcutsForAppAndPostCallback(const std::string& app_id,
       FROM_HERE, base::BindOnce(std::move(callback), Result::kOk));
 }
 
-absl::optional<ScopedShortcutOverrideForTesting*>&
-GetMutableShortcutOverrideForTesting() {
-  static absl::optional<ScopedShortcutOverrideForTesting*> g_shortcut_override;
-  return g_shortcut_override;
+struct ShortcutOverrideForTestingState {
+  base::Lock lock;
+  raw_ptr<ShortcutOverrideForTesting> global_shortcut_override
+      GUARDED_BY(lock) = nullptr;
+};
+
+ShortcutOverrideForTestingState& GetMutableShortcutOverrideStateForTesting() {
+  static base::NoDestructor<ShortcutOverrideForTestingState>
+      g_shortcut_override;
+  return *g_shortcut_override.get();
 }
 
 std::string GetAllFilesInDir(const base::FilePath& file_path) {
@@ -128,9 +149,113 @@ std::string GetAllFilesInDir(const base::FilePath& file_path) {
 
 }  // namespace
 
-ScopedShortcutOverrideForTesting::ScopedShortcutOverrideForTesting() = default;
-ScopedShortcutOverrideForTesting::~ScopedShortcutOverrideForTesting() {
-  DCHECK(GetMutableShortcutOverrideForTesting().has_value());  // IN-TEST
+ShortcutOverrideForTesting::BlockingRegistration::BlockingRegistration() =
+    default;
+ShortcutOverrideForTesting::BlockingRegistration::~BlockingRegistration() {
+  base::ScopedAllowBlockingForTesting blocking;
+  base::RunLoop wait_until_destruction_loop;
+  // Lock the global state.
+  {
+    auto& global_state = GetMutableShortcutOverrideStateForTesting();
+    base::AutoLock state_lock(global_state.lock);
+    DCHECK_EQ(global_state.global_shortcut_override, shortcut_override.get());
+
+    // Set the destruction closure for the scoped override object.
+    DCHECK(!shortcut_override->on_destruction)
+        << "Cannot have multiple registrations at the same time.";
+    shortcut_override->on_destruction.ReplaceClosure(
+        wait_until_destruction_loop.QuitClosure());
+
+    // Unregister the override so new handles cannot be acquired.
+    global_state.global_shortcut_override = nullptr;
+  }
+
+  // Release the override & wait until all references are released.
+  // Note: The `shortcut_override` MUST be released before waiting on the run
+  // loop, as then it will hang forever.
+  shortcut_override.reset();
+  wait_until_destruction_loop.Run();
+}
+
+// static
+std::unique_ptr<ShortcutOverrideForTesting::BlockingRegistration>
+ShortcutOverrideForTesting::OverrideForTesting(
+    const base::FilePath& base_path) {
+  auto& state = GetMutableShortcutOverrideStateForTesting();
+  base::AutoLock state_lock(state.lock);
+  DCHECK(!state.global_shortcut_override)
+      << "Cannot have multiple registrations at the same time.";
+  auto shortcut_override =
+      base::WrapRefCounted(new ShortcutOverrideForTesting(base_path));
+  state.global_shortcut_override = shortcut_override.get();
+
+  std::unique_ptr<BlockingRegistration> registration =
+      std::make_unique<BlockingRegistration>();
+  registration->shortcut_override = shortcut_override;
+  return registration;
+}
+
+ShortcutOverrideForTesting::ShortcutOverrideForTesting(
+    const base::FilePath& base_path) {
+  // Initialize all directories used. The success & the DCHECK are separated to
+  // ensure that these function calls occur on release builds.
+  if (!base_path.empty()) {
+#if BUILDFLAG(IS_WIN)
+    bool success = desktop.CreateUniqueTempDirUnderPath(base_path);
+    DCHECK(success);
+    success = application_menu.CreateUniqueTempDirUnderPath(base_path);
+    DCHECK(success);
+    success = quick_launch.CreateUniqueTempDirUnderPath(base_path);
+    DCHECK(success);
+    success = startup.CreateUniqueTempDirUnderPath(base_path);
+    DCHECK(success);
+#elif BUILDFLAG(IS_MAC)
+    bool success = chrome_apps_folder.CreateUniqueTempDirUnderPath(base_path);
+    DCHECK(success);
+#elif BUILDFLAG(IS_LINUX)
+    bool success = desktop.CreateUniqueTempDirUnderPath(base_path);
+    DCHECK(success);
+    success = startup.CreateUniqueTempDirUnderPath(base_path);
+    DCHECK(success);
+#endif
+  } else {
+#if BUILDFLAG(IS_WIN)
+    bool success = desktop.CreateUniqueTempDir();
+    DCHECK(success);
+    success = application_menu.CreateUniqueTempDir();
+    DCHECK(success);
+    success = quick_launch.CreateUniqueTempDir();
+    DCHECK(success);
+    success = startup.CreateUniqueTempDir();
+    DCHECK(success);
+#elif BUILDFLAG(IS_MAC)
+    bool success = chrome_apps_folder.CreateUniqueTempDir();
+    DCHECK(success);
+#elif BUILDFLAG(IS_LINUX)
+    bool success = desktop.CreateUniqueTempDir();
+    DCHECK(success);
+    success = startup.CreateUniqueTempDir();
+    DCHECK(success);
+#endif
+  }
+
+#if BUILDFLAG(IS_LINUX)
+  auto callback =
+      base::BindRepeating([](base::FilePath filename, std::string xdg_command,
+                             std::string file_contents) {
+        auto shortcut_override = GetShortcutOverrideForTesting();
+        DCHECK(shortcut_override);
+        LinuxFileRegistration file_registration = LinuxFileRegistration();
+        file_registration.xdg_command = xdg_command;
+        file_registration.file_contents = file_contents;
+        shortcut_override->linux_file_registration.push_back(file_registration);
+        return true;
+      });
+  SetUpdateMimeInfoDatabaseOnLinuxCallbackForTesting(std::move(callback));
+#endif
+}
+
+ShortcutOverrideForTesting::~ShortcutOverrideForTesting() {
   std::vector<base::ScopedTempDir*> directories;
 #if BUILDFLAG(IS_WIN)
   directories = {&desktop, &application_menu, &quick_launch, &startup};
@@ -148,6 +273,9 @@ ScopedShortcutOverrideForTesting::~ScopedShortcutOverrideForTesting() {
     }
   }
 #elif BUILDFLAG(IS_LINUX)
+  // Reset the file handling callback.
+  SetUpdateMimeInfoDatabaseOnLinuxCallbackForTesting(
+      UpdateMimeInfoDatabaseOnLinuxCallback());
   directories = {&desktop};
 #endif
   for (base::ScopedTempDir* dir : directories) {
@@ -159,68 +287,12 @@ ScopedShortcutOverrideForTesting::~ScopedShortcutOverrideForTesting() {
            "shortcuts were overriden. Contents:\n"
         << GetAllFilesInDir(dir->GetPath());
   }
-  GetMutableShortcutOverrideForTesting() = absl::nullopt;  // IN-TEST
 }
 
-ScopedShortcutOverrideForTesting* GetShortcutOverrideForTesting() {
-  return GetMutableShortcutOverrideForTesting().value_or(nullptr);  // IN-TEST
-}
-
-std::unique_ptr<ScopedShortcutOverrideForTesting> OverrideShortcutsForTesting(
-    const base::FilePath& base_path) {                          // IN-TEST
-  DCHECK(!GetMutableShortcutOverrideForTesting().has_value());  // IN-TEST
-  auto scoped_override = std::make_unique<ScopedShortcutOverrideForTesting>();
-
-  // Initialize all directories used. The success & the DCHECK are separated to
-  // ensure that these function calls occur on release builds.
-  if (!base_path.empty()) {
-#if BUILDFLAG(IS_WIN)
-    bool success =
-        scoped_override->desktop.CreateUniqueTempDirUnderPath(base_path);
-    DCHECK(success);
-    success = scoped_override->application_menu.CreateUniqueTempDirUnderPath(
-        base_path);
-    DCHECK(success);
-    success =
-        scoped_override->quick_launch.CreateUniqueTempDirUnderPath(base_path);
-    DCHECK(success);
-    success = scoped_override->startup.CreateUniqueTempDirUnderPath(base_path);
-    DCHECK(success);
-#elif BUILDFLAG(IS_MAC)
-    bool success =
-        scoped_override->chrome_apps_folder.CreateUniqueTempDirUnderPath(
-            base_path);
-    DCHECK(success);
-#elif BUILDFLAG(IS_LINUX)
-    bool success =
-        scoped_override->desktop.CreateUniqueTempDirUnderPath(base_path);
-    DCHECK(success);
-    success = scoped_override->startup.CreateUniqueTempDirUnderPath(base_path);
-    DCHECK(success);
-#endif
-  } else {
-#if BUILDFLAG(IS_WIN)
-    bool success = scoped_override->desktop.CreateUniqueTempDir();
-    DCHECK(success);
-    success = scoped_override->application_menu.CreateUniqueTempDir();
-    DCHECK(success);
-    success = scoped_override->quick_launch.CreateUniqueTempDir();
-    DCHECK(success);
-    success = scoped_override->startup.CreateUniqueTempDir();
-    DCHECK(success);
-#elif BUILDFLAG(IS_MAC)
-    bool success = scoped_override->chrome_apps_folder.CreateUniqueTempDir();
-    DCHECK(success);
-#elif BUILDFLAG(IS_LINUX)
-    bool success = scoped_override->desktop.CreateUniqueTempDir();
-    DCHECK(success);
-    success = scoped_override->startup.CreateUniqueTempDir();
-    DCHECK(success);
-#endif
-  }
-
-  GetMutableShortcutOverrideForTesting() = scoped_override.get();  // IN-TEST
-  return scoped_override;
+scoped_refptr<ShortcutOverrideForTesting> GetShortcutOverrideForTesting() {
+  auto& state = GetMutableShortcutOverrideStateForTesting();
+  base::AutoLock state_lock(state.lock);
+  return base::WrapRefCounted(state.global_shortcut_override.get());
 }
 
 ShortcutInfo::ShortcutInfo() = default;
@@ -294,8 +366,19 @@ namespace internals {
 
 void PostShortcutIOTask(base::OnceCallback<void(const ShortcutInfo&)> task,
                         std::unique_ptr<ShortcutInfo> shortcut_info) {
-  PostShortcutIOTaskAndReply(std::move(task), std::move(shortcut_info),
-                             base::OnceClosure());
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // Ownership of |shortcut_info| moves to the Reply, which is guaranteed to
+  // outlive the const reference.
+  const ShortcutInfo& shortcut_info_ref = *shortcut_info;
+  GetShortcutIOTaskRunner()->PostTaskAndReply(
+      FROM_HERE, base::BindOnce(std::move(task), std::cref(shortcut_info_ref)),
+      base::BindOnce(
+          [](std::unique_ptr<ShortcutInfo> shortcut_info) {
+            // This lambda is to own and delete the shortcut info.
+            shortcut_info.reset();
+          },
+          std::move(shortcut_info)));
 }
 
 void ScheduleCreatePlatformShortcuts(
@@ -333,16 +416,16 @@ void ScheduleDeleteMultiProfileShortcutsForApp(const std::string& app_id,
                      std::move(callback)));
 }
 
-void PostShortcutIOTaskAndReply(
-    base::OnceCallback<void(const ShortcutInfo&)> task,
+void PostShortcutIOTaskAndReplyWithResult(
+    base::OnceCallback<Result(const ShortcutInfo&)> task,
     std::unique_ptr<ShortcutInfo> shortcut_info,
-    base::OnceClosure reply) {
+    ResultCallback reply) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // Ownership of |shortcut_info| moves to the Reply, which is guaranteed to
   // outlive the const reference.
   const ShortcutInfo& shortcut_info_ref = *shortcut_info;
-  GetShortcutIOTaskRunner()->PostTaskAndReply(
+  GetShortcutIOTaskRunner()->PostTaskAndReplyWithResult(
       FROM_HERE, base::BindOnce(std::move(task), std::cref(shortcut_info_ref)),
       base::BindOnce(&DeleteShortcutInfoOnUIThread, std::move(shortcut_info),
                      std::move(reply)));

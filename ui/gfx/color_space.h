@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "build/build_config.h"
+#include "skia/ext/skcolorspace_trfn.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/color_space_export.h"
@@ -20,6 +21,7 @@ struct skcms_Matrix3x3;
 struct skcms_TransferFunction;
 class SkColorSpace;
 class SkM44;
+struct SkColorSpacePrimaries;
 enum SkYUVColorSpace : int;
 
 // These forward declarations are used to give IPC code friend access to private
@@ -205,13 +207,12 @@ class COLOR_SPACE_EXPORT ColorSpace {
   }
 
   // scRGB uses the same primaries as sRGB but has a linear transfer function
-  // for all real values, and a white point of kDefaultScrgbLinearSdrWhiteLevel.
-  static constexpr ColorSpace CreateSCRGBLinear() {
+  // for all real values.
+  static constexpr ColorSpace CreateSRGBLinear() {
     return ColorSpace(PrimaryID::BT709, TransferID::LINEAR_HDR, MatrixID::RGB,
                       RangeID::FULL);
   }
-  // Allows specifying a custom SDR white level.  Only used on Windows.
-  static ColorSpace CreateSCRGBLinear(float sdr_white_level);
+
   // scRGB uses the same primaries as sRGB but has a linear transfer function
   // for all real values, and an SDR white level of 80 nits.
   static constexpr ColorSpace CreateSCRGBLinear80Nits() {
@@ -224,11 +225,17 @@ class COLOR_SPACE_EXPORT ColorSpace {
     return ColorSpace(PrimaryID::BT2020, TransferID::PQ, MatrixID::RGB,
                       RangeID::FULL);
   }
-  // Allows specifying a custom SDR white level.  Only used on Windows.
-  static ColorSpace CreateHDR10(float sdr_white_level);
 
   // HLG uses the BT.2020 primaries with the ARIB_STD_B67 transfer function.
-  static ColorSpace CreateHLG();
+  static constexpr ColorSpace CreateHLG() {
+    return ColorSpace(PrimaryID::BT2020, TransferID::HLG, MatrixID::RGB,
+                      RangeID::FULL);
+  }
+
+  // An extended sRGB ColorSpace that matches the sRGB EOTF but extends to
+  // 4.99x the headroom of SDR brightness. Designed for a 10 bpc buffer format.
+  // Uses P3 primaries. An HDR ColorSpace suitable for blending and compositing.
+  static ColorSpace CreateExtendedSRGB10Bit();
 
   // Create a piecewise-HDR color space.
   // - If |primaries| is CUSTOM, then |custom_primary_matrix| must be
@@ -261,22 +268,10 @@ class COLOR_SPACE_EXPORT ColorSpace {
                       RangeID::LIMITED);
   }
 
-  // On macOS and on ChromeOS, sRGB's (1,1,1) always coincides with PQ's 100
-  // nits (which may not be 100 physical nits). On Windows, sRGB's (1,1,1)
-  // maps to scRGB linear's (1,1,1) when the SDR white level is set to 80 nits.
-  // See also kDefaultScrgbLinearSdrWhiteLevel.
-  static constexpr float kDefaultSDRWhiteLevel = 100.f;
-
-  // The default white level in nits for scRGB linear color space. On Windows,
-  // sRGB's (1,1,1) maps to scRGB linear's (1,1,1) when the SDR white level is
-  // set to 80 nits. On Mac and ChromeOS, sRGB's (1,1,1) maps to PQ's 100 nits.
-  // Using a platform specific value here satisfies both constraints.
-#if BUILDFLAG(IS_WIN)
-  static constexpr float kDefaultScrgbLinearSdrWhiteLevel = 80.0f;
-#else
-  static constexpr float kDefaultScrgbLinearSdrWhiteLevel =
-      kDefaultSDRWhiteLevel;
-#endif  // BUILDFLAG(IS_WIN)
+  // The default number of nits for SDR white. This is used for transformations
+  // between color spaces that do not specify an SDR white for tone mapping
+  // (e.g, in 2D canvas).
+  static constexpr float kDefaultSDRWhiteLevel = 203.f;
 
   bool operator==(const ColorSpace& other) const;
   bool operator!=(const ColorSpace& other) const;
@@ -289,8 +284,15 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // Returns true if the transfer function is an HDR one (SMPTE 2084, HLG, etc).
   bool IsHDR() const;
 
-  // Returns true if the transfer function is PQ or HLG.
-  bool IsPQOrHLG() const;
+  // Returns true if there exists a default tone mapping that should be applied
+  // when drawing content with this color space. This is true for spaces with
+  // the PQ and HLG transfer functions.
+  bool IsToneMappedByDefault() const;
+
+  // Returns true if the color space's interpretation is affected by the SDR
+  // white level parameter. This is true for spaces with the PQ, HLG, and
+  // SCRGB_LINEAR_80_NITS transfer functions.
+  bool IsAffectedBySDRWhiteLevel() const;
 
   // Returns true if the encoded values can be outside of the 0.0-1.0 range.
   bool FullRangeEncodedValues() const;
@@ -319,11 +321,6 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // the caller but replacing the matrix and range with the given values.
   ColorSpace GetWithMatrixAndRange(MatrixID matrix, RangeID range) const;
 
-  // If this color space has a PQ or scRGB linear transfer function, then return
-  // |this| with its SDR white level set to |sdr_white_level|. Otherwise return
-  // |this| unmodified.
-  ColorSpace GetWithSDRWhiteLevel(float sdr_white_level) const;
-
   // This will return nullptr for non-RGB spaces, spaces with non-FULL
   // range, unspecified spaces, and spaces that require but are not provided
   // and SDR white level.
@@ -344,6 +341,9 @@ class COLOR_SPACE_EXPORT ColorSpace {
     return ToSkYUVColorSpace(kDefaultBitDepth, out);
   }
 
+  // Return the RGB and whitepoint coordinates of the ColorSpace's
+  // chromaticity. Assumes D65 whitepoint in the case of a custom PrimaryID.
+  SkColorSpacePrimaries GetPrimaries() const;
   void GetPrimaryMatrix(skcms_Matrix3x3* to_XYZD50) const;
   SkM44 GetPrimaryMatrix() const;
 
@@ -356,11 +356,6 @@ class COLOR_SPACE_EXPORT ColorSpace {
   bool GetInverseTransferFunction(
       skcms_TransferFunction* fn,
       absl::optional<float> sdr_white_level = absl::nullopt) const;
-
-  // Returns the SDR white level specified for the PQ or HLG transfer functions.
-  // If no value was specified, then use kDefaultSDRWhiteLevel. If the transfer
-  // function is not PQ then return false.
-  bool GetSDRWhiteLevel(float* sdr_white_level) const;
 
   // Returns the parameters for a PIECEWISE_HDR transfer function. See
   // CreatePiecewiseHDR for parameter meanings.
@@ -390,8 +385,13 @@ class COLOR_SPACE_EXPORT ColorSpace {
   RangeID GetRangeID() const;
 
   // Returns true if the transfer function is defined by an
-  // skcms_TransferFunction which is extended to all real values.
+  // skcms_TransferFunction which is extended to all real values. This is true
+  // unless the color space has a non-RGB matrix.
   bool HasExtendedSkTransferFn() const;
+
+  // Returns true if the transfer function values of this color space match
+  // those of the passed in skcms_TransferFunction.
+  bool IsTransferFunctionEqualTo(const skcms_TransferFunction& fn) const;
 
   // Returns true if each color in |other| can be expressed in this color space.
   bool Contains(const ColorSpace& other) const;
@@ -400,6 +400,9 @@ class COLOR_SPACE_EXPORT ColorSpace {
   // The default bit depth assumed by ToSkYUVColorSpace().
   static constexpr int kDefaultBitDepth = 8;
 
+  static SkColorSpacePrimaries GetColorSpacePrimaries(
+      PrimaryID,
+      const skcms_Matrix3x3* custom_primary_matrix);
   static void GetPrimaryMatrix(PrimaryID, skcms_Matrix3x3* to_XYZD50);
   static bool GetTransferFunction(TransferID, skcms_TransferFunction* fn);
   static size_t TransferParamCount(TransferID);

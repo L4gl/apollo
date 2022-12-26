@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
@@ -17,16 +18,17 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/important_sites_util.h"
 #include "chrome/browser/metrics/ukm_background_recorder_service.h"
-#include "chrome/browser/permissions/abusive_origin_permission_revocation_request.h"
 #include "chrome/browser/permissions/adaptive_quiet_notification_permission_ui_enabler.h"
 #include "chrome/browser/permissions/contextual_notification_permission_ui_selector.h"
+#include "chrome/browser/permissions/origin_keyed_permission_action_service_factory.h"
 #include "chrome/browser/permissions/permission_actions_history_factory.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
-#include "chrome/browser/permissions/permission_manager_factory.h"
+#include "chrome/browser/permissions/permission_revocation_request.h"
 #include "chrome/browser/permissions/prediction_based_permission_ui_selector.h"
 #include "chrome/browser/permissions/pref_notification_permission_ui_selector.h"
 #include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
@@ -53,18 +55,18 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
-#include "chrome/browser/permissions/grouped_permission_infobar_delegate_android.h"
 #include "chrome/browser/permissions/notification_blocked_message_delegate_android.h"
+#include "chrome/browser/permissions/permission_infobar_delegate_android.h"
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
 #include "chrome/browser/permissions/permission_update_message_controller_android.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/messages/android/messages_feature.h"
 #include "components/permissions/permission_request_manager.h"
 #else
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
 #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
+#include "components/vector_icons/vector_icons.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -72,6 +74,10 @@
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/lacros/app_mode/kiosk_session_service_lacros.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -189,6 +195,13 @@ ChromePermissionsClient::GetChooserContext(
   }
 }
 
+permissions::OriginKeyedPermissionActionService*
+ChromePermissionsClient::GetOriginKeyedPermissionActionService(
+    content::BrowserContext* browser_context) {
+  return OriginKeyedPermissionActionServiceFactory::GetForProfile(
+      Profile::FromBrowserContext(browser_context));
+}
+
 permissions::PermissionActionsHistory*
 ChromePermissionsClient::GetPermissionActionsHistory(
     content::BrowserContext* browser_context) {
@@ -200,12 +213,6 @@ permissions::PermissionDecisionAutoBlocker*
 ChromePermissionsClient::GetPermissionDecisionAutoBlocker(
     content::BrowserContext* browser_context) {
   return PermissionDecisionAutoBlockerFactory::GetForProfile(
-      Profile::FromBrowserContext(browser_context));
-}
-
-permissions::PermissionManager* ChromePermissionsClient::GetPermissionManager(
-    content::BrowserContext* browser_context) {
-  return PermissionManagerFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context));
 }
 
@@ -239,15 +246,9 @@ void ChromePermissionsClient::AreSitesImportant(
             net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
     if (registerable_domain.empty())
       registerable_domain = host;  // IP address or internal hostname.
-    auto important_domain_search =
-        [&registerable_domain](
-            const site_engagement::ImportantSitesUtil::ImportantDomainInfo&
-                item) {
-          return item.registerable_domain == registerable_domain;
-        };
-    entry.second =
-        std::find_if(important_domains.begin(), important_domains.end(),
-                     important_domain_search) != important_domains.end();
+    entry.second = base::Contains(important_domains, registerable_domain,
+                                  &site_engagement::ImportantSitesUtil::
+                                      ImportantDomainInfo::registerable_domain);
   }
 }
 
@@ -272,7 +273,7 @@ void ChromePermissionsClient::GetUkmSourceId(
     GetUkmSourceIdCallback callback) {
   if (web_contents) {
     ukm::SourceId source_id =
-        web_contents->GetMainFrame()->GetPageUkmSourceId();
+        web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId();
     std::move(callback).Run(source_id);
   } else {
     // We only record a permission change if the origin is in the user's
@@ -289,7 +290,7 @@ permissions::IconId ChromePermissionsClient::GetOverrideIconId(
 #if BUILDFLAG(IS_CHROMEOS)
   // TODO(xhwang): fix this icon, see crbug.com/446263.
   if (request_type == permissions::RequestType::kProtectedMediaIdentifier)
-    return kProductIcon;
+    return vector_icons::kProductIcon;
 #endif
   return PermissionsClient::GetOverrideIconId(request_type);
 }
@@ -330,9 +331,11 @@ void ChromePermissionsClient::OnPromptResolved(
         (quiet_ui_reason.value() ==
              QuietUiReason::kTriggeredDueToAbusiveRequests ||
          quiet_ui_reason.value() ==
-             QuietUiReason::kTriggeredDueToAbusiveContent)) {
-      AbusiveOriginPermissionRevocationRequest::
-          ExemptOriginFromFutureRevocations(profile, origin);
+             QuietUiReason::kTriggeredDueToAbusiveContent ||
+         quiet_ui_reason.value() ==
+             QuietUiReason::kTriggeredDueToDisruptiveBehavior)) {
+      PermissionRevocationRequest::ExemptOriginFromFutureRevocations(profile,
+                                                                     origin);
     }
   }
 
@@ -363,14 +366,14 @@ ChromePermissionsClient::HasPreviouslyAutoRevokedPermission(
   }
 
   Profile* profile = Profile::FromBrowserContext(browser_context);
-  return AbusiveOriginPermissionRevocationRequest::
-      HasPreviouslyRevokedPermission(profile, origin);
+  return PermissionRevocationRequest::HasPreviouslyRevokedPermission(profile,
+                                                                     origin);
 }
 
 absl::optional<url::Origin> ChromePermissionsClient::GetAutoApprovalOrigin() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   // In web kiosk mode, all permission requests are auto-approved for the origin
   // of the main app.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (user_manager::UserManager::IsInitialized() &&
       user_manager::UserManager::Get()->IsLoggedInAsWebKioskApp()) {
     const AccountId& account_id =
@@ -380,6 +383,11 @@ absl::optional<url::Origin> ChromePermissionsClient::GetAutoApprovalOrigin() {
         ash::WebKioskAppManager::Get()->GetAppByAccountId(account_id);
     DCHECK(app_data);
     return url::Origin::Create(app_data->install_url());
+  }
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (profiles::IsWebKioskSession()) {
+    return url::Origin::Create(
+        KioskSessionServiceLacros::Get()->GetInstallURL());
   }
 #endif
   return absl::nullopt;
@@ -430,7 +438,7 @@ absl::optional<GURL> ChromePermissionsClient::OverrideCanonicalOrigin(
   return absl::nullopt;
 }
 
-bool ChromePermissionsClient::DoOriginsMatchNewTabPage(
+bool ChromePermissionsClient::DoURLsMatchNewTabPage(
     const GURL& requesting_origin,
     const GURL& embedding_origin) {
   return embedding_origin ==
@@ -460,8 +468,8 @@ infobars::InfoBar* ChromePermissionsClient::MaybeCreateInfoBar(
   infobars::ContentInfoBarManager* infobar_manager =
       infobars::ContentInfoBarManager::FromWebContents(web_contents);
   if (infobar_manager && ShouldUseQuietUI(web_contents, type)) {
-    return GroupedPermissionInfoBarDelegate::Create(std::move(prompt),
-                                                    infobar_manager);
+    return PermissionInfoBarDelegate::Create(std::move(prompt),
+                                             infobar_manager);
   }
   return nullptr;
 }
@@ -486,14 +494,20 @@ ChromePermissionsClient::MaybeCreateMessageUI(
 void ChromePermissionsClient::RepromptForAndroidPermissions(
     content::WebContents* web_contents,
     const std::vector<ContentSettingsType>& content_settings_types,
+    const std::vector<ContentSettingsType>& filtered_content_settings_types,
+    const std::vector<std::string>& required_permissions,
+    const std::vector<std::string>& optional_permissions,
     PermissionsUpdatedCallback callback) {
   if (messages::IsPermissionUpdateMessagesUiEnabled()) {
     PermissionUpdateMessageController::CreateForWebContents(web_contents);
     PermissionUpdateMessageController::FromWebContents(web_contents)
-        ->ShowMessage(content_settings_types, std::move(callback));
+        ->ShowMessage(content_settings_types, filtered_content_settings_types,
+                      required_permissions, optional_permissions,
+                      std::move(callback));
   } else {
     PermissionUpdateInfoBarDelegate::Create(
-        web_contents, content_settings_types, std::move(callback));
+        web_contents, content_settings_types, filtered_content_settings_types,
+        required_permissions, optional_permissions, std::move(callback));
   }
 }
 

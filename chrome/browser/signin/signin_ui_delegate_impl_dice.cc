@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -34,26 +34,23 @@ void ShowDiceTab(Browser* browser,
 }  // namespace
 
 void SigninUiDelegateImplDice::ShowSigninUI(
-    Browser* browser,
     Profile* profile,
     bool enable_sync,
     signin_metrics::AccessPoint access_point,
     signin_metrics::PromoAction promo_action) {
-  ShowDiceTab(EnsureBrowser(browser, profile), /*email=*/std::string(),
-              enable_sync, access_point, promo_action);
+  ShowDiceTab(EnsureBrowser(profile), /*email=*/std::string(), enable_sync,
+              access_point, promo_action);
 }
 
 void SigninUiDelegateImplDice::ShowReauthUI(
-    Browser* browser,
     Profile* profile,
     const std::string& email,
     bool enable_sync,
     signin_metrics::AccessPoint access_point,
     signin_metrics::PromoAction promo_action) {
-  DCHECK(!browser || browser->profile() == profile);
   DCHECK(profile);
 
-  ShowDiceTab(EnsureBrowser(browser, profile), email, enable_sync, access_point,
+  ShowDiceTab(EnsureBrowser(profile), email, enable_sync, access_point,
               promo_action);
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,16 +6,37 @@
  * @fileoverview Handles logic for the ChromeVox panel that requires state from
  * the background context.
  */
+import {constants} from '../../../common/constants.js';
+import {CursorRange} from '../../../common/cursors/range.js';
+import {Earcon} from '../../common/abstract_earcons.js';
+import {BridgeConstants} from '../../common/bridge_constants.js';
+import {BridgeHelper} from '../../common/bridge_helper.js';
+import {PanelBridge} from '../../common/panel_bridge.js';
+import {ALL_PANEL_MENU_NODE_DATA} from '../../common/panel_menu_data.js';
+import {QueueMode} from '../../common/tts_types.js';
+import {ChromeVox} from '../chromevox.js';
+import {ChromeVoxState, ChromeVoxStateObserver} from '../chromevox_state.js';
+import {Output} from '../output/output.js';
+import {OutputCustomEvent} from '../output/output_types.js';
+
 import {ISearch} from './i_search.js';
 import {ISearchHandler} from './i_search_handler.js';
+import {PanelNodeMenuBackground} from './panel_node_menu_background.js';
+import {PanelTabMenuBackground} from './panel_tab_menu_background.js';
+
+const AutomationNode = chrome.automation.AutomationNode;
+const Constants = BridgeConstants.PanelBackground;
 
 /** @implements {ISearchHandler} */
 export class PanelBackground {
+  /** @private */
   constructor() {
     /** @private {ISearch} */
     this.iSearch_;
-    /** @private {chrome.automation.AutomationNode} */
-    this.nodeForActions_;
+    /** @private {AutomationNode} */
+    this.savedNode_;
+    /** @private {Promise} */
+    this.resolvePanelCollapsed_;
   }
 
   static init() {
@@ -24,40 +45,80 @@ export class PanelBackground {
     }
     PanelBackground.instance = new PanelBackground();
     PanelBackground.stateObserver_ = new PanelStateObserver();
+    ChromeVoxState.addObserver(PanelBackground.stateObserver_);
 
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND, BridgeAction.CREATE_NEW_I_SEARCH,
+        Constants.TARGET, Constants.Action.CLEAR_SAVED_NODE,
+        () => PanelBackground.instance.clearSavedNode_());
+    BridgeHelper.registerHandler(
+        Constants.TARGET, Constants.Action.CREATE_ALL_NODE_MENU_BACKGROUNDS,
+        opt_activateMenuTitle =>
+            PanelBackground.instance.createAllNodeMenuBackgrounds_(
+                opt_activateMenuTitle));
+    BridgeHelper.registerHandler(
+        Constants.TARGET, Constants.Action.CREATE_NEW_I_SEARCH,
         () => PanelBackground.instance.createNewISearch_());
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND, BridgeAction.DESTROY_I_SEARCH,
+        Constants.TARGET, Constants.Action.DESTROY_I_SEARCH,
         () => PanelBackground.instance.destroyISearch_());
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND,
-        BridgeAction.GET_ACTIONS_FOR_CURRENT_NODE,
+        Constants.TARGET, Constants.Action.FOCUS_TAB,
+        (windowId, tabId) => PanelTabMenuBackground.focusTab(windowId, tabId));
+    BridgeHelper.registerHandler(
+        Constants.TARGET, Constants.Action.GET_ACTIONS_FOR_CURRENT_NODE,
         () => PanelBackground.instance.getActionsForCurrentNode_());
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND, BridgeAction.INCREMENTAL_SEARCH,
-        ({searchStr, dir, opt_nextObject}) =>
+        Constants.TARGET, Constants.Action.GET_TAB_MENU_DATA,
+        () => PanelTabMenuBackground.getTabMenuData());
+    BridgeHelper.registerHandler(
+        Constants.TARGET, Constants.Action.INCREMENTAL_SEARCH,
+        (searchStr, dir, opt_nextObject) =>
             PanelBackground.instance.incrementalSearch_(
                 searchStr, dir, opt_nextObject));
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND,
-        BridgeAction.PERFORM_CUSTOM_ACTION_ON_CURRENT_NODE,
-        (actionId) =>
-            PanelBackground.instance.performCustomActionOnCurrentNode_(
-                actionId));
+        Constants.TARGET,
+        Constants.Action.PERFORM_CUSTOM_ACTION_ON_CURRENT_NODE,
+        actionId => PanelBackground.instance.performCustomActionOnCurrentNode_(
+            actionId));
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND,
-        BridgeAction.PERFORM_STANDARD_ACTION_ON_CURRENT_NODE,
-        (action) =>
-            PanelBackground.instance.performStandardActionOnCurrentNode_(
-                action));
+        Constants.TARGET,
+        Constants.Action.PERFORM_STANDARD_ACTION_ON_CURRENT_NODE,
+        action => PanelBackground.instance.performStandardActionOnCurrentNode_(
+            action));
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND, BridgeAction.SET_RANGE_TO_I_SEARCH_NODE,
+        Constants.TARGET, Constants.Action.SAVE_CURRENT_NODE,
+        () => PanelBackground.instance.saveCurrentNode_());
+    BridgeHelper.registerHandler(
+        Constants.TARGET, Constants.Action.SET_PANEL_COLLAPSE_WATCHER,
+        () => PanelBackground.instance.setPanelCollapseWatcher_());
+    BridgeHelper.registerHandler(
+        Constants.TARGET, Constants.Action.SET_RANGE_TO_I_SEARCH_NODE,
         () => PanelBackground.instance.setRangeToISearchNode_());
     BridgeHelper.registerHandler(
-        BridgeTarget.PANEL_BACKGROUND, BridgeAction.WAIT_FOR_PANEL_COLLAPSE,
+        Constants.TARGET, Constants.Action.WAIT_FOR_PANEL_COLLAPSE,
         () => PanelBackground.instance.waitForPanelCollapse_());
+  }
+
+  /** @private */
+  clearSavedNode_() {
+    this.savedNode_ = null;
+  }
+
+  /**
+   * @param {string=} opt_activateMenuTitleId Optional string specifying the
+   *     activated menu.
+   * @private
+   */
+  createAllNodeMenuBackgrounds_(opt_activateMenuTitleId) {
+    if (!this.savedNode_) {
+      return;
+    }
+    for (const data of ALL_PANEL_MENU_NODE_DATA) {
+      const isActivatedMenu = opt_activateMenuTitleId === data.titleId;
+      const menuBackground =
+          new PanelNodeMenuBackground(data, this.savedNode_, isActivatedMenu);
+      menuBackground.populate();
+    }
   }
 
   /**
@@ -68,6 +129,12 @@ export class PanelBackground {
   createNewISearch_() {
     if (this.iSearch_) {
       this.iSearch_.clear();
+    }
+    // TODO(accessibility): not sure if this actually works anymore since all
+    // the refactoring.
+    if (!ChromeVoxState.instance.currentRange ||
+        !ChromeVoxState.instance.currentRange.start) {
+      return;
     }
     this.iSearch_ = new ISearch(ChromeVoxState.instance.currentRange.start);
     this.iSearch_.handler = this;
@@ -90,19 +157,18 @@ export class PanelBackground {
    * @private
    */
   getActionsForCurrentNode_() {
-    this.nodeForActions_ = ChromeVoxState.instance.currentRange.start;
     const result = {
       standardActions: [],
       customActions: [],
     };
-    if (!this.nodeForActions_) {
+    if (!this.savedNode_) {
       return result;
     }
-    if (this.nodeForActions_.standardActions) {
-      result.standardActions = this.nodeForActions_.standardActions;
+    if (this.savedNode_.standardActions) {
+      result.standardActions = this.savedNode_.standardActions;
     }
-    if (this.nodeForActions_.customActions) {
-      result.customActions = this.nodeForActions_.customActions;
+    if (this.savedNode_.customActions) {
+      result.customActions = this.savedNode_.customActions;
     }
     return result;
   }
@@ -128,8 +194,8 @@ export class PanelBackground {
    * @private
    */
   performCustomActionOnCurrentNode_(actionId) {
-    if (this.nodeForActions_) {
-      this.nodeForActions_.performCustomAction(actionId);
+    if (this.savedNode_) {
+      this.savedNode_.performCustomAction(actionId);
     }
   }
 
@@ -138,8 +204,8 @@ export class PanelBackground {
    * @private
    */
   performStandardActionOnCurrentNode_(action) {
-    if (this.nodeForActions_) {
-      this.nodeForActions_.performStandardAction(action);
+    if (this.savedNode_) {
+      this.savedNode_.performStandardAction(action);
     }
   }
 
@@ -158,7 +224,7 @@ export class PanelBackground {
     if (!node) {
       return;
     }
-    ChromeVoxState.instance.navigateToRange(cursors.Range.fromNode(node));
+    ChromeVoxState.instance.navigateToRange(CursorRange.fromNode(node));
   }
 
   /** @override */
@@ -185,47 +251,64 @@ export class PanelBackground {
       o.withString([
         node.name.substr(0, opt_start),
         node.name.substr(opt_start, opt_end - opt_start),
-        node.name.substr(opt_end)
+        node.name.substr(opt_end),
       ].join(', '));
       o.format('$role', node);
     } else {
       o.withRichSpeechAndBraille(
-          cursors.Range.fromNode(node), null, OutputEventType.NAVIGATE);
+          CursorRange.fromNode(node), null, OutputCustomEvent.NAVIGATE);
     }
     o.go();
 
-    ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(node));
+    ChromeVoxState.instance.setCurrentRange(CursorRange.fromNode(node));
   }
 
   /**
-   * Listens for focus events, and returns once the target is not the panel.
+   * Adds an event listener to detect panel collapse.
+   * @private
+   */
+  async setPanelCollapseWatcher_() {
+    const desktop =
+        await new Promise((resolve) => chrome.automation.getDesktop(resolve));
+    let notifyPanelCollapsed;
+    this.resolvePanelCollapsed_ = new Promise(resolve => {
+      notifyPanelCollapsed = resolve;
+    });
+    const onFocus = event => {
+      if (event.target.docUrl &&
+          event.target.docUrl.includes('chromevox/panel')) {
+        return;
+      }
+
+      desktop.removeEventListener(
+          chrome.automation.EventType.FOCUS, onFocus, true);
+
+      // Clears focus on the page by focusing the root explicitly. This makes
+      // sure we don't get future focus events as a result of giving this
+      // entire page focus (which would interfere with our desired range).
+      if (event.target.root) {
+        event.target.root.focus();
+      }
+
+      notifyPanelCollapsed();
+    };
+
+    desktop.addEventListener(chrome.automation.EventType.FOCUS, onFocus, true);
+  }
+
+  /** @private */
+  saveCurrentNode_() {
+    if (ChromeVoxState.instance.currentRange) {
+      this.savedNode_ = ChromeVoxState.instance.currentRange.start.node;
+    }
+  }
+
+  /**
+   * Wait for the promise to notify panel collapse to resolved.
    * @private
    */
   async waitForPanelCollapse_() {
-    return new Promise(async resolve => {
-      const desktop = await new Promise(chrome.automation.getDesktop);
-      // Watch for a focus event outside the panel.
-      const onFocus = (event) => {
-        if (event.target.docUrl.contains('chromevox/panel')) {
-          return;
-        }
-
-        desktop.removeEventListener(
-            chrome.automation.EventType.FOCUS, onFocus, true);
-
-        // Clears focus on the page by focusing the root explicitly. This makes
-        // sure we don't get future focus events as a result of giving this
-        // entire page focus (which would interfere with our desired range).
-        if (event.target.root) {
-          event.target.root.focus();
-        }
-
-        resolve();
-      };
-
-      desktop.addEventListener(
-          chrome.automation.EventType.FOCUS, onFocus, true);
-    });
+    return this.resolvePanelCollapsed_;
   }
 }
 

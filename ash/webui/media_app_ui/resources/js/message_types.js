@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,10 +13,13 @@
  */
 export const Message = {
   DELETE_FILE: 'delete-file',
+  EDIT_IN_PHOTOS: 'edit-in-photos',
   IFRAME_READY: 'iframe-ready',
+  IS_FILE_ARC_WRITABLE: 'is-file-arc-writable',
   IS_FILE_BROWSER_WRITABLE: 'is-file-browser-writable',
   LOAD_EXTRA_FILES: 'load-extra-files',
   LOAD_FILES: 'load-files',
+  MAYBE_TRIGGER_PDF_HATS: 'maybe-trigger-pdf-hats',
   NAVIGATE: 'navigate',
   NOTIFY_CURRENT_FILE: 'notify-current-file',
   OPEN_ALLOWED_FILE: 'open-allowed-file',
@@ -24,6 +27,7 @@ export const Message = {
   OPEN_FILES_WITH_PICKER: 'open-files-with-picker',
   OPEN_IN_SANDBOXED_VIEWER: 'open-in-sandboxed-viewer',
   OVERWRITE_FILE: 'overwrite-file',
+  RELOAD_MAIN_FRAME: 'reload-main-frame',
   RENAME_FILE: 'rename-file',
   REQUEST_SAVE_FILE: 'request-save-file',
   SAVE_AS: 'save-as',
@@ -63,6 +67,17 @@ export let LoadFilesMessage;
 
 /**
  * Message sent by the unprivileged context to the privileged context to check
+ * whether or not the current file is writable according to ARC. If the supplied
+ * file `token` is invalid the request is rejected.
+ * @typedef {{token: number}}
+ */
+export let IsFileArcWritableMessage;
+
+/** @typedef {{writable: boolean}} */
+export let IsFileArcWritableResponse;
+
+/**
+ * Message sent by the unprivileged context to the privileged context to check
  * whether or not the current file is writable according to Ash. If the supplied
  * file `token` is invalid the request is rejected.
  * @typedef {{token: number}}
@@ -71,6 +86,14 @@ export let IsFileBrowserWritableMessage;
 
 /** @typedef {{writable: boolean}} */
 export let IsFileBrowserWritableResponse;
+
+/**
+ * Message sent by the unprivileged context to the privileged context requesting
+ * the current file to be launched in Photos with an edit intent. If the
+ * supplied file `token` is invalid the request is rejected.
+ * @typedef {{token: number, mimeType: string}}
+ */
+export let EditInPhotosMessage;
 
 /**
  * Message sent by the unprivileged context to the privileged context requesting

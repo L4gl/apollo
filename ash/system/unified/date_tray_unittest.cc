@@ -1,10 +1,9 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "ash/system/unified/date_tray.h"
 
-#include "ash/constants/ash_features.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/system/time/time_tray_item_view.h"
@@ -12,9 +11,9 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/test/ash_test_base.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "base/time/time_override.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 
 namespace ash {
 
@@ -26,9 +25,6 @@ class DateTrayTest : public AshTestBase {
   ~DateTrayTest() override = default;
 
   void SetUp() override {
-    // Enable calendar view feature.
-    scoped_feature_list_.InitWithFeatures({ash::features::kCalendarView}, {});
-
     // Set time override.
     base::subtle::ScopedTimeClockOverrides time_override(
         []() {
@@ -68,8 +64,8 @@ class DateTrayTest : public AshTestBase {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<views::Widget> widget_;
+
   // Owned by `widget_`.
   DateTray* date_tray_ = nullptr;
 };
@@ -165,6 +161,51 @@ TEST_F(DateTrayTest, ClickingArea) {
   event_generator->ClickLeftButton();
   LeftClickOn(GetDateTray());
   base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(GetUnifiedSystemTray()->IsBubbleShown());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
+}
+
+TEST_F(DateTrayTest, EscapeKeyForClose) {
+  base::HistogramTester histogram_tester;
+  // Clicking on the `DateTray` -> show the calendar bubble.
+  LeftClickOn(GetDateTray());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(GetUnifiedSystemTray()->IsBubbleShown());
+  EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
+
+  histogram_tester.ExpectTotalCount("Ash.Calendar.ShowSource.TimeView", 1);
+
+  // Hitting escape key -> close and deactivate the calendar bubble.
+  PressAndReleaseKey(ui::KeyboardCode::VKEY_ESCAPE);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
+}
+
+// Tests that calling `DateTray::CloseBubble()` actually closes the bubble.
+TEST_F(DateTrayTest, CloseBubble) {
+  ASSERT_FALSE(GetUnifiedSystemTray()->IsBubbleShown());
+
+  // Clicking on the `DateTray` -> show the calendar bubble.
+  LeftClickOn(GetDateTray());
+  EXPECT_TRUE(GetUnifiedSystemTray()->IsBubbleShown());
+  EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
+
+  // Calling `DateTray::CloseBubble()` should close the bubble.
+  GetDateTray()->CloseBubble();
+  EXPECT_FALSE(GetUnifiedSystemTray()->IsBubbleShown());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
+
+  // Calling `DateTray::CloseBubble()` on an already-closed bubble should do
+  // nothing.
+  GetDateTray()->CloseBubble();
   EXPECT_FALSE(GetUnifiedSystemTray()->IsBubbleShown());
   EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
   EXPECT_FALSE(GetDateTray()->is_active());

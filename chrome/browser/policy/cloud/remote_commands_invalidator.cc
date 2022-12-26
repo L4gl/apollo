@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -162,10 +162,8 @@ void RemoteCommandsInvalidator::Unregister() {
 }
 
 void RemoteCommandsInvalidator::UnsubscribeFromTopics() {
-  base::ScopedObservation<
-      invalidation::InvalidationService, invalidation::InvalidationHandler,
-      &invalidation::InvalidationService::RegisterInvalidationHandler,
-      &invalidation::InvalidationService::UnregisterInvalidationHandler>
+  base::ScopedObservation<invalidation::InvalidationService,
+                          invalidation::InvalidationHandler>
       temporary_registration(this);
 
   // Invalidator cannot unset its topics without being registered. Let's quickly

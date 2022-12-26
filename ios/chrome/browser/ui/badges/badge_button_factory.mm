@@ -1,23 +1,22 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/badges/badge_button_factory.h"
 
-#include <ostream>
+#import <ostream>
 
 #import "base/notreached.h"
-#include "components/password_manager/core/common/password_manager_features.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/ui/badges/badge_button.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
 #import "ios/chrome/browser/ui/badges/badge_overflow_menu_util.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#import "ios/chrome/browser/ui/icons/infobar_icon.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -29,10 +28,10 @@ NSString* const kOverflowPopupMenuActionIdentifier =
     @"kOverflowPopupMenuActionIdentifier";
 
 // The size of the incognito symbol image.
-NSInteger kSymbolIncognitoPointSize = 28;
+const CGFloat kSymbolIncognitoPointSize = 28.;
 
 // The size of the incognito full screen symbol image.
-NSInteger kSymbolIncognitoFullScreenPointSize = 14;
+const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
 }  // namespace
 
@@ -54,8 +53,6 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
       return [self overflowBadgeButton];
     case kBadgeTypeSaveAddressProfile:
       return [self saveAddressProfileBadgeButton];
-    case kBadgeTypeAddToReadingList:
-      return [self readingListBadgeButton];
     case kBadgeTypePermissionsCamera:
       return [self permissionsCameraBadgeButton];
     case kBadgeTypePermissionsMicrophone:
@@ -79,11 +76,14 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 }
 
 - (BadgeButton*)passwordsSaveBadgeButton {
-  BadgeButton* button = [self
-      createButtonForType:kBadgeTypePasswordSave
-                    image:[[UIImage imageNamed:[self passwordKeyAssetName]]
-                              imageWithRenderingMode:
-                                  UIImageRenderingModeAlwaysTemplate]];
+  UIImage* image =
+      UseSymbols()
+          ? CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize)
+          : [UIImage imageNamed:[self passwordKeyAssetName]];
+  BadgeButton* button =
+      [self createButtonForType:kBadgeTypePasswordSave
+                          image:[image imageWithRenderingMode:
+                                           UIImageRenderingModeAlwaysTemplate]];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -95,11 +95,14 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 }
 
 - (BadgeButton*)passwordsUpdateBadgeButton {
-  BadgeButton* button = [self
-      createButtonForType:kBadgeTypePasswordUpdate
-                    image:[[UIImage imageNamed:[self passwordKeyAssetName]]
-                              imageWithRenderingMode:
-                                  UIImageRenderingModeAlwaysTemplate]];
+  UIImage* image =
+      UseSymbols()
+          ? CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize)
+          : [UIImage imageNamed:[self passwordKeyAssetName]];
+  BadgeButton* button =
+      [self createButtonForType:kBadgeTypePasswordUpdate
+                          image:[image imageWithRenderingMode:
+                                           UIImageRenderingModeAlwaysTemplate]];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -113,7 +116,7 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 - (BadgeButton*)saveCardBadgeButton {
   UIImage* image;
   image = UseSymbols() ? DefaultSymbolWithPointSize(kCreditCardSymbol,
-                                                    kSymbolImagePointSize)
+                                                    kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"infobar_save_card_icon"];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypeSaveCard
@@ -131,7 +134,7 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 - (BadgeButton*)translateBadgeButton {
   UIImage* image;
   image = UseSymbols() ? CustomSymbolWithPointSize(kTranslateSymbol,
-                                                   kSymbolImagePointSize)
+                                                   kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"infobar_translate_icon"];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypeTranslate
@@ -149,8 +152,16 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 - (BadgeButton*)incognitoBadgeButton {
   BadgeButton* button;
   if (UseSymbols()) {
-    UIImage* image = CustomSymbolTemplateWithPointSize(
-        kIncognitoCircleFillSymbol, kSymbolIncognitoPointSize);
+    UIImage* image;
+    if (@available(iOS 15, *)) {
+      image = SymbolWithPalette(
+          CustomSymbolWithPointSize(kIncognitoCircleFillSymbol,
+                                    kSymbolIncognitoPointSize),
+          SmallIncognitoPalette());
+    } else {
+      image = [[UIImage imageNamed:@"incognito_badge_ios14"]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    }
     button = [self createButtonForType:kBadgeTypeIncognito image:image];
     button.fullScreenImage = CustomSymbolTemplateWithPointSize(
         kIncognitoSymbol, kSymbolIncognitoFullScreenPointSize);
@@ -174,9 +185,9 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 }
 
 - (BadgeButton*)overflowBadgeButton {
-  UIImage* image = ShouldUseUIKitPopupMenu()
+  UIImage* image = UseSymbols()
                        ? DefaultSymbolWithPointSize(kEllipsisCircleFillSymbol,
-                                                    kSymbolImagePointSize)
+                                                    kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"wrench_badge"];
   BadgeButton* button =
       [self createButtonForType:kBadgeTypeOverflow
@@ -187,7 +198,7 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
       l10n_util::GetNSString(IDS_IOS_OVERFLOW_BADGE_HINT);
 
   // Configure new overflow popup menu if enabled.
-  if (ShouldUseUIKitPopupMenu()) {
+  if (UseSymbols()) {
     button.showsMenuAsPrimaryAction = YES;
 
     // Adds an empty menu so the event triggers the first time.
@@ -226,9 +237,9 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 
 - (BadgeButton*)saveAddressProfileBadgeButton {
   UIImage* image;
-  image = UseSymbols()
-              ? DefaultSymbolWithPointSize(kPinSymbol, kSymbolImagePointSize)
-              : [UIImage imageNamed:@"ic_place"];
+  image = UseSymbols() ? DefaultSymbolWithPointSize(kPinFillSymbol,
+                                                    kInfobarSymbolPointSize)
+                       : [UIImage imageNamed:@"ic_place"];
 
   BadgeButton* button =
       [self createButtonForType:kBadgeTypeSaveAddressProfile
@@ -243,26 +254,11 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
   return button;
 }
 
-- (BadgeButton*)readingListBadgeButton {
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypeAddToReadingList
-                          image:[[UIImage imageNamed:@"infobar_reading_list"]
-                                    imageWithRenderingMode:
-                                        UIImageRenderingModeAlwaysTemplate]];
-  [button addTarget:self.delegate
-                action:@selector(addToReadingListBadgeButtonTapped:)
-      forControlEvents:UIControlEventTouchUpInside];
-  button.accessibilityIdentifier =
-      kBadgeButtonReadingListAccessibilityIdentifier;
-  // TODO(crbug.com/1014652): Create a11y label hint.
-  return button;
-}
-
 - (BadgeButton*)permissionsCameraBadgeButton {
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypePermissionsCamera
-                          image:CustomSymbolTemplateWithPointSize(
-                                    kCameraFillSymbol, kSymbolImagePointSize)];
+  BadgeButton* button = [self
+      createButtonForType:kBadgeTypePermissionsCamera
+                    image:CustomSymbolTemplateWithPointSize(
+                              kCameraFillSymbol, kInfobarSymbolPointSize)];
   [button addTarget:self.delegate
                 action:@selector(permissionsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -274,11 +270,10 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 }
 
 - (BadgeButton*)permissionsMicrophoneBadgeButton {
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypePermissionsMicrophone
-                          image:[[UIImage systemImageNamed:@"mic.fill"]
-                                    imageWithRenderingMode:
-                                        UIImageRenderingModeAlwaysTemplate]];
+  BadgeButton* button = [self
+      createButtonForType:kBadgeTypePermissionsMicrophone
+                    image:DefaultSymbolTemplateWithPointSize(
+                              kMicrophoneFillSymbol, kInfobarSymbolPointSize)];
   [button addTarget:self.delegate
                 action:@selector(permissionsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -292,7 +287,7 @@ NSInteger kSymbolIncognitoFullScreenPointSize = 14;
 - (BadgeButton*)createButtonForType:(BadgeType)badgeType image:(UIImage*)image {
   BadgeButton* button = [BadgeButton badgeButtonWithType:badgeType];
   UIImageSymbolConfiguration* symbolConfig = [UIImageSymbolConfiguration
-      configurationWithPointSize:kSymbolImagePointSize
+      configurationWithPointSize:kInfobarSymbolPointSize
                           weight:UIImageSymbolWeightRegular
                            scale:UIImageSymbolScaleMedium];
   [button setPreferredSymbolConfiguration:symbolConfig

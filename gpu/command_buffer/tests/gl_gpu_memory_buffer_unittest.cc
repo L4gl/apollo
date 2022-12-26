@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,6 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
-#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/tests/gl_manager.h"
 #include "gpu/command_buffer/tests/gl_test_utils.h"
 #include "gpu/config/gpu_test_config.h"
@@ -121,6 +120,7 @@ uint32_t BufferFormatToFourCC(gfx::BufferFormat format) {
     case gfx::BufferFormat::RGBA_F16:
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::RGBX_8888:
+    case gfx::BufferFormat::YUVA_420_TRIPLANAR:
     case gfx::BufferFormat::P010:
       return libyuv::FOURCC_ANY;
   }

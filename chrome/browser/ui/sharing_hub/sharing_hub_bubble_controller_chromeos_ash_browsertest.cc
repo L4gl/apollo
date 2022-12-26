@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,7 @@ IN_PROC_BROWSER_TEST_F(SharingHubBubbleControllerChromeOsBrowserTest,
       browser()->tab_strip_model()->GetActiveWebContents();
   sharing_hub::SharingHubBubbleControllerChromeOsImpl::
       CreateOrGetFromWebContents(web_contents)
-          ->ShowBubble();
+          ->ShowBubble(share::ShareAttempt(web_contents));
 
   // Verify that the sharesheet is open.
   sharesheet::SharesheetUiDelegate* bubble_delegate =

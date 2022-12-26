@@ -1,23 +1,24 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/variations/synthetic_trial_registry.h"
 
-#include <algorithm>
-
+#include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
+#include "components/variations/active_field_trials.h"
 #include "components/variations/hashing.h"
 #include "components/variations/variations_associated_data.h"
 
 namespace variations {
 namespace internal {
 
-const base::Feature kExternalExperimentAllowlist{
-    "ExternalExperimentAllowlist", base::FEATURE_ENABLED_BY_DEFAULT};
+BASE_FEATURE(kExternalExperimentAllowlist,
+             "ExternalExperimentAllowlist",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace internal
 
@@ -79,11 +80,10 @@ void SyntheticTrialRegistry::RegisterExternalExperiments(
     // If existing ids shouldn't be overridden, skip entries whose study names
     // are already registered.
     if (mode == kDoNotOverrideExistingIds) {
-      auto matches_trial = [trial_hash](const SyntheticTrialGroup& group) {
-        return group.id().name == trial_hash;
-      };
-      const auto& groups = synthetic_trial_groups_;
-      if (std::any_of(groups.begin(), groups.end(), matches_trial)) {
+      if (base::Contains(synthetic_trial_groups_, trial_hash,
+                         [](const SyntheticTrialGroup& group) {
+                           return group.id().name;
+                         })) {
         continue;
       }
     }
@@ -165,14 +165,19 @@ void SyntheticTrialRegistry::NotifySyntheticTrialObservers() {
 
 void SyntheticTrialRegistry::GetSyntheticFieldTrialsOlderThan(
     base::TimeTicks time,
-    std::vector<ActiveGroupId>* synthetic_trials) const {
+    std::vector<ActiveGroupId>* synthetic_trials,
+    base::StringPiece suffix) const {
   DCHECK(synthetic_trials);
   synthetic_trials->clear();
+  base::FieldTrial::ActiveGroups active_groups;
   for (const auto& entry : synthetic_trial_groups_) {
     if (entry.start_time() <= time ||
         entry.annotation_mode() == SyntheticTrialAnnotationMode::kCurrentLog)
-      synthetic_trials->push_back(entry.id());
+      active_groups.push_back(entry.active_group());
   }
+
+  GetFieldTrialActiveGroupIdsForActiveGroups(suffix, active_groups,
+                                             synthetic_trials);
 }
 
 }  // namespace variations

@@ -1,10 +1,11 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/ash/borealis/borealis_installer.h"
 
 namespace borealis {
 
@@ -32,10 +33,10 @@ const char kBorealisDiskStartupResultHistogram[] =
     "Borealis.Disk.Startup.Result";
 const char kBorealisInstallNumAttemptsHistogram[] =
     "Borealis.Install.NumAttempts";
-const char kBorealisGameModeResultHistogram[] = "Borealis.GameMode.Result";
 const char kBorealisInstallResultHistogram[] = "Borealis.Install.Result";
 const char kBorealisInstallOverallTimeHistogram[] =
     "Borealis.Install.OverallTime";
+const char kBorealisInstallRetriesHistogram[] = "Borealis.Install.Retries";
 const char kBorealisShutdownNumAttemptsHistogram[] =
     "Borealis.Shutdown.NumAttempts";
 const char kBorealisShutdownResultHistogram[] = "Borealis.Shutdown.Result";
@@ -61,6 +62,14 @@ void RecordBorealisInstallResultHistogram(
 
 void RecordBorealisInstallOverallTimeHistogram(base::TimeDelta install_time) {
   base::UmaHistogramTimes(kBorealisInstallOverallTimeHistogram, install_time);
+}
+
+void RecordBorealisInstallRetries(int retry_count) {
+  base::UmaHistogramCustomCounts(
+      kBorealisInstallRetriesHistogram, retry_count,
+      /*min=*/0,
+      /*exclusive_max=*/BorealisInstaller::kMaxDlcRetries + 1,
+      /*buckets=*/BorealisInstaller::kMaxDlcRetries + 1);
 }
 
 void RecordBorealisUninstallNumAttemptsHistogram() {
@@ -171,12 +180,6 @@ void RecordBorealisDiskStartupResultHistogram(
     BorealisSyncDiskSizeResult disk_result) {
   base::UmaHistogramEnumeration(kBorealisDiskStartupResultHistogram,
                                 disk_result);
-}
-
-void RecordBorealisGameModeResultHistogram(
-    BorealisGameModeResult game_mode_result) {
-  base::UmaHistogramEnumeration(kBorealisGameModeResultHistogram,
-                                game_mode_result);
 }
 
 }  // namespace borealis

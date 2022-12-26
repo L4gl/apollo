@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,12 +30,12 @@ class MockMojoMediaStreamDispatcherHost
   mojo::PendingRemote<mojom::blink::MediaStreamDispatcherHost>
   CreatePendingRemoteAndBind();
 
-  void GenerateStream(
+  void GenerateStreams(
       int32_t request_id,
       const StreamControls& controls,
       bool user_gesture,
       mojom::blink::StreamSelectionInfoPtr audio_stream_selection_info_ptr,
-      GenerateStreamCallback callback) override;
+      GenerateStreamsCallback callback) override;
   void CancelRequest(int32_t request_id) override;
   void StopStreamDevice(
       const WTF::String& device_id,
@@ -51,6 +51,10 @@ class MockMojoMediaStreamDispatcherHost
                     mojom::blink::MediaStreamType,
                     bool));
   MOCK_METHOD1(OnStreamStarted, void(const WTF::String&));
+  MOCK_METHOD3(KeepDeviceAliveForTransfer,
+               void(const base::UnguessableToken&,
+                    const base::UnguessableToken&,
+                    KeepDeviceAliveForTransferCallback));
 #if !BUILDFLAG(IS_ANDROID)
   MOCK_METHOD2(FocusCapturedSurface, void(const WTF::String&, bool));
   MOCK_METHOD4(Crop,
@@ -59,10 +63,10 @@ class MockMojoMediaStreamDispatcherHost
                     uint32_t,
                     CropCallback));
 #endif
-  MOCK_METHOD3(GetOpenDevice,
-               void(int32_t request_id,
-                    const base::UnguessableToken&,
-                    GetOpenDeviceCallback));
+  void GetOpenDevice(int32_t request_id,
+                     const base::UnguessableToken&,
+                     const base::UnguessableToken&,
+                     GetOpenDeviceCallback) override;
 
   void ResetSessionId() { session_id_ = base::UnguessableToken::Create(); }
   void DoNotRunCallback() { do_not_run_cb_ = true; }
@@ -76,6 +80,10 @@ class MockMojoMediaStreamDispatcherHost
     return stream_devices_;
   }
 
+  void SetStreamDevices(const blink::mojom::blink::StreamDevices& devices) {
+    stream_devices_ = devices;
+  }
+
  private:
   int request_id_ = -1;
   int request_stream_counter_ = 0;
@@ -84,7 +92,8 @@ class MockMojoMediaStreamDispatcherHost
   base::UnguessableToken session_id_ = base::UnguessableToken::Create();
   bool do_not_run_cb_ = false;
   blink::mojom::blink::StreamDevices stream_devices_;
-  GenerateStreamCallback generate_stream_cb_;
+  GenerateStreamsCallback generate_stream_cb_;
+  GetOpenDeviceCallback get_open_device_cb_;
   mojo::Receiver<mojom::blink::MediaStreamDispatcherHost> receiver_{this};
 };
 

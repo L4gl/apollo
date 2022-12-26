@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Functions for creating APK symbols."""
@@ -55,7 +55,10 @@ class _ResourcePathDeobfuscator:
 class _ResourceSourceMapper:
   def __init__(self, size_info_prefix, path_defaults):
     self._path_defaults = path_defaults or {}
-    self._res_info = self._LoadResInfo(size_info_prefix)
+    if size_info_prefix:
+      self._res_info = self._LoadResInfo(size_info_prefix)
+    else:
+      self._res_info = dict()
     self._pattern_dollar_underscore = re.compile(r'\$+(.*?)(?:__\d)+')
     self._pattern_version_suffix = re.compile(r'-v\d+/')
 
@@ -87,6 +90,24 @@ class _ResourceSourceMapper:
     if ret:
       return ret
     return ''
+
+
+def CreateMetadata(apk_spec, include_file_details, shorten_path):
+  """Returns metadata for the given apk_spec."""
+  logging.debug('Constructing APK metadata')
+  apk_metadata = {}
+  if include_file_details:
+    apk_metadata[models.METADATA_APK_SIZE] = os.path.getsize(apk_spec.apk_path)
+    if apk_spec.mapping_path:
+      apk_metadata[models.METADATA_PROGUARD_MAPPING_FILENAME] = shorten_path(
+          apk_spec.mapping_path)
+  if apk_spec.minimal_apks_path:
+    apk_metadata[models.METADATA_APK_FILENAME] = shorten_path(
+        apk_spec.minimal_apks_path)
+    apk_metadata[models.METADATA_APK_SPLIT_NAME] = apk_spec.split_name
+  else:
+    apk_metadata[models.METADATA_APK_FILENAME] = shorten_path(apk_spec.apk_path)
+  return apk_metadata
 
 
 def CreateApkOtherSymbols(apk_spec):

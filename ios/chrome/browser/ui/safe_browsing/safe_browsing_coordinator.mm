@@ -1,10 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/safe_browsing/safe_browsing_coordinator.h"
 
-#include "ios/chrome/browser/main/browser.h"
+#import "base/feature_list.h"
+#import "components/safe_browsing/core/common/features.h"
+#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_safe_browsing_coordinator.h"
@@ -35,6 +37,10 @@
   self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
     _webStateList = browser->GetWebStateList();
+    for (int i = 0; i < _webStateList->count(); i++) {
+      web::WebState* web_state = _webStateList->GetWebStateAt(i);
+      SafeBrowsingTabHelper::FromWebState(web_state)->SetDelegate(self);
+    }
     _webStateListObserver = std::make_unique<WebStateListObserverBridge>(self);
     _webStateList->AddObserver(_webStateListObserver.get());
   }
@@ -64,6 +70,20 @@
               atIndex:(int)index
            activating:(BOOL)activating {
   SafeBrowsingTabHelper::FromWebState(webState)->SetDelegate(self);
+}
+
+- (void)webStateList:(WebStateList*)webStateList
+    didReplaceWebState:(web::WebState*)oldWebState
+          withWebState:(web::WebState*)newWebState
+               atIndex:(int)atIndex {
+  DCHECK(newWebState);
+  SafeBrowsingTabHelper::FromWebState(newWebState)->SetDelegate(self);
+}
+
+- (void)webStateList:(WebStateList*)webStateList
+    didDetachWebState:(web::WebState*)webState
+              atIndex:(int)atIndex {
+  SafeBrowsingTabHelper::FromWebState(webState)->RemoveDelegate();
 }
 
 @end

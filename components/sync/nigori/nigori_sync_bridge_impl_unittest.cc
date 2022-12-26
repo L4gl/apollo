@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,8 +17,8 @@
 #include "components/sync/nigori/keystore_keys_cryptographer.h"
 #include "components/sync/nigori/nigori_state.h"
 #include "components/sync/nigori/nigori_storage.h"
-#include "components/sync/nigori/nigori_test_utils.h"
 #include "components/sync/protocol/entity_data.h"
+#include "components/sync/test/nigori_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -95,7 +95,7 @@ MATCHER_P(CanDecryptWith, key_params, "") {
   const std::string unencrypted = "test";
   sync_pb::EncryptedData encrypted;
   encrypted.set_key_name(nigori_name);
-  EXPECT_TRUE(nigori->Encrypt(unencrypted, encrypted.mutable_blob()));
+  encrypted.set_blob(nigori->Encrypt(unencrypted));
 
   if (!cryptographer.CanDecrypt(encrypted)) {
     return false;

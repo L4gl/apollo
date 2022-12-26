@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -80,10 +80,12 @@ class ExtensionNavigationThrottleUnitTest
         .Set("description", "something")
         .Set("version", "0.1")
         .Set("manifest_version", 2)
-        .Set("web_accessible_resources",
-             ListBuilder().Append(kAccessible).Append(kAccessibleDir).Build());
+        .Set("web_accessible_resources", ListBuilder()
+                                             .Append(kAccessible)
+                                             .Append(kAccessibleDir)
+                                             .BuildList());
     extension_ = ExtensionBuilder()
-                     .SetManifest(manifest.Build())
+                     .SetManifest(manifest.BuildDict())
                      .SetID(crx_file::id_util::GenerateId("foo"))
                      .Build();
     ASSERT_TRUE(extension_);

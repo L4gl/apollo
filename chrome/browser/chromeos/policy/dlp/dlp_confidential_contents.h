@@ -1,16 +1,16 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CHROME_BROWSER_CHROMEOS_POLICY_DLP_DLP_CONFIDENTIAL_CONTENTS_H_
 #define CHROME_BROWSER_CHROMEOS_POLICY_DLP_DLP_CONFIDENTIAL_CONTENTS_H_
 
-#include <algorithm>
 #include <list>
 #include <string>
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -32,7 +32,7 @@ namespace policy {
 // Used to cache and later show information about observed confidential contents
 // to the user.
 struct DlpConfidentialContent {
-  DlpConfidentialContent();
+  DlpConfidentialContent() = delete;
   // Constructs DlpConfidentialContent from the title and icon obtained from
   // |web_contents|, which cannot be null.
   explicit DlpConfidentialContent(content::WebContents* web_contents);
@@ -82,9 +82,8 @@ class DlpConfidentialContents {
   // in titles, even if the set of the confidential contents hasn't changed.
   friend bool EqualWithTitles(const DlpConfidentialContents& a,
                               const DlpConfidentialContents& b) {
-    return std::equal(
-        a.contents_.begin(), a.contents_.end(), b.contents_.begin(),
-        b.contents_.end(),
+    return base::ranges::equal(
+        a.contents_, b.contents_,
         [](const DlpConfidentialContent& x, const DlpConfidentialContent& y) {
           return x == y && x.title == y.title;
         });
@@ -101,8 +100,6 @@ class DlpConfidentialContents {
   void Add(content::WebContents* web_contents);
   // Same for |window| and |url| pair.
   void Add(aura::Window* window, const GURL& url);
-
-  void Add(const DlpConfidentialContent& content);
 
   // Removes all stored confidential content, if there was any, and adds
   // |web_contents| converted to a DlpConfidentialContent.

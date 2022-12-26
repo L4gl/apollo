@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -36,7 +36,7 @@ class TestWorkingSetTrimmerChromeOS : public testing::Test {
   ~TestWorkingSetTrimmerChromeOS() override = default;
 
   void SetUp() override {
-    chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
+    ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
     arc_session_manager_ = arc::CreateTestArcSessionManager(
         std::make_unique<arc::ArcSessionRunner>(
             base::BindRepeating(arc::FakeArcSession::Create)));
@@ -57,7 +57,7 @@ class TestWorkingSetTrimmerChromeOS : public testing::Test {
     trimmer_.reset();
     testing_profile_.reset();
     TearDownArcSessionManager();
-    chromeos::ConciergeClient::Shutdown();
+    ash::ConciergeClient::Shutdown();
   }
 
  protected:

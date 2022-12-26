@@ -1,12 +1,12 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/touch_to_fill/touch_to_fill_webauthn_credential.h"
 
 TouchToFillWebAuthnCredential::TouchToFillWebAuthnCredential(
-    const std::u16string& username,
-    const std::string& backend_id)
+    const Username& username,
+    const BackendId& backend_id)
     : username_(username), backend_id_(backend_id) {}
 
 TouchToFillWebAuthnCredential::~TouchToFillWebAuthnCredential() = default;

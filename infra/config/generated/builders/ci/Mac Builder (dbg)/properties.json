@@ -30,7 +30,7 @@
           {
             "builder_id": {
               "bucket": "ci",
-              "builder": "Mac11 Tests (dbg)",
+              "builder": "Mac12 Tests (dbg)",
               "project": "chromium"
             },
             "builder_spec": {
@@ -42,6 +42,36 @@
                   "mb"
                 ],
                 "build_config": "Debug",
+                "config": "chromium",
+                "target_bits": 64,
+                "target_platform": "mac"
+              },
+              "legacy_gclient_config": {
+                "config": "chromium"
+              },
+              "parent": {
+                "bucket": "ci",
+                "builder": "Mac Builder (dbg)",
+                "project": "chromium"
+              }
+            }
+          },
+          {
+            "builder_id": {
+              "bucket": "ci",
+              "builder": "mac-osxbeta-rel",
+              "project": "chromium"
+            },
+            "builder_spec": {
+              "build_gs_bucket": "chromium-fyi-archive",
+              "builder_group": "chromium.fyi",
+              "execution_mode": "TEST",
+              "legacy_chromium_config": {
+                "apply_configs": [
+                  "mb",
+                  "goma_use_local"
+                ],
+                "build_config": "Release",
                 "config": "chromium",
                 "target_bits": 64,
                 "target_platform": "mac"
@@ -68,11 +98,20 @@
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
-          "builder": "Mac11 Tests (dbg)",
+          "builder": "Mac12 Tests (dbg)",
+          "project": "chromium"
+        },
+        {
+          "bucket": "ci",
+          "builder": "mac-osxbeta-rel",
           "project": "chromium"
         }
       ],
       "mirroring_builder_group_and_names": [
+        {
+          "builder": "mac-osxbeta-rel",
+          "group": "tryserver.chromium.mac"
+        },
         {
           "builder": "mac_chromium_compile_dbg_ng",
           "group": "tryserver.chromium.mac"
@@ -84,10 +123,10 @@
       ]
     }
   },
-  "$build/goma": {
-    "rpc_extra_params": "?prod",
-    "server_host": "goma.chromium.org",
-    "use_luci_auth": true
+  "$build/reclient": {
+    "instance": "rbe-chromium-trusted",
+    "jobs": 250,
+    "metrics_project": "chromium-reclient-metrics"
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

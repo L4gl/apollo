@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -266,7 +266,7 @@ class BLINK_PLATFORM_EXPORT MultiBuffer {
       std::vector<scoped_refptr<media::DataBuffer>>* output);
 
   // Increment max cache size by |size| (counted in blocks).
-  void IncrementMaxSize(int32_t size);
+  void IncrementMaxSize(int64_t size);
 
   // Returns how many bytes have been received by the data providers at position
   // |block|, which have not yet been submitted to the multibuffer cache.

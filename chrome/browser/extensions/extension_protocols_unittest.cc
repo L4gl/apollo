@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -85,12 +85,11 @@ base::FilePath GetContentVerifierTestPath() {
 scoped_refptr<Extension> CreateTestExtension(const std::string& name,
                                              bool incognito_split_mode,
                                              const ExtensionId& extension_id) {
-  base::DictionaryValue manifest;
-  manifest.SetStringKey("name", name);
-  manifest.SetStringKey("version", "1");
-  manifest.SetIntKey("manifest_version", 2);
-  manifest.SetStringKey("incognito",
-                        incognito_split_mode ? "split" : "spanning");
+  base::Value::Dict manifest;
+  manifest.Set("name", name);
+  manifest.Set("version", "1");
+  manifest.Set("manifest_version", 2);
+  manifest.Set("incognito", incognito_split_mode ? "split" : "spanning");
 
   base::FilePath path = GetTestPath("response_headers");
 
@@ -108,16 +107,17 @@ scoped_refptr<Extension> CreateTestExtension(const std::string& name,
 }
 
 scoped_refptr<Extension> CreateWebStoreExtension() {
-  std::unique_ptr<base::DictionaryValue> manifest =
+  base::Value::Dict manifest =
       DictionaryBuilder()
           .Set("name", "WebStore")
           .Set("version", "1")
           .Set("manifest_version", 2)
-          .Set("icons",
-               DictionaryBuilder().Set("16", "webstore_icon_16.png").Build())
+          .Set(
+              "icons",
+              DictionaryBuilder().Set("16", "webstore_icon_16.png").BuildDict())
           .Set("web_accessible_resources",
-               ListBuilder().Append("webstore_icon_16.png").Build())
-          .Build();
+               ListBuilder().Append("webstore_icon_16.png").BuildList())
+          .BuildDict();
 
   base::FilePath path;
   EXPECT_TRUE(base::PathService::Get(chrome::DIR_RESOURCES, &path));
@@ -125,7 +125,7 @@ scoped_refptr<Extension> CreateWebStoreExtension() {
 
   std::string error;
   scoped_refptr<Extension> extension(
-      Extension::Create(path, mojom::ManifestLocation::kComponent, *manifest,
+      Extension::Create(path, mojom::ManifestLocation::kComponent, manifest,
                         Extension::NO_FLAGS, &error));
   EXPECT_TRUE(extension.get()) << error;
   return extension;
@@ -134,7 +134,7 @@ scoped_refptr<Extension> CreateWebStoreExtension() {
 scoped_refptr<const Extension> CreateTestResponseHeaderExtension() {
   return ExtensionBuilder("An extension with web-accessible resources")
       .SetManifestKey("web_accessible_resources",
-                      ListBuilder().Append("test.dat").Build())
+                      ListBuilder().Append("test.dat").BuildList())
       .SetPath(GetTestPath("response_headers"))
       .Build();
 }
@@ -353,7 +353,7 @@ class ExtensionProtocolsTestBase : public testing::Test {
   content::WebContents* web_contents() { return contents_.get(); }
 
   content::RenderFrameHost* main_rfh() {
-    return web_contents()->GetMainFrame();
+    return web_contents()->GetPrimaryMainFrame();
   }
 
   content::BrowserTaskEnvironment task_environment_;
@@ -778,8 +778,8 @@ TEST_F(ExtensionProtocolsTest, MimeTypesForKnownFiles) {
         "web_accessible_resources": ["*"]
       })";
   test_dir.WriteManifest(kManifest);
-  std::unique_ptr<base::DictionaryValue> manifest =
-      base::DictionaryValue::From(base::test::ParseJsonDeprecated(kManifest));
+  std::unique_ptr<base::DictionaryValue> manifest = base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(base::test::ParseJson(kManifest)));
   ASSERT_TRUE(manifest);
 
   test_dir.WriteFile(FILE_PATH_LITERAL("json_file.json"), "{}");

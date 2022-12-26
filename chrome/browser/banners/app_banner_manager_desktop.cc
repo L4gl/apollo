@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,8 +33,8 @@
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/arc/arc_util.h"
-#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
@@ -164,7 +164,7 @@ web_app::WebAppRegistrar& AppBannerManagerDesktop::registrar() {
   auto* provider = web_app::WebAppProvider::GetForWebApps(
       Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
   DCHECK(provider);
-  return provider->registrar();
+  return provider->registrar_unsafe();
 }
 
 bool AppBannerManagerDesktop::ShouldAllowWebAppReplacementInstall() {
@@ -226,9 +226,8 @@ void AppBannerManagerDesktop::OnWebAppInstalled(
 void AppBannerManagerDesktop::OnWebAppWillBeUninstalled(
     const web_app::AppId& app_id) {
   // WebAppTabHelper has a app_id but it is reset during
-  // OnWebAppWillBeUninstalled so using FindAppWithUrlInScope.
-  auto local_app_id = registrar().FindAppWithUrlInScope(validated_url());
-  if (app_id == local_app_id)
+  // OnWebAppWillBeUninstalled so use IsUrlInAppScope() instead.
+  if (registrar().IsUrlInAppScope(validated_url(), app_id))
     uninstalling_app_id_ = app_id;
 }
 

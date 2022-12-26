@@ -1,17 +1,18 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/settings/privacy/safe_browsing/safe_browsing_standard_protection_mediator.h"
 
-#include "base/mac/foundation_util.h"
-#include "base/notreached.h"
-#include "components/password_manager/core/common/password_manager_features.h"
-#include "components/password_manager/core/common/password_manager_pref_names.h"
-#include "components/prefs/pref_service.h"
-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#import "base/mac/foundation_util.h"
+#import "base/notreached.h"
+#import "components/password_manager/core/common/password_manager_features.h"
+#import "components/password_manager/core/common/password_manager_pref_names.h"
+#import "components/prefs/pref_service.h"
+#import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/settings/cells/safe_browsing_header_item.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
@@ -22,9 +23,9 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_google_chrome_strings.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "ios/chrome/grit/ios_google_chrome_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -33,6 +34,7 @@
 using ItemArray = NSArray<TableViewItem*>*;
 
 namespace {
+
 // List of item types.
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeShieldIcon = kItemTypeEnumZero,
@@ -41,6 +43,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeSafeBrowsingExtendedReporting,
   ItemTypeSafeBrowsingManagedExtendedReporting,
 };
+
+// The size of the symbols.
+const CGFloat kSymbolSize = 20;
+
 }  // namespace
 
 @interface SafeBrowsingStandardProtectionMediator () <
@@ -53,10 +59,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // User pref service used to check if a specific pref is managed by enterprise
 // policies.
 @property(nonatomic, assign, readonly) PrefService* userPrefService;
-
-// Local pref service used to check if a specific pref is managed by enterprise
-// policies.
-@property(nonatomic, assign, readonly) PrefService* localPrefService;
 
 // Authentication service.
 @property(nonatomic, assign, readonly) AuthenticationService* authService;
@@ -105,16 +107,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
     _safeBrowsingStandardProtectionItems;
 
 - (instancetype)initWithUserPrefService:(PrefService*)userPrefService
-                       localPrefService:(PrefService*)localPrefService
                             authService:(AuthenticationService*)authService
                         identityManager:
                             (signin::IdentityManager*)identityManager {
   self = [super init];
   if (self) {
     DCHECK(userPrefService);
-    DCHECK(localPrefService);
     _userPrefService = userPrefService;
-    _localPrefService = localPrefService;
     _authService = authService;
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
@@ -186,13 +185,18 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (SafeBrowsingHeaderItem*)shieldIconHeader {
   if (!_shieldIconHeader) {
+    UIImage* shieldIcon;
+    if (UseSymbols()) {
+      shieldIcon = CustomSymbolWithPointSize(kPrivacySymbol, kSymbolSize);
+    } else {
+      shieldIcon = [[UIImage imageNamed:@"shield"]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    }
     SafeBrowsingHeaderItem* shieldIconItem = [self
              detailItemWithType:ItemTypeShieldIcon
                      detailText:
                          IDS_IOS_SAFE_BROWSING_STANDARD_PROTECTION_BULLET_ONE
-                          image:[[UIImage imageNamed:@"shield"]
-                                    imageWithRenderingMode:
-                                        UIImageRenderingModeAlwaysTemplate]
+                          image:shieldIcon
         accessibilityIdentifier:kSafeBrowsingStandardProtectionShieldCellId];
     _shieldIconHeader = shieldIconItem;
   }
@@ -201,13 +205,19 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (SafeBrowsingHeaderItem*)metricIconHeader {
   if (!_metricIconHeader) {
+    UIImage* metricIcon;
+    if (UseSymbols()) {
+      metricIcon =
+          DefaultSymbolWithPointSize(kCheckmarkCircleSymbol, kSymbolSize);
+    } else {
+      metricIcon = [[UIImage imageNamed:@"bar_chart"]
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    }
     SafeBrowsingHeaderItem* metricIconItem = [self
              detailItemWithType:ItemTypeMetricIcon
                      detailText:
                          IDS_IOS_SAFE_BROWSING_STANDARD_PROTECTION_BULLET_TWO
-                          image:[[UIImage imageNamed:@"bar_chart"]
-                                    imageWithRenderingMode:
-                                        UIImageRenderingModeAlwaysTemplate]
+                          image:metricIcon
         accessibilityIdentifier:kSafeBrowsingStandardProtectionMetricCellId];
     _metricIconHeader = metricIconItem;
   }
@@ -275,7 +285,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   managedItem.statusText = status ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
                                   : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
   if (!status) {
-    managedItem.tintColor = [UIColor colorNamed:kGrey300Color];
+    managedItem.iconTintColor = [UIColor colorNamed:kGrey300Color];
 
     // This item is not controllable, then set the color opacity to 40%.
     managedItem.textColor =

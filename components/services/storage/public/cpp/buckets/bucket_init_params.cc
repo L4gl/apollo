@@ -1,13 +1,23 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "components/services/storage/public/cpp/buckets/bucket_init_params.h"
 
+#include "components/services/storage/public/cpp/buckets/constants.h"
+
 namespace storage {
 
-BucketInitParams::BucketInitParams(blink::StorageKey storage_key)
-    : storage_key(std::move(storage_key)) {}
+BucketInitParams BucketInitParams::ForDefaultBucket(
+    const blink::StorageKey& storage_key) {
+  BucketInitParams params(storage_key, kDefaultBucketName);
+  params.durability = blink::mojom::BucketDurability::kStrict;
+  return params;
+}
+
+BucketInitParams::BucketInitParams(blink::StorageKey storage_key,
+                                   const std::string& name)
+    : storage_key(std::move(storage_key)), name(name) {}
 
 BucketInitParams::~BucketInitParams() = default;
 

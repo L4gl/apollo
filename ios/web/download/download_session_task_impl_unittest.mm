@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,6 @@
 #import "ios/web/public/test/web_task_environment.h"
 #import "ios/web/test/fakes/crw_fake_nsurl_session_task.h"
 #import "net/base/net_errors.h"
-#import "net/url_request/url_fetcher_response_writer.h"
 #import "net/url_request/url_request_context.h"
 #import "net/url_request/url_request_context_getter.h"
 #import "testing/gtest/include/gtest/gtest.h"
@@ -98,7 +97,7 @@ class DownloadSessionTaskImplTest : public PlatformTest {
   }
 
   // Updates NSURLSessionTask.countOfBytesReceived and calls
-  // URLSession:dataTask:didReceiveData: callback. |data_str| is null terminated
+  // URLSession:dataTask:didReceiveData: callback. `data_str` is null terminated
   // C-string that represents the downloaded data.
   void SimulateDataDownload(CRWFakeNSURLSessionTask* session_task,
                             const char data_str[]) {

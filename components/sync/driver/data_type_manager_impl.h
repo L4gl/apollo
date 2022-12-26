@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -52,6 +52,7 @@ class DataTypeManagerImpl : public DataTypeManager,
 
   // |ModelLoadManagerDelegate| implementation.
   void OnAllDataTypesReadyForConfigure() override;
+  // No-op if the type is not connected or has already failed.
   void OnSingleDataTypeWillStop(ModelType type,
                                 const SyncError& error) override;
 

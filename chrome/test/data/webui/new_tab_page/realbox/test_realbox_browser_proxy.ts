@@ -1,8 +1,8 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {PageCallbackRouter, PageHandlerInterface, PageRemote} from 'chrome://new-tab-page/realbox.mojom-webui.js';
+import {NavigationPredictor, PageCallbackRouter, PageHandlerInterface, PageRemote} from 'chrome://new-tab-page/omnibox.mojom-webui.js';
 import {String16} from 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-webui.js';
 import {TimeDelta, TimeTicks} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
@@ -21,6 +21,7 @@ class FakePageHandler extends TestBrowserProxy implements PageHandlerInterface {
       'deleteAutocompleteMatch',
       'executeAction',
       'logCharTypedToRepaintLatency',
+      'onNavigationLikely',
       'openAutocompleteMatch',
       'queryAutocomplete',
       'stopAutocomplete',
@@ -46,7 +47,7 @@ class FakePageHandler extends TestBrowserProxy implements PageHandlerInterface {
       altKey,
       ctrlKey,
       metaKey,
-      shiftKey
+      shiftKey,
     });
   }
 
@@ -67,8 +68,12 @@ class FakePageHandler extends TestBrowserProxy implements PageHandlerInterface {
       altKey,
       ctrlKey,
       metaKey,
-      shiftKey
+      shiftKey,
     });
+  }
+
+  onNavigationLikely(line: number, navigationPredictor: NavigationPredictor) {
+    this.methodCalled('onNavigationLikely', {line, navigationPredictor});
   }
 
   queryAutocomplete(input: String16, preventInlineAutocomplete: boolean) {

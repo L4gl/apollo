@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -58,6 +58,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
+import org.chromium.content.webid.IdentityRequestDialogDismissReason;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
@@ -97,7 +98,7 @@ public class AccountSelectionIntegrationTest {
     private static final Account BOB = new Account("Bob", "", "Bob", "", TEST_PROFILE_PIC, false);
 
     private static final IdentityProviderMetadata IDP_METADATA =
-            new IdentityProviderMetadata(Color.BLACK, Color.BLACK, null);
+            new IdentityProviderMetadata(Color.BLACK, Color.BLACK, null, null);
 
     private AccountSelectionComponent mAccountSelection;
 
@@ -116,12 +117,11 @@ public class AccountSelectionIntegrationTest {
     @Before
     public void setUp() throws InterruptedException {
         MockitoAnnotations.initMocks(this);
-        mAccountSelection = new AccountSelectionCoordinator();
         mActivityTestRule.startMainActivityOnBlankPage();
         runOnUiThreadBlocking(() -> {
             mBottomSheetController = BottomSheetControllerProvider.from(
                     mActivityTestRule.getActivity().getWindowAndroid());
-            mAccountSelection.initialize(
+            mAccountSelection = new AccountSelectionCoordinator(
                     mActivityTestRule.getActivity(), mBottomSheetController, mMockBridge);
         });
 
@@ -144,8 +144,8 @@ public class AccountSelectionIntegrationTest {
 
         Espresso.pressBack();
 
-        waitForEvent(mMockBridge).onDismissed(/*shouldEmbargo=*/false);
-        verify(mMockBridge, never()).onAccountSelected(any());
+        waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.OTHER);
+        verify(mMockBridge, never()).onAccountSelected(any(), any());
     }
 
     private void testClickOnConsentLink(int linkIndex, String expectedUrl) {
@@ -210,8 +210,8 @@ public class AccountSelectionIntegrationTest {
             mAccountSelection.showAccounts(EXAMPLE_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1,
                     Arrays.asList(ANA, BOB), IDP_METADATA, mClientIdMetadata, false);
         });
-        waitForEvent(mMockBridge).onDismissed(/*shouldEmbargo=*/false);
-        verify(mMockBridge, never()).onAccountSelected(any());
+        waitForEvent(mMockBridge).onDismissed(IdentityRequestDialogDismissReason.OTHER);
+        verify(mMockBridge, never()).onAccountSelected(any(), any());
         Espresso.onView(withText("Another bottom sheet content")).check(matches(isDisplayed()));
 
         runOnUiThreadBlocking(

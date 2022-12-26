@@ -1,4 +1,4 @@
-# Copyright 2022 The Chromium Authors. All rights reserved.
+# Copyright 2022 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Validate mojo attributes are allowed in Chrome before generation."""
@@ -80,13 +80,7 @@ _UNION_FIELD_ATTRIBUTES = _COMMON_FIELD_ATTRIBUTES | {
 
 # TODO(https://crbug.com/1193875) empty this set and remove the allowlist.
 _STABLE_ONLY_ALLOWLISTED_ENUMS = {
-    'ash.ime.mojom.CommitTextCursorBehavior',
-    'ash.ime.mojom.KeyEventResult',
-    'ash.ime.mojom.KeyEventType',
     'crosapi.mojom.OptionalBool',
-    'crosapi.mojom.RequestActivityIconsStatus',
-    'crosapi.mojom.RequestTextSelectionActionsStatus',
-    'crosapi.mojom.RequestUrlHandlerListStatus',
     'crosapi.mojom.TriState',
 }
 

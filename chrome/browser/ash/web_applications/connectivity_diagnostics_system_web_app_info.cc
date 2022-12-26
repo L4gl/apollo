@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,11 +39,10 @@ CreateWebAppInfoForConnectivityDiagnosticsSystemWebApp() {
 
 ConnectivityDiagnosticsSystemAppDelegate::
     ConnectivityDiagnosticsSystemAppDelegate(Profile* profile)
-    : web_app::SystemWebAppDelegate(
-          web_app::SystemAppType::CONNECTIVITY_DIAGNOSTICS,
-          "ConnectivityDiagnostics",
-          GURL(ash::kChromeUIConnectivityDiagnosticsUrl),
-          profile) {}
+    : ash::SystemWebAppDelegate(ash::SystemWebAppType::CONNECTIVITY_DIAGNOSTICS,
+                                "ConnectivityDiagnostics",
+                                GURL(ash::kChromeUIConnectivityDiagnosticsUrl),
+                                profile) {}
 
 std::unique_ptr<WebAppInstallInfo>
 ConnectivityDiagnosticsSystemAppDelegate::GetWebAppInfo() const {

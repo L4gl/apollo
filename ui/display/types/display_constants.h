@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <array>
 
+#include "base/containers/flat_map.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace display {
@@ -36,6 +37,13 @@ constexpr int32_t kInvalidYearOfManufacture = -1;
 // confusion, set this as the minimum maximum relative luminance for HDR
 // capable displays.
 constexpr float kMinHDRCapableMaxLuminanceRelative = 1.0625;
+// Set SDR content to 75% of display brightness so SDR colors look good
+// and there is no perceived brightness change during SDR-HDR.
+constexpr float kSDRJoint = 0.75;
+
+// Set the HDR level multiplier to 4x so that the bright areas of the videos
+// are not overexposed, and maintain local contrast.
+constexpr float kHDRLevel = 4.0;
 
 // Used to describe the state of a multi-display configuration.
 enum MultipleDisplayState {
@@ -108,6 +116,40 @@ enum PrivacyScreenState {
   kNotSupported = 4,
   kPrivacyScreenLegacyStateLast = kDisabledLocked,
   kPrivacyScreenStateLast = kNotSupported,
+};
+
+// The requested state for refresh rate throttling.
+enum RefreshRateThrottleState {
+  kRefreshRateThrottleEnabled,
+  kRefreshRateThrottleDisabled,
+};
+
+// Whether a configuration should be seamless or full. Full configuration may
+// result in visible artifacts such as blanking to achieve the specified
+// configuration. Seamless configuration requests will fail if the system cannot
+// achieve it without visible artifacts.
+enum ConfigurationType {
+  kConfigurationTypeFull,
+  kConfigurationTypeSeamless,
+};
+
+// A flag to allow ui/display and ozone to adjust the behavior of display
+// configurations.
+enum ModesetFlag {
+  // At least one of kTestModeset and kCommitModeset must be set.
+  kTestModeset = 1 << 0,
+  kCommitModeset = 1 << 1,
+  // When |kSeamlessModeset| is set, the commit (or test) will succeed only if
+  // the submitted configuration can be completed without visual artifacts such
+  // as blanking.
+  kSeamlessModeset = 1 << 2,
+};
+
+enum VariableRefreshRateState {
+  kVrrDisabled = 0,
+  kVrrEnabled = 1,
+  kVrrNotCapable = 2,
+  kVrrLast = kVrrNotCapable,
 };
 
 // Defines the float values closest to repeating decimal scale factors.
@@ -253,6 +295,12 @@ constexpr struct Data {
 
     // clang-format on
 };
+
+// A map of DRM formats and modifiers that are supported by the hardware planes
+// of the display.
+// See third_party/libdrm/src/include/drm/drm_fourcc.h for the canonical list of
+// formats and modifiers
+using DrmFormatsAndModifiers = base::flat_map<uint32_t, std::vector<uint64_t>>;
 
 }  // namespace display
 

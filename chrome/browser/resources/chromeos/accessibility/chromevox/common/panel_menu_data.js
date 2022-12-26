@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,26 +7,65 @@
  * the background context to the panel context.
  */
 
-goog.provide('PanelNodeMenuData');
-goog.provide('PanelNodeMenuItemData');
-goog.provide('ALL_NODE_MENU_DATA');
+import {AutomationPredicate} from '../../common/automation_predicate.js';
 
-goog.require('AutomationPredicate');
+import {BridgeCallbackId} from './bridge_callback_manager.js';
 
-/** @typedef {{titleId: string, predicate: !AutomationPredicate.Unary}} */
-let PanelNodeMenuData;
+/** @enum {number} */
+export const PanelNodeMenuId = {
+  HEADING: 1,
+  LANDMARK: 2,
+  LINK: 3,
+  FORM_CONTROL: 4,
+  TABLE: 5,
+};
 
-/** @typedef {{title: string, callback: function(), isActive: boolean}} */
-let PanelNodeMenuItemData;
+/**
+ * @typedef {{
+ *     menuId: !PanelNodeMenuId,
+ *     titleId: string,
+ *     predicate: !AutomationPredicate.Unary
+ * }}
+ */
+export let PanelNodeMenuData;
 
-/** @const {!Array<!PanelNodeMenuData>} */
-ALL_NODE_MENU_DATA = [
-  {titleId: 'role_heading', predicate: AutomationPredicate.heading},
-  {titleId: 'role_landmark', predicate: AutomationPredicate.landmark},
-  {titleId: 'role_link', predicate: AutomationPredicate.link},
+/**
+ * @typedef {{
+ *     title: string,
+ *     callbackId: ?BridgeCallbackId,
+ *     isActive: boolean,
+ *     menuId: !PanelNodeMenuId
+ * }}
+ */
+export let PanelNodeMenuItemData;
+
+/** @typedef {{title: string, windowId: number, tabId: number}} */
+export let PanelTabMenuItemData;
+
+export const ALL_PANEL_MENU_NODE_DATA = [
   {
-    titleId: 'panel_menu_form_controls',
-    predicate: AutomationPredicate.formField
+    menuId: PanelNodeMenuId.HEADING,
+    titleId: 'role_heading',
+    predicate: AutomationPredicate.heading,
   },
-  {titleId: 'role_table', predicate: AutomationPredicate.table},
+  {
+    menuId: PanelNodeMenuId.LANDMARK,
+    titleId: 'role_landmark',
+    predicate: AutomationPredicate.landmark,
+  },
+  {
+    menuId: PanelNodeMenuId.LINK,
+    titleId: 'role_link',
+    predicate: AutomationPredicate.link,
+  },
+  {
+    menuId: PanelNodeMenuId.FORM_CONTROL,
+    titleId: 'panel_menu_form_controls',
+    predicate: AutomationPredicate.formField,
+  },
+  {
+    menuId: PanelNodeMenuId.TABLE,
+    titleId: 'role_table',
+    predicate: AutomationPredicate.table,
+  },
 ];

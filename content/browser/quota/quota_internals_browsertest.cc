@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@ class QuotaInternalsWebUiBrowserTest : public ContentBrowserTest {
   // to execute the script because WebUI has a default CSP policy denying
   // "eval()", which is what EvalJs uses under the hood.
   bool ExecJsInWebUI(const std::string& script) {
-    return ExecJs(shell()->web_contents()->GetMainFrame(), script,
+    return ExecJs(shell()->web_contents()->GetPrimaryMainFrame(), script,
                   EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */);
   }
 };

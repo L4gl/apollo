@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -72,7 +72,7 @@ IN_PROC_BROWSER_TEST_F(WebstoreReinstallerBrowserTest, TestWebstoreReinstall) {
                            .Set("description", "Foo")
                            .Set("manifest_version", 2)
                            .Set("version", "1.0")
-                           .Build())
+                           .BuildDict())
           .Build();
   extension_service()->AddExtension(extension.get());
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile());

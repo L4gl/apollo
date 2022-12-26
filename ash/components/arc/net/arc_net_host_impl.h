@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2015 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,10 +19,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/values.h"
+#include "chromeos/ash/components/dbus/patchpanel/patchpanel_client.h"
 #include "chromeos/ash/components/dbus/patchpanel/patchpanel_service.pb.h"
-#include "chromeos/network/network_connection_observer.h"
-#include "chromeos/network/network_profile_handler.h"
-#include "chromeos/network/network_state_handler_observer.h"
+#include "chromeos/ash/components/network/network_connection_observer.h"
+#include "chromeos/ash/components/network/network_profile_handler.h"
+#include "chromeos/ash/components/network/network_state_handler_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 namespace content {
@@ -38,8 +39,9 @@ class ArcBridgeService;
 // Private implementation of ArcNetHost.
 class ArcNetHostImpl : public KeyedService,
                        public ConnectionObserver<mojom::NetInstance>,
-                       public chromeos::NetworkConnectionObserver,
-                       public chromeos::NetworkStateHandlerObserver,
+                       public ash::NetworkConnectionObserver,
+                       public ash::NetworkStateHandlerObserver,
+                       public ash::PatchPanelClient::Observer,
                        public mojom::NetHost {
  public:
   // Returns singleton instance for the given BrowserContext,
@@ -60,55 +62,44 @@ class ArcNetHostImpl : public KeyedService,
   void SetPrefService(PrefService* pref_service);
   void SetCertManager(std::unique_ptr<CertManager> cert_manager);
 
-  // ARC -> Chrome calls:
-
+  // Overridden from mojom::NetHost.
   void GetNetworks(mojom::GetNetworksRequestType type,
                    GetNetworksCallback callback) override;
-
   void GetWifiEnabledState(GetWifiEnabledStateCallback callback) override;
-
   void SetWifiEnabledState(bool is_enabled,
                            SetWifiEnabledStateCallback callback) override;
-
   void StartScan() override;
-
   void CreateNetwork(mojom::WifiConfigurationPtr cfg,
                      CreateNetworkCallback callback) override;
-
   void ForgetNetwork(const std::string& guid,
                      ForgetNetworkCallback callback) override;
-
   void StartConnect(const std::string& guid,
                     StartConnectCallback callback) override;
-
   void StartDisconnect(const std::string& guid,
                        StartDisconnectCallback callback) override;
-
   void AndroidVpnConnected(mojom::AndroidVpnConfigurationPtr cfg) override;
-
   void AndroidVpnStateChanged(mojom::ConnectionStateType state) override;
-
   void AddPasspointCredentials(
       mojom::PasspointCredentialsPtr credentials) override;
-
   void RemovePasspointCredentials(
       mojom::PasspointRemovalPropertiesPtr properties) override;
-
   void SetAlwaysOnVpn(const std::string& vpnPackage, bool lockdown) override;
-
   std::unique_ptr<base::DictionaryValue> TranslateVpnConfigurationToOnc(
       const mojom::AndroidVpnConfiguration& cfg);
+  void DisconnectHostVpn() override;
+  void StartLohs(mojom::LohsConfigPtr config,
+                 StartLohsCallback callback) override;
+  void StopLohs() override;
 
-  // Overridden from chromeos::NetworkStateHandlerObserver.
-  void ScanCompleted(const chromeos::DeviceState* /*unused*/) override;
+  // Overridden from ash::NetworkStateHandlerObserver.
+  void ScanCompleted(const ash::DeviceState* /*unused*/) override;
   void OnShuttingDown() override;
-  void NetworkConnectionStateChanged(
-      const chromeos::NetworkState* network) override;
+  void NetworkConnectionStateChanged(const ash::NetworkState* network) override;
   void NetworkListChanged() override;
   void DeviceListChanged() override;
-  void NetworkPropertiesUpdated(const chromeos::NetworkState* network) override;
+  void NetworkPropertiesUpdated(const ash::NetworkState* network) override;
 
-  // Overridden from chromeos::NetworkConnectionObserver.
+  // Overridden from ash::NetworkConnectionObserver.
   void DisconnectRequested(const std::string& service_path) override;
 
   // Overridden from ConnectionObserver<mojom::NetInstance>:
@@ -116,7 +107,7 @@ class ArcNetHostImpl : public KeyedService,
   void OnConnectionClosed() override;
 
  private:
-  const chromeos::NetworkState* GetDefaultNetworkFromChrome();
+  const ash::NetworkState* GetDefaultNetworkFromChrome();
   void UpdateActiveNetworks(
       const std::vector<patchpanel::NetworkDevice>& devices);
   void DefaultNetworkSuccessCallback(const std::string& service_path,
@@ -197,9 +188,15 @@ class ArcNetHostImpl : public KeyedService,
       base::OnceCallback<void(base::Value)> callback,
       base::Value dict);
 
+  base::Value::Dict TranslateProxyConfiguration(
+      const mojom::ArcProxyInfoPtr& http_proxy);
+
   // Synchronously calls Chrome OS to add passpoint credentials from ARC with
   // the properties values translated taken from mojo.
   void AddPasspointCredentialsWithProperties(base::Value properties);
+
+  // Pass any Chrome flags into ARC.
+  void SetUpFlags();
 
   void CreateNetworkSuccessCallback(
       base::OnceCallback<void(const std::string&)> callback,
@@ -210,9 +207,12 @@ class ArcNetHostImpl : public KeyedService,
       base::OnceCallback<void(const std::string&)> callback,
       const std::string& error_name);
 
-  // Callback for chromeos::NetworkHandler::GetShillProperties
+  // Callback for ash::NetworkHandler::GetShillProperties
   void ReceiveShillProperties(const std::string& service_path,
                               absl::optional<base::Value> shill_properties);
+
+  // PatchPanelClient::Observer implementation:
+  void NetworkConfigurationChanged() override;
 
   ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
 

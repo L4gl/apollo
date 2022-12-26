@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ scoped_refptr<InputMethodManager::State> MockInputMethodManager::State::Clone()
 void MockInputMethodManager::State::AddInputMethodExtension(
     const std::string& extension_id,
     const InputMethodDescriptors& descriptors,
-    ui::IMEEngineHandlerInterface* instance) {}
+    ui::TextInputMethod* instance) {}
 
 void MockInputMethodManager::State::RemoveInputMethodExtension(
     const std::string& extension_id) {}
@@ -48,14 +48,14 @@ void MockInputMethodManager::State::DisableNonLockScreenLayouts() {}
 void MockInputMethodManager::State::GetInputMethodExtensions(
     InputMethodDescriptors* result) {}
 
-std::unique_ptr<InputMethodDescriptors> MockInputMethodManager::State::
+InputMethodDescriptors MockInputMethodManager::State::
     GetEnabledInputMethodsSortedByLocalizedDisplayNames() const {
-  return nullptr;
+  return {};
 }
 
-std::unique_ptr<InputMethodDescriptors>
-MockInputMethodManager::State::GetEnabledInputMethods() const {
-  return nullptr;
+InputMethodDescriptors MockInputMethodManager::State::GetEnabledInputMethods()
+    const {
+  return {};
 }
 
 const std::vector<std::string>&
@@ -234,32 +234,11 @@ bool MockInputMethodManager::GetImeMenuFeatureEnabled(
 
 void MockInputMethodManager::NotifyObserversImeExtraInputStateChange() {}
 
-ui::VirtualKeyboardController*
-MockInputMethodManager::GetVirtualKeyboardController() {
-  return this;
-}
-
 void MockInputMethodManager::NotifyInputMethodExtensionAdded(
     const std::string& extension_id) {}
 
 void MockInputMethodManager::NotifyInputMethodExtensionRemoved(
     const std::string& extension_id) {}
-
-bool MockInputMethodManager::DisplayVirtualKeyboard() {
-  return false;
-}
-
-void MockInputMethodManager::DismissVirtualKeyboard() {}
-
-void MockInputMethodManager::AddObserver(
-    ui::VirtualKeyboardControllerObserver* observer) {}
-
-void MockInputMethodManager::RemoveObserver(
-    ui::VirtualKeyboardControllerObserver* observer) {}
-
-bool MockInputMethodManager::IsKeyboardVisible() {
-  return false;
-}
 
 }  // namespace input_method
 }  // namespace ash

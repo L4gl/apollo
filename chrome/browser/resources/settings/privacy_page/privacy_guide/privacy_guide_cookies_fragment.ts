@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -9,7 +9,7 @@
  */
 import '../../prefs/prefs.js';
 import './privacy_guide_description_item.js';
-import './privacy_guide_fragment_shared_css.js';
+import './privacy_guide_fragment_shared.css.js';
 import '../../controls/settings_radio_group.js';
 import '../../privacy_page/collapse_radio_button.js';
 
@@ -97,12 +97,12 @@ export class PrivacyGuideCookiesFragmentElement extends
     this.metricsBrowserProxy_.recordPrivacyGuideSettingsStatesHistogram(state!);
   }
 
-  private onCookies3PIncognitoClick_() {
+  private onCookies3pIncognitoClick_() {
     this.metricsBrowserProxy_.recordAction(
         'Settings.PrivacyGuide.ChangeCookiesBlock3PIncognito');
   }
 
-  private onCookies3PClick_() {
+  private onCookies3pClick_() {
     this.metricsBrowserProxy_.recordAction(
         'Settings.PrivacyGuide.ChangeCookiesBlock3P');
   }

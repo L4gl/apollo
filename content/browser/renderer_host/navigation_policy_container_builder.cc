@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -140,9 +140,7 @@ NavigationPolicyContainerBuilder::DeliveredPoliciesForTesting() const {
   return delivered_policies_;
 }
 
-void NavigationPolicyContainerBuilder::ComputePoliciesForError(
-    bool is_inside_mhtml,
-    network::mojom::WebSandboxFlags frame_sandbox_flags) {
+void NavigationPolicyContainerBuilder::ComputePoliciesForError() {
   // The decision to commit an error page can happen after receiving the
   // response for a regular document. It overrides any previous attempt to
   // |ComputePolicies()|.
@@ -159,8 +157,6 @@ void NavigationPolicyContainerBuilder::ComputePoliciesForError(
   // request (from the unknown/public address space to private). See also
   // crbug.com/1180140.
   policies.ip_address_space = delivered_policies_.ip_address_space;
-
-  ComputeSandboxFlags(is_inside_mhtml, frame_sandbox_flags, policies);
 
   SetFinalPolicies(std::move(policies));
 
@@ -241,7 +237,8 @@ NavigationPolicyContainerBuilder::ComputeInheritedPolicies(const GURL& url) {
 PolicyContainerPolicies NavigationPolicyContainerBuilder::ComputeFinalPolicies(
     const GURL& url,
     bool is_inside_mhtml,
-    network::mojom::WebSandboxFlags frame_sandbox_flags) {
+    network::mojom::WebSandboxFlags frame_sandbox_flags,
+    bool is_credentialless) {
   PolicyContainerPolicies policies;
 
   // Policies are either inherited from another document for local scheme, or
@@ -261,22 +258,38 @@ PolicyContainerPolicies NavigationPolicyContainerBuilder::ComputeFinalPolicies(
     IncorporateDeliveredPolicies(url, policies);
   }
 
+  // `can_navigate_top_without_user_gesture` is inherited from the parent.
+  // Later in `NavigationRequest::CommitNavigation()` it will either be made
+  // less strict for same-origin navigations, or stricter for cross-origin
+  // navigations that do not explicitly allow top-level navigation without user
+  // gesture.
+  policies.can_navigate_top_without_user_gesture =
+      parent_policies_ ? parent_policies_->can_navigate_top_without_user_gesture
+                       : true;
+
   ComputeSandboxFlags(is_inside_mhtml, frame_sandbox_flags, policies);
+  policies.is_credentialless = is_credentialless;
   return policies;
 }
 
 void NavigationPolicyContainerBuilder::ComputePolicies(
     const GURL& url,
     bool is_inside_mhtml,
-    network::mojom::WebSandboxFlags frame_sandbox_flags) {
+    network::mojom::WebSandboxFlags frame_sandbox_flags,
+    bool is_credentialless) {
   DCHECK(!HasComputedPolicies());
   ComputeIsWebSecureContext();
-  SetFinalPolicies(
-      ComputeFinalPolicies(url, is_inside_mhtml, frame_sandbox_flags));
+  SetFinalPolicies(ComputeFinalPolicies(
+      url, is_inside_mhtml, frame_sandbox_flags, is_credentialless));
 }
 
 bool NavigationPolicyContainerBuilder::HasComputedPolicies() const {
   return host_ != nullptr;
+}
+
+void NavigationPolicyContainerBuilder::SetAllowTopNavigationWithoutUserGesture(
+    bool allow_top) {
+  host_->SetCanNavigateTopWithoutUserGesture(allow_top);
 }
 
 void NavigationPolicyContainerBuilder::SetFinalPolicies(

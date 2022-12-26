@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,7 @@ using LaunchKioskAppCallback =
 class ChromeKioskLaunchControllerLacros
     : public crosapi::mojom::ChromeKioskLaunchController {
  public:
-  ChromeKioskLaunchControllerLacros();
+  explicit ChromeKioskLaunchControllerLacros(Profile& profile);
   ChromeKioskLaunchControllerLacros(const ChromeKioskLaunchControllerLacros&) =
       delete;
   ChromeKioskLaunchControllerLacros& operator=(
@@ -37,6 +37,10 @@ class ChromeKioskLaunchControllerLacros
                       LaunchKioskAppCallback callback) override;
 
  private:
+  Profile& profile_;
+  std::unique_ptr<ash::ChromeKioskAppInstaller> installer_;
+  std::unique_ptr<ash::ChromeKioskAppLauncher> launcher_;
+
   mojo::Receiver<crosapi::mojom::ChromeKioskLaunchController>
       controller_receiver_{this};
 };

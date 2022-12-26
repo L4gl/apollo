@@ -1,28 +1,28 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 
-#include "base/strings/sys_string_conversions.h"
-#include "components/open_from_clipboard/clipboard_recent_content.h"
-#include "components/prefs/pref_service.h"
-#include "components/search_engines/template_url_service.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/open_from_clipboard/clipboard_recent_content.h"
+#import "components/prefs/pref_service.h"
+#import "components/search_engines/template_url_service.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
-#import "ios/chrome/browser/ui/icons/action_icon.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/menu/action_factory+protected.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
@@ -45,7 +45,7 @@
 @implementation BrowserActionFactory
 
 - (instancetype)initWithBrowser:(Browser*)browser
-                       scenario:(MenuScenario)scenario {
+                       scenario:(MenuScenarioHistogram)scenario {
   DCHECK(browser);
   if (self = [super initWithScenario:scenario]) {
     _browser = browser;
@@ -102,11 +102,14 @@
   UIImage* image = UseSymbols() ? CustomSymbolWithPointSize(
                                       kIncognitoSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"open_in_incognito"];
+  ProceduralBlock completionBlock =
+      [self recordMobileWebContextMenuOpenTabActionWithBlock:block];
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_OPEN_IN_INCOGNITO_ACTION_TITLE)
                          image:image
                           type:MenuActionType::OpenInNewIncognitoTab
-                         block:block];
+                         block:completionBlock];
 }
 
 - (UIAction*)actionToOpenInNewWindowWithURL:(const GURL)URL
@@ -150,9 +153,13 @@
                          completion:(ProceduralBlock)completion {
   UrlLoadingBrowserAgent* loadingAgent =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
+  UIImage* image = UseSymbols()
+                       ? DefaultSymbolWithPointSize(kOpenImageActionSymbol,
+                                                    kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"open"];
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENIMAGE)
-                image:[UIImage imageNamed:@"open"]
+                image:image
                  type:MenuActionType::OpenImageInCurrentTab
                 block:^{
                   loadingAgent->Load(UrlLoadParams::InCurrentTab(URL));
@@ -168,10 +175,14 @@
                                                (ProceduralBlock)completion {
   UrlLoadingBrowserAgent* loadingAgent =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
+  UIImage* image = UseSymbols()
+                       ? CustomSymbolWithPointSize(kPhotoBadgePlusSymbol,
+                                                   kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"open_image_in_new_tab"];
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_CONTENT_CONTEXT_OPENIMAGENEWTAB)
-                      image:[UIImage imageNamed:@"open_image_in_new_tab"]
+                      image:image
                        type:MenuActionType::OpenImageInNewTab
                       block:^{
                         loadingAgent->Load(params);
@@ -203,11 +214,11 @@
 - (UIAction*)actionToOpenNewIncognitoTab {
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
-  // TODO(crbug.com/1285015): Add the image.
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB)
-                      image:nil
+                      image:CustomSymbolWithPointSize(kIncognitoSymbol,
+                                                      kSymbolActionPointSize)
                        type:MenuActionType::OpenNewIncognitoTab
                       block:^{
                         [handler openURLInNewTab:[OpenNewTabCommand
@@ -220,8 +231,8 @@
 }
 
 - (UIAction*)actionToCloseCurrentTab {
-  __weak id<BrowserCommands> handler =
-      static_cast<id<BrowserCommands>>(self.browser->GetCommandDispatcher());
+  __weak id<BrowserCoordinatorCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), BrowserCoordinatorCommands);
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_CLOSE_TAB)
                       image:DefaultSymbolWithPointSize(kXMarkSymbol,
@@ -285,15 +296,15 @@
 - (UIAction*)actionToStartNewIncognitoSearch {
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
-  // TODO(crbug.com/1285015): Add the image.
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_SEARCH)
-                      image:nil
+                      image:CustomSymbolWithPointSize(kIncognitoSymbol,
+                                                      kSymbolActionPointSize)
                        type:MenuActionType::StartNewIcognitoSearch
                       block:^{
                         OpenNewTabCommand* command =
-                            [OpenNewTabCommand commandWithIncognito:NO];
+                            [OpenNewTabCommand commandWithIncognito:YES];
                         command.shouldFocusOmnibox = YES;
                         [handler openURLInNewTab:command];
                       }];

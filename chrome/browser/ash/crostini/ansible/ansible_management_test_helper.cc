@@ -1,10 +1,11 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/crostini/ansible/ansible_management_test_helper.h"
 
 #include "base/files/file_util.h"
+#include "chrome/browser/ash/crostini/ansible/ansible_management_service_factory.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,9 +14,22 @@
 
 namespace crostini {
 
+// static
+MockAnsibleManagementService*
+AnsibleManagementTestHelper::SetUpMockAnsibleManagementService(
+    Profile* profile) {
+  return static_cast<MockAnsibleManagementService*>(
+      AnsibleManagementServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+          profile, base::BindRepeating(
+                       [](Profile* profile, content::BrowserContext* context) {
+                         return MockAnsibleManagementService::Build(profile);
+                       },
+                       profile)));
+}
+
 AnsibleManagementTestHelper::AnsibleManagementTestHelper(Profile* profile)
     : profile_(profile) {
-  fake_cicerone_client_ = chromeos::FakeCiceroneClient::Get();
+  fake_cicerone_client_ = ash::FakeCiceroneClient::Get();
 }
 
 void AnsibleManagementTestHelper::SetUpAnsiblePlaybookPreference() {

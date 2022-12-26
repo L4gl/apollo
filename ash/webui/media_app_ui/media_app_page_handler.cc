@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,16 +6,13 @@
 
 #include <utility>
 
+#include "ash/webui/media_app_ui/file_system_access_helpers.h"
 #include "ash/webui/media_app_ui/media_app_ui.h"
 #include "ash/webui/media_app_ui/media_app_ui_delegate.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "content/public/browser/browser_context.h"
-#include "content/public/browser/file_system_access_entry_factory.h"
-#include "content/public/browser/render_process_host.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 
 namespace ash {
@@ -56,16 +53,33 @@ void MediaAppPageHandler::ToggleBrowserFullscreenMode(
   std::move(callback).Run();
 }
 
+void MediaAppPageHandler::MaybeTriggerPdfHats(
+    MaybeTriggerPdfHatsCallback callback) {
+  media_app_ui_->delegate()->MaybeTriggerPdfHats();
+  std::move(callback).Run();
+}
+
+void MediaAppPageHandler::IsFileArcWritable(
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token,
+    IsFileArcWritableCallback callback) {
+  media_app_ui_->delegate()->IsFileArcWritable(std::move(token),
+                                               std::move(callback));
+}
+
 void MediaAppPageHandler::IsFileBrowserWritable(
     mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token,
     IsFileBrowserWritableCallback callback) {
-  auto* web_contents = media_app_ui_->web_ui()->GetWebContents();
-  web_contents->GetBrowserContext()
-      ->GetStoragePartition(web_contents->GetSiteInstance())
-      ->GetFileSystemAccessEntryFactory()
-      ->ResolveTransferToken(
-          std::move(token),
-          base::BindOnce(&IsFileURLBrowserWritable, std::move(callback)));
+  ash::ResolveTransferToken(
+      std::move(token), media_app_ui_->web_ui()->GetWebContents(),
+      base::BindOnce(&IsFileURLBrowserWritable, std::move(callback)));
+}
+
+void MediaAppPageHandler::EditInPhotos(
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token,
+    const std::string& mime_type,
+    EditInPhotosCallback callback) {
+  media_app_ui_->delegate()->EditInPhotos(std::move(token), mime_type,
+                                          std::move(callback));
 }
 
 }  // namespace ash

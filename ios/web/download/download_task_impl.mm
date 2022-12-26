@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,7 +14,6 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/bind_post_task.h"
 #import "base/task/sequenced_task_runner.h"
-#import "base/threading/sequenced_task_runner_handle.h"
 #import "ios/web/download/download_result.h"
 #import "ios/web/public/download/download_task_observer.h"
 #import "ios/web/public/web_state.h"
@@ -129,7 +128,7 @@ DownloadTaskImpl::DownloadTaskImpl(
   DCHECK(task_runner_);
 
   base::RepeatingClosure closure = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindRepeating(&DownloadTaskImpl::OnAppWillResignActive,
                           weak_factory_.GetWeakPtr()));
 

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,11 +26,12 @@ class ChromePermissionsClient : public permissions::PermissionsClient {
       content::BrowserContext* browser_context) override;
   bool IsSubresourceFilterActivated(content::BrowserContext* browser_context,
                                     const GURL& url) override;
+  permissions::OriginKeyedPermissionActionService*
+  GetOriginKeyedPermissionActionService(
+      content::BrowserContext* browser_context) override;
   permissions::PermissionActionsHistory* GetPermissionActionsHistory(
       content::BrowserContext* browser_context) override;
   permissions::PermissionDecisionAutoBlocker* GetPermissionDecisionAutoBlocker(
-      content::BrowserContext* browser_context) override;
-  permissions::PermissionManager* GetPermissionManager(
       content::BrowserContext* browser_context) override;
   permissions::ObjectPermissionContextBase* GetChooserContext(
       content::BrowserContext* browser_context,
@@ -74,8 +75,10 @@ class ChromePermissionsClient : public permissions::PermissionsClient {
   absl::optional<GURL> OverrideCanonicalOrigin(
       const GURL& requesting_origin,
       const GURL& embedding_origin) override;
-  bool DoOriginsMatchNewTabPage(const GURL& requesting_origin,
-                                const GURL& embedding_origin) override;
+  // Checks if `requesting_origin` and `embedding_origin` are the new tab page
+  // origins.
+  bool DoURLsMatchNewTabPage(const GURL& requesting_origin,
+                             const GURL& embedding_origin) override;
 #if BUILDFLAG(IS_ANDROID)
   bool IsDseOrigin(content::BrowserContext* browser_context,
                    const url::Origin& origin) override;
@@ -92,6 +95,9 @@ class ChromePermissionsClient : public permissions::PermissionsClient {
   void RepromptForAndroidPermissions(
       content::WebContents* web_contents,
       const std::vector<ContentSettingsType>& content_settings_types,
+      const std::vector<ContentSettingsType>& filtered_content_settings_types,
+      const std::vector<std::string>& required_permissions,
+      const std::vector<std::string>& optional_permissions,
       PermissionsUpdatedCallback callback) override;
   int MapToJavaDrawableId(int resource_id) override;
 #else

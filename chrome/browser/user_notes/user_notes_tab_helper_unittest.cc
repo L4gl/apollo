@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -43,8 +43,10 @@ MATCHER(HasUserNoteManager, "") {
 
 class MockUserNoteService : public UserNoteService {
  public:
+  // A service delegate and user note storage are not needed for these tests, so
+  // pass nullptr.
   MockUserNoteService()
-      : UserNoteService(std::unique_ptr<UserNoteServiceDelegate>()) {}
+      : UserNoteService(/*delegate=*/nullptr, /*storage=*/nullptr) {}
 
   MOCK_METHOD(void,
               OnFrameNavigated,

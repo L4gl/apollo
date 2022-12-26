@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,8 +50,7 @@ bool IsControlChar(const std::u16string& text) {
 ui::TextInputClient* GetTextInputClient() {
   ui::IMEBridge* bridge = ui::IMEBridge::Get();
   DCHECK(bridge);
-  ui::IMEInputContextHandlerInterface* handler =
-      bridge->GetInputContextHandler();
+  ui::TextInputTarget* handler = bridge->GetInputContextHandler();
   if (!handler)
     return nullptr;
   ui::TextInputClient* client = handler->GetInputMethod()->GetTextInputClient();
@@ -158,8 +157,8 @@ void InputConnectionImpl::DeleteSurroundingText(int before, int after) {
   // |before| is a number of characters is going to be deleted before the cursor
   // and |after| is a number of characters is going to be deleted after the
   // cursor.
-  if (!ime_engine_->DeleteSurroundingText(input_context_id_, -before,
-                                          before + after, &error)) {
+  if (!ime_engine_->DeleteSurroundingText(input_context_id_, before, after,
+                                          &error)) {
     LOG(ERROR) << "DeleteSurroundingText failed: before = " << before
                << ", after = " << after << ", error = \"" << error << "\"";
   }

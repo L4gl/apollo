@@ -1,9 +1,10 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.privacy_sandbox;
 
+import org.chromium.base.Callback;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 
@@ -27,22 +28,6 @@ public class PrivacySandboxBridge {
 
     public static void setPrivacySandboxEnabled(boolean enabled) {
         PrivacySandboxBridgeJni.get().setPrivacySandboxEnabled(enabled);
-    }
-
-    public static boolean isFlocEnabled() {
-        return PrivacySandboxBridgeJni.get().isFlocEnabled();
-    }
-
-    public static void setFlocEnabled(boolean enabled) {
-        PrivacySandboxBridgeJni.get().setFlocEnabled(enabled);
-    }
-
-    public static boolean isFlocIdResettable() {
-        return PrivacySandboxBridgeJni.get().isFlocIdResettable();
-    }
-
-    public static void resetFlocId() {
-        PrivacySandboxBridgeJni.get().resetFlocId();
     }
 
     public static String getFlocStatusString() {
@@ -88,12 +73,52 @@ public class PrivacySandboxBridge {
         return topics;
     }
 
-    public static @DialogType int getRequiredDialogType() {
-        return PrivacySandboxBridgeJni.get().getRequiredDialogType();
+    public static void getFledgeJoiningEtldPlusOneForDisplay(Callback<List<String>> callback) {
+        Callback<String[]> arrayCallback =
+                (String[] domains) -> callback.onResult(Arrays.asList(domains));
+        PrivacySandboxBridgeJni.get().getFledgeJoiningEtldPlusOneForDisplay(arrayCallback);
     }
 
-    public static void dialogActionOccurred(@DialogAction int action) {
-        PrivacySandboxBridgeJni.get().dialogActionOccurred(action);
+    public static List<String> getBlockedFledgeJoiningTopFramesForDisplay() {
+        return Arrays.asList(
+                PrivacySandboxBridgeJni.get().getBlockedFledgeJoiningTopFramesForDisplay());
+    }
+
+    public static void setFledgeJoiningAllowed(String topFrameEtldPlus1, boolean allowed) {
+        PrivacySandboxBridgeJni.get().setFledgeJoiningAllowed(topFrameEtldPlus1, allowed);
+    }
+
+    public static @PromptType int getRequiredPromptType() {
+        return PrivacySandboxBridgeJni.get().getRequiredPromptType();
+    }
+
+    public static void promptActionOccurred(@PromptAction int action) {
+        PrivacySandboxBridgeJni.get().promptActionOccurred(action);
+    }
+
+    public static boolean isFirstPartySetsDataAccessEnabled() {
+        return PrivacySandboxBridgeJni.get().isFirstPartySetsDataAccessEnabled();
+    }
+
+    public static boolean isFirstPartySetsDataAccessManaged() {
+        return PrivacySandboxBridgeJni.get().isFirstPartySetsDataAccessManaged();
+    }
+
+    public static boolean isPartOfManagedFirstPartySet(String origin) {
+        return PrivacySandboxBridgeJni.get().isPartOfManagedFirstPartySet(origin);
+    }
+
+    public static void setFirstPartySetsDataAccessEnabled(boolean enabled) {
+        PrivacySandboxBridgeJni.get().setFirstPartySetsDataAccessEnabled(enabled);
+    }
+
+    /**
+     * Gets the First Party Sets owner hostname given a FPS member origin.
+     * @param memberOrigin FPS member origin.
+     * @return A string containing the owner hostname, null if it doesn't exist.
+     */
+    public static String getFirstPartySetOwner(String memberOrigin) {
+        return PrivacySandboxBridgeJni.get().getFirstPartySetOwner(memberOrigin);
     }
 
     @NativeMethods
@@ -101,11 +126,12 @@ public class PrivacySandboxBridge {
         boolean isPrivacySandboxEnabled();
         boolean isPrivacySandboxManaged();
         boolean isPrivacySandboxRestricted();
+        boolean isFirstPartySetsDataAccessEnabled();
+        boolean isFirstPartySetsDataAccessManaged();
+        boolean isPartOfManagedFirstPartySet(String origin);
         void setPrivacySandboxEnabled(boolean enabled);
-        boolean isFlocEnabled();
-        void setFlocEnabled(boolean enabled);
-        boolean isFlocIdResettable();
-        void resetFlocId();
+        void setFirstPartySetsDataAccessEnabled(boolean enabled);
+        String getFirstPartySetOwner(String memberOrigin);
         String getFlocStatusString();
         String getFlocGroupString();
         String getFlocUpdateString();
@@ -114,7 +140,10 @@ public class PrivacySandboxBridge {
         Topic[] getCurrentTopTopics();
         Topic[] getBlockedTopics();
         void setTopicAllowed(int topicId, int taxonomyVersion, boolean allowed);
-        int getRequiredDialogType();
-        void dialogActionOccurred(int action);
+        void getFledgeJoiningEtldPlusOneForDisplay(Callback<String[]> callback);
+        String[] getBlockedFledgeJoiningTopFramesForDisplay();
+        void setFledgeJoiningAllowed(String topFrameEtldPlus1, boolean allowed);
+        int getRequiredPromptType();
+        void promptActionOccurred(int action);
     }
 }

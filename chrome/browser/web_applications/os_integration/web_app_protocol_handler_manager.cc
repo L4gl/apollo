@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,7 +84,7 @@ WebAppProtocolHandlerManager::GetAllowedHandlersForProtocol(
   std::vector<ProtocolHandler> protocol_handlers;
 
   for (const WebApp& web_app : app_registrar_->GetApps()) {
-    web_app::AppId app_id = web_app.app_id();
+    AppId app_id = web_app.app_id();
 
     if (!app_registrar_->IsAllowedLaunchProtocol(app_id, protocol))
       continue;
@@ -108,7 +108,7 @@ WebAppProtocolHandlerManager::GetDisallowedHandlersForProtocol(
   std::vector<ProtocolHandler> protocol_handlers;
 
   for (const WebApp& web_app : app_registrar_->GetApps()) {
-    web_app::AppId app_id = web_app.app_id();
+    AppId app_id = web_app.app_id();
 
     if (!app_registrar_->IsDisallowedLaunchProtocol(app_id, protocol))
       continue;
@@ -133,12 +133,9 @@ void WebAppProtocolHandlerManager::RegisterOsProtocolHandlers(
     std::move(callback).Run(Result::kOk);
     return;
   }
+
   const std::vector<apps::ProtocolHandlerInfo> handlers =
       GetAppProtocolHandlerInfos(app_id);
-  if (handlers.empty()) {
-    std::move(callback).Run(Result::kOk);
-    return;
-  }
   RegisterProtocolHandlersWithOs(app_id,
                                  app_registrar_->GetAppShortName(app_id),
                                  profile_, handlers, std::move(callback));

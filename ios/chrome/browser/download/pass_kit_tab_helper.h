@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,7 @@
 #include "ios/web/public/download/download_task_observer.h"
 #include "ios/web/public/web_state_user_data.h"
 
-@protocol PassKitTabHelperDelegate;
+@protocol WebContentCommands;
 namespace web {
 class DownloadTask;
 class WebState;
@@ -51,16 +51,16 @@ class PassKitTabHelper : public web::WebStateUserData<PassKitTabHelper>,
 
   ~PassKitTabHelper() override;
 
-  // Asynchronously downloads pkpass file using the given |task|. Asks delegate
+  // Asynchronously downloads pkpass file using the given `task`. Asks delegate
   // to present "Add pkpass" dialog when the download is complete.
   virtual void Download(std::unique_ptr<web::DownloadTask> task);
 
-  // Set the delegate. The tab helper will no-op if used when delegate is nil.
-  void SetDelegate(id<PassKitTabHelperDelegate> delegate);
+  // Set the web content handler, used to display the passkit UI.
+  void SetWebContentsHandler(id<WebContentCommands> handler);
 
  protected:
   // Allow subclassing from PassKitTabHelper for testing purposes.
-  PassKitTabHelper(web::WebState* web_state);
+  explicit PassKitTabHelper(web::WebState* web_state);
 
  private:
   friend class web::WebStateUserData<PassKitTabHelper>;
@@ -73,7 +73,7 @@ class PassKitTabHelper : public web::WebStateUserData<PassKitTabHelper>,
                           NSData* data);
 
   web::WebState* web_state_;
-  __weak id<PassKitTabHelperDelegate> delegate_ = nil;
+  __weak id<WebContentCommands> handler_ = nil;
   // Set of unfinished download tasks.
   std::set<std::unique_ptr<web::DownloadTask>, base::UniquePtrComparator>
       tasks_;

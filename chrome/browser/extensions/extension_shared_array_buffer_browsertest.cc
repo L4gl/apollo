@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -87,7 +87,7 @@ class SharedArrayBufferTest
       public ::testing::WithParamInterface<std::tuple<bool, bool, bool>> {
  public:
   SharedArrayBufferTest() {
-    std::vector<base::Feature> enabled_features, disabled_features;
+    std::vector<base::test::FeatureRef> enabled_features, disabled_features;
     const bool is_sab_allowed_unconditionally = std::get<0>(GetParam());
     if (is_sab_allowed_unconditionally) {
       enabled_features.push_back(
@@ -123,21 +123,21 @@ IN_PROC_BROWSER_TEST_P(SharedArrayBufferTest, TransferToWorker) {
   if (is_cross_origin_isolated) {
     builder
         .Set("cross_origin_opener_policy",
-             DictionaryBuilder().Set("value", "same-origin").Build())
+             DictionaryBuilder().Set("value", "same-origin").BuildDict())
         .Set("cross_origin_embedder_policy",
-             DictionaryBuilder().Set("value", "require-corp").Build());
+             DictionaryBuilder().Set("value", "require-corp").BuildDict());
   }
 
   DictionaryBuilder background_builder;
   background_builder.Set("scripts",
-                         ListBuilder().Append("background.js").Build());
+                         ListBuilder().Append("background.js").BuildList());
 
   if (is_platform_app) {
     builder.Set("app", DictionaryBuilder()
-                           .Set("background", background_builder.Build())
-                           .Build());
+                           .Set("background", background_builder.BuildDict())
+                           .BuildDict());
   } else {
-    builder.Set("background", background_builder.Build());
+    builder.Set("background", background_builder.BuildDict());
   }
 
   test_dir().WriteManifest(builder.ToJSON());

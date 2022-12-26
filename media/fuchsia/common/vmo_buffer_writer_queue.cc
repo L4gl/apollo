@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,7 +45,7 @@ VmoBufferWriterQueue::~VmoBufferWriterQueue() = default;
 
 void VmoBufferWriterQueue::EnqueueBuffer(scoped_refptr<DecoderBuffer> buffer) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  pending_buffers_.push_back(PendingBuffer(buffer));
+  pending_buffers_.emplace_back(std::move(buffer));
   PumpPackets();
 }
 
@@ -82,7 +82,15 @@ void VmoBufferWriterQueue::PumpPackets() {
     PendingBuffer* current_buffer = &pending_buffers_[input_queue_position_];
 
     if (current_buffer->buffer->end_of_stream()) {
-      pending_buffers_.pop_front();
+      // Pop the EndOfStream buffer if it's the only buffer. Otherwise, mark it
+      // as complete so that ReleaseBuffer will pop it.
+      if (input_queue_position_ == 0) {
+        pending_buffers_.pop_front();
+        DCHECK(pending_buffers_.empty());
+      } else {
+        current_buffer->is_complete = true;
+        input_queue_position_ += 1;
+      }
       end_of_stream_cb_.Run();
       if (!weak_this)
         return;
@@ -103,9 +111,9 @@ void VmoBufferWriterQueue::PumpPackets() {
 
     bool buffer_end = current_buffer->bytes_left() == 0;
 
-    auto packet = StreamProcessorHelper::IoPacket(
+    StreamProcessorHelper::IoPacket packet(
         buffer_index, /*offset=*/0, bytes_filled,
-        current_buffer->buffer->timestamp(), buffer_end,
+        current_buffer->buffer->timestamp(), buffer_end, /*key_frame=*/false,
         base::BindOnce(&VmoBufferWriterQueue::ReleaseBuffer,
                        weak_factory_.GetWeakPtr(), buffer_index));
 

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -22,7 +22,6 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.ColorInt;
-import androidx.appcompat.content.res.AppCompatResources;
 import androidx.test.filters.MediumTest;
 
 import org.junit.Rule;
@@ -38,7 +37,6 @@ import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.components.browser_ui.modaldialog.ModalDialogTestUtils;
 import org.chromium.components.browser_ui.modaldialog.ModalDialogView;
 import org.chromium.components.browser_ui.modaldialog.test.R;
-import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -171,40 +169,6 @@ public class ModalDialogViewRenderTest extends BlankUiTestActivityTestCase {
     @Test
     @MediumTest
     @Feature({"ModalDialog", "RenderTest"})
-    public void testRender_PrimaryButtonWithIcon() throws IOException {
-        final Drawable icon = UiUtils.getTintedDrawable(getActivity(),
-                org.chromium.chrome.R.drawable.ic_add, R.color.default_icon_color_tint_list);
-
-        setUpViews(R.style.ThemeOverlay_BrowserUI_ModalDialog_TextPrimaryButton);
-        createModel(
-                mModelBuilder.with(ModalDialogProperties.TITLE, mResources, R.string.title)
-                        .with(ModalDialogProperties.MESSAGE_PARAGRAPH_1, "Message")
-                        .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, mResources, R.string.ok)
-                        .with(ModalDialogProperties.POSITIVE_BUTTON_ICON, icon));
-        mRenderTestRule.render(mModalDialogView, "primary_button_with_icon");
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"ModalDialog", "RenderTest"})
-    public void testRender_FilledPrimaryButtonWithIcon() throws IOException {
-        final Drawable icon = AppCompatResources.getDrawable(getActivity(), R.drawable.ic_add);
-        icon.mutate().setTint(SemanticColorUtils.getDefaultIconColorInverse(getActivity()));
-
-        setUpViews(R.style.ThemeOverlay_BrowserUI_ModalDialog_FilledPrimaryButton);
-        createModel(
-                mModelBuilder.with(ModalDialogProperties.TITLE, mResources, R.string.title)
-                        .with(ModalDialogProperties.MESSAGE_PARAGRAPH_1, "Message")
-                        .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, mResources, R.string.ok)
-                        .with(ModalDialogProperties.POSITIVE_BUTTON_ICON, icon)
-                        .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, mResources,
-                                R.string.cancel));
-        mRenderTestRule.render(mModalDialogView, "filled_primary_button_with_icon");
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"ModalDialog", "RenderTest"})
     public void testRender_ScrollableTitle() throws IOException {
         setUpViews(R.style.ThemeOverlay_BrowserUI_ModalDialog_TextPrimaryButton);
         createModel(
@@ -221,9 +185,13 @@ public class ModalDialogViewRenderTest extends BlankUiTestActivityTestCase {
     @Feature({"ModalDialog", "RenderTest"})
     public void testRender_CustomView() throws IOException {
         setUpViews(R.style.ThemeOverlay_BrowserUI_ModalDialog_TextPrimaryButton);
+        var sb = new StringBuilder();
+        for (int i = 0; i < 100; i++) {
+            sb.append(i).append("\n");
+        }
+        sb.append(100);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mCustomTextView1.setText(
-                    TextUtils.join("\n", Collections.nCopies(100, "Custom Message")));
+            mCustomTextView1.setText(sb.toString());
             mCustomScrollView.addView(mCustomTextView1);
         });
         createModel(

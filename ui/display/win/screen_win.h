@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -32,8 +32,11 @@ class Size;
 namespace display {
 namespace win {
 
-class DisplayInfo;
 class ScreenWinDisplay;
+
+namespace internal {
+class DisplayInfo;
+}  // namespace internal
 
 class DISPLAY_EXPORT ScreenWin : public Screen,
                                  public ColorProfileReader::Client,
@@ -148,6 +151,18 @@ class DISPLAY_EXPORT ScreenWin : public Screen,
   // parameters).
   static void SetDXGIInfo(gfx::mojom::DXGIInfoPtr dxgi_info);
 
+  // Returns the ScreenWinDisplay with the given id, or a default object if an
+  // unrecognized id was specified or if this was called during a screen update.
+  static ScreenWinDisplay GetScreenWinDisplayWithDisplayId(int64_t id);
+
+  // Returns the device id for the given `device_name`.
+  static int64_t DeviceIdFromDeviceName(const wchar_t* device_name);
+
+  // Updates the display infos to make sure they have the right scale factors.
+  // This is called before handling WM_DPICHANGED messages, to be sure that we
+  // have the right scale factors for the screens.
+  static void UpdateDisplayInfos();
+
   // Returns the HWND associated with the NativeWindow.
   virtual HWND GetHWNDFromNativeWindow(gfx::NativeWindow view) const;
 
@@ -156,6 +171,11 @@ class DISPLAY_EXPORT ScreenWin : public Screen,
 
   // Returns true if the native window is occluded.
   virtual bool IsNativeWindowOccluded(gfx::NativeWindow window) const;
+
+  // Returns the cached on_current_workspace() value for the NativeWindow's
+  // host.
+  virtual absl::optional<bool> IsWindowOnCurrentVirtualDesktop(
+      gfx::NativeWindow window) const;
 
  protected:
   ScreenWin(bool initialize);
@@ -184,7 +204,8 @@ class DISPLAY_EXPORT ScreenWin : public Screen,
   // ColorProfileReader::Client:
   void OnColorProfilesChanged() override;
 
-  void UpdateFromDisplayInfos(const std::vector<DisplayInfo>& display_infos);
+  void UpdateFromDisplayInfos(
+      const std::vector<internal::DisplayInfo>& display_infos);
 
   // Virtual to support mocking by unit tests.
   virtual MONITORINFOEX MonitorInfoFromScreenPoint(

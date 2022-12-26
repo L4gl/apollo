@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -17,8 +17,8 @@
 #include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/engine/nigori/nigori.h"
 #include "components/sync/nigori/cryptographer_impl.h"
-#include "components/sync/nigori/nigori_test_utils.h"
-#include "components/sync/test/fake_server/fake_server_nigori_helper.h"
+#include "components/sync/test/fake_server_nigori_helper.h"
+#include "components/sync/test/nigori_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -32,26 +32,20 @@ using bookmarks_helper::ServerBookmarksEqualityChecker;
 using fake_server::FakeServer;
 using fake_server::GetServerNigori;
 using fake_server::SetNigoriInFakeServer;
-using sync_pb::EncryptedData;
 using sync_pb::NigoriSpecifics;
-using sync_pb::SyncEntity;
 using syncer::BuildCustomPassphraseNigoriSpecifics;
 using syncer::Cryptographer;
 using syncer::GetEncryptedBookmarkEntitySpecifics;
 using syncer::InitCustomPassphraseCryptographerFromNigori;
-using syncer::InitCustomPassphraseKeyDerivationParamsFromNigori;
 using syncer::KeyParamsForTesting;
 using syncer::LoopbackServerEntity;
-using syncer::ModelType;
 using syncer::ModelTypeSet;
 using syncer::PassphraseType;
 using syncer::Pbkdf2PassphraseKeyParamsForTesting;
 using syncer::ProtoPassphraseInt32ToEnum;
 using syncer::ScryptPassphraseKeyParamsForTesting;
 using syncer::SyncEngineStoppedChecker;
-using syncer::SyncService;
 using testing::ElementsAre;
-using testing::SizeIs;
 
 // Intercepts all bookmark entity names as committed to the FakeServer.
 class CommittedBookmarkEntityNameObserver : public FakeServer::Observer {
@@ -102,7 +96,7 @@ class SingleClientCustomPassphraseSyncTest : public SyncTest {
   SingleClientCustomPassphraseSyncTest& operator=(
       const SingleClientCustomPassphraseSyncTest&) = delete;
 
-  ~SingleClientCustomPassphraseSyncTest() override {}
+  ~SingleClientCustomPassphraseSyncTest() override = default;
 
   // Waits until the given set of bookmarks appears on the server, encrypted
   // according to the server-side Nigori and with the given passphrase.
@@ -112,8 +106,7 @@ class SingleClientCustomPassphraseSyncTest : public SyncTest {
       const std::string& passphrase) {
     std::unique_ptr<Cryptographer> cryptographer =
         CreateCryptographerFromServerNigori(passphrase);
-    return ServerBookmarksEqualityChecker(GetSyncService(), GetFakeServer(),
-                                          expected_bookmarks,
+    return ServerBookmarksEqualityChecker(expected_bookmarks,
                                           cryptographer.get())
         .Wait();
   }
@@ -121,21 +114,21 @@ class SingleClientCustomPassphraseSyncTest : public SyncTest {
   bool WaitForUnencryptedServerBookmarks(
       const std::vector<ServerBookmarksEqualityChecker::ExpectedBookmark>&
           expected_bookmarks) {
-    return ServerBookmarksEqualityChecker(GetSyncService(), GetFakeServer(),
-                                          expected_bookmarks,
+    return ServerBookmarksEqualityChecker(expected_bookmarks,
                                           /*cryptographer=*/nullptr)
         .Wait();
   }
 
   bool WaitForNigori(PassphraseType expected_passphrase_type) {
-    return ServerNigoriChecker(GetSyncService(), GetFakeServer(),
-                               expected_passphrase_type)
-        .Wait();
+    return ServerPassphraseTypeChecker(expected_passphrase_type).Wait();
   }
 
-  bool WaitForPassphraseRequiredState(bool desired_state) {
-    return PassphraseRequiredStateChecker(GetSyncService(), desired_state)
-        .Wait();
+  bool WaitForPassphraseRequired() {
+    return PassphraseRequiredChecker(GetSyncService()).Wait();
+  }
+
+  bool WaitForPassphraseAccepted() {
+    return PassphraseAcceptedChecker(GetSyncService()).Wait();
   }
 
   bool WaitForClientBookmarkWithTitle(std::string title) {
@@ -182,8 +175,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
   const GURL page_url1("https://google.com/");
   const GURL page_url2("https://example.com/");
 
-  SetEncryptionPassphraseForClient(/*index=*/0, "hunter2");
   ASSERT_TRUE(SetupSync());
+  GetSyncService()->GetUserSettings()->SetEncryptionPassphrase("hunter2");
 
   ASSERT_TRUE(AddURL(/*profile=*/0, title1, page_url1));
   ASSERT_TRUE(AddURL(/*profile=*/0, title2, page_url2));
@@ -208,9 +201,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
                                 kKeyParams);
   SetNigoriInFakeServer(BuildCustomPassphraseNigoriSpecifics(kKeyParams),
                         GetFakeServer());
-  SetDecryptionPassphraseForClient(/*index=*/0, "hunter2");
-  ASSERT_TRUE(SetupSync());
-  EXPECT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/false));
+  ASSERT_TRUE(SetupSync(WAIT_FOR_SYNC_SETUP_TO_COMPLETE));
+  EXPECT_TRUE(GetSyncService()->GetUserSettings()->SetDecryptionPassphrase(
+      kKeyParams.password));
+  EXPECT_TRUE(WaitForPassphraseAccepted());
 
   EXPECT_TRUE(WaitForClientBookmarkWithTitle("PBKDF2-encrypted bookmark"));
 }
@@ -221,9 +215,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
       Pbkdf2PassphraseKeyParamsForTesting("hunter2");
   SetNigoriInFakeServer(BuildCustomPassphraseNigoriSpecifics(kKeyParams),
                         GetFakeServer());
-  SetDecryptionPassphraseForClient(/*index=*/0, "hunter2");
-  ASSERT_TRUE(SetupSync());
-  EXPECT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/false));
+  ASSERT_TRUE(SetupSync(WAIT_FOR_SYNC_SETUP_TO_COMPLETE));
+  EXPECT_TRUE(GetSyncService()->GetUserSettings()->SetDecryptionPassphrase(
+      kKeyParams.password));
+  EXPECT_TRUE(WaitForPassphraseAccepted());
 
   const std::string kTitle = "Should be encrypted";
   const GURL kURL("https://google.com/encrypted");
@@ -242,10 +237,11 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
                                 kKeyParams);
   SetNigoriInFakeServer(BuildCustomPassphraseNigoriSpecifics(kKeyParams),
                         GetFakeServer());
-  SetDecryptionPassphraseForClient(/*index=*/0, "hunter2");
 
-  ASSERT_TRUE(SetupSync());
-  EXPECT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/false));
+  ASSERT_TRUE(SetupSync(WAIT_FOR_SYNC_SETUP_TO_COMPLETE));
+  EXPECT_TRUE(GetSyncService()->GetUserSettings()->SetDecryptionPassphrase(
+      kKeyParams.password));
+  EXPECT_TRUE(WaitForPassphraseAccepted());
 
   EXPECT_TRUE(WaitForClientBookmarkWithTitle("scypt-encrypted bookmark"));
 }
@@ -256,9 +252,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
       ScryptPassphraseKeyParamsForTesting("hunter2");
   SetNigoriInFakeServer(BuildCustomPassphraseNigoriSpecifics(kKeyParams),
                         GetFakeServer());
-  SetDecryptionPassphraseForClient(/*index=*/0, "hunter2");
-  ASSERT_TRUE(SetupSync());
-  EXPECT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/false));
+  ASSERT_TRUE(SetupSync(WAIT_FOR_SYNC_SETUP_TO_COMPLETE));
+  EXPECT_TRUE(GetSyncService()->GetUserSettings()->SetDecryptionPassphrase(
+      kKeyParams.password));
+  EXPECT_TRUE(WaitForPassphraseAccepted());
 
   const std::string kTitle = "Should be encrypted";
   const GURL kURL("https://google.com/encrypted");
@@ -277,8 +274,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
       Pbkdf2PassphraseKeyParamsForTesting("hunter2");
   SetNigoriInFakeServer(BuildCustomPassphraseNigoriSpecifics(key_params),
                         GetFakeServer());
-  SetDecryptionPassphraseForClient(/*index=*/0, key_params.password);
-  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(SetupSync(WAIT_FOR_SYNC_SETUP_TO_COMPLETE));
+  ASSERT_TRUE(GetSyncService()->GetUserSettings()->SetDecryptionPassphrase(
+      key_params.password));
+  ASSERT_TRUE(WaitForPassphraseAccepted());
 }
 
 // Client should be able to decrypt with keystore keys, regardless whether they
@@ -302,23 +301,22 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
                        DoesNotLeakUnencryptedData) {
   const std::string title = "Should be encrypted";
   const GURL page_url("https://google.com/encrypted");
-  SetEncryptionPassphraseForClient(/*index=*/0, "hunter2");
   ASSERT_TRUE(SetupClients());
 
-  // Create local bookmarks before sync is enabled.
+  // Create local bookmarks before setting up sync.
+  CommittedBookmarkEntityNameObserver observer(GetFakeServer());
   ASSERT_TRUE(AddURL(/*profile=*/0, title, page_url));
 
-  CommittedBookmarkEntityNameObserver observer(GetFakeServer());
-  ASSERT_TRUE(SetupSync());
+  // Mimic custom passphrase being set during initial sync setup.
+  ASSERT_TRUE(GetClient(0)->SignInPrimaryAccount());
+  ASSERT_TRUE(GetClient(0)->AwaitEngineInitialization());
+  GetSyncService()->GetUserSettings()->SetSyncRequested(true);
+  GetSyncService()->GetUserSettings()->SetEncryptionPassphrase("hunter2");
+  GetClient(0)->FinishSyncSetup();
 
   ASSERT_TRUE(WaitForNigori(PassphraseType::kCustomPassphrase));
-  // If WaitForEncryptedServerBookmarks() succeeds, that means that a
-  // cryptographer initialized with only the key params was able to decrypt the
-  // data, so the data must be encrypted using a passphrase-derived key (and not
-  // e.g. a keystore key), because that cryptographer has never seen the
-  // server-side Nigori. Furthermore, if a bookmark commit has happened only
-  // once, we are certain that no bookmarks other than those we've verified to
-  // be encrypted have been committed.
+  // Ensure that only encrypted bookmarks were committed and that they are
+  // encrypted using custom passprhase.
   EXPECT_TRUE(WaitForEncryptedServerBookmarks({{title, page_url}},
                                               /*passphrase=*/"hunter2"));
   EXPECT_THAT(observer.GetCommittedEntityNames(), ElementsAre("encrypted"));
@@ -358,10 +356,10 @@ IN_PROC_BROWSER_TEST_F(
       ScryptPassphraseKeyParamsForTesting("hunter2");
   SetNigoriInFakeServer(BuildCustomPassphraseNigoriSpecifics(kKeyParams),
                         GetFakeServer());
-  ASSERT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/true));
+  ASSERT_TRUE(WaitForPassphraseRequired());
   ASSERT_TRUE(GetSyncService()->GetUserSettings()->SetDecryptionPassphrase(
       kKeyParams.password));
-  ASSERT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/false));
+  ASSERT_TRUE(WaitForPassphraseAccepted());
 
   // Mimic going through CLIENT_DATA_OBSOLETE state.
   GetFakeServer()->TriggerError(sync_pb::SyncEnums::CLIENT_DATA_OBSOLETE);
@@ -373,7 +371,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(GetClient(0)->AwaitEngineInitialization());
 
   // Make sure the client is still able to decrypt the data.
-  EXPECT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/false));
+  EXPECT_TRUE(WaitForPassphraseAccepted());
   const std::string kEncryptedBookmarkTitle = "title2";
   InjectEncryptedServerBookmark(kEncryptedBookmarkTitle,
                                 GURL("https://www.google.com"), kKeyParams);
@@ -402,7 +400,7 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(GetClient(0)->AwaitEngineInitialization());
 
   // Make sure the client is still able to decrypt the data.
-  EXPECT_TRUE(WaitForPassphraseRequiredState(/*desired_state=*/false));
+  EXPECT_TRUE(WaitForPassphraseAccepted());
   const std::string kEncryptedBookmarkTitle = "title2";
 
   NigoriSpecifics nigori;

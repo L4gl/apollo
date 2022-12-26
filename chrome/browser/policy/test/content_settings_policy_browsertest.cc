@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,6 +23,7 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_result.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
@@ -49,7 +50,7 @@ constexpr int kBlockAll = 2;
 
 bool IsJavascriptEnabled(content::WebContents* contents) {
   base::Value value =
-      content::ExecuteScriptAndGetValue(contents->GetMainFrame(), "123");
+      content::ExecuteScriptAndGetValue(contents->GetPrimaryMainFrame(), "123");
   return value.is_int() && value.GetInt() == 123;
 }
 
@@ -194,7 +195,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothPolicyTest, MAYBE_Block) {
   content::WebContents* const web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_THAT(
-      web_contents->GetMainFrame()->GetLastCommittedOrigin().Serialize(),
+      web_contents->GetPrimaryMainFrame()->GetLastCommittedOrigin().Serialize(),
       testing::StartsWith("http://localhost:"));
 
   // Set the policy to block Web Bluetooth.
@@ -358,7 +359,8 @@ IN_PROC_BROWSER_TEST_P(ScrollToTextFragmentPolicyTest, RunPolicyTest) {
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(content::WaitForLoadStop(contents));
-  ASSERT_TRUE(content::WaitForRenderFrameReady(contents->GetMainFrame()));
+  ASSERT_TRUE(
+      content::WaitForRenderFrameReady(contents->GetPrimaryMainFrame()));
 
   content::RenderFrameSubmissionObserver frame_observer(contents);
   if (IsScrollToTextFragmentEnabled()) {
@@ -367,7 +369,7 @@ IN_PROC_BROWSER_TEST_P(ScrollToTextFragmentPolicyTest, RunPolicyTest) {
     // Force a frame - if it were going to happen, the scroll would complete
     // before this forced frame makes its way through the pipeline.
     content::RunUntilInputProcessed(
-        contents->GetMainFrame()->GetView()->GetRenderWidgetHost());
+        contents->GetPrimaryMainFrame()->GetView()->GetRenderWidgetHost());
   }
   EXPECT_EQ(IsScrollToTextFragmentEnabled(),
             !frame_observer.LastRenderFrameMetadata().is_scroll_offset_at_top);
@@ -391,8 +393,10 @@ class SensorsPolicyTest : public PolicyTest {
     content::PermissionController* permission_controller =
         browser()->profile()->GetPermissionController();
     EXPECT_EQ(
-        permission_controller->GetPermissionStatusForOriginWithoutContext(
-            blink::PermissionType::SENSORS, url::Origin::Create(GURL(url))),
+        permission_controller
+            ->GetPermissionResultForOriginWithoutContext(
+                blink::PermissionType::SENSORS, url::Origin::Create(GURL(url)))
+            .status,
         status);
   }
 
@@ -440,7 +444,7 @@ IN_PROC_BROWSER_TEST_F(SensorsPolicyTest, BlockSensorApi) {
   content::WebContents* const web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_THAT(
-      web_contents->GetMainFrame()->GetLastCommittedOrigin().Serialize(),
+      web_contents->GetPrimaryMainFrame()->GetLastCommittedOrigin().Serialize(),
       testing::StartsWith("http://localhost:"));
 
   // Set the policy to block Sensors.

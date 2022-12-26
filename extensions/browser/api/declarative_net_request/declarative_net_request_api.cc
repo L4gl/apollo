@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
-#include "base/task/task_runner_util.h"
 #include "base/time/time.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -26,6 +25,8 @@
 #include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
 #include "extensions/browser/api/declarative_net_request/utils.h"
 #include "extensions/browser/api/extensions_api_client.h"
+#include "extensions/browser/api/web_request/permission_helper.h"
+#include "extensions/browser/api/web_request/web_request_permissions.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -126,9 +127,8 @@ DeclarativeNetRequestGetDynamicRulesFunction::Run() {
       },
       std::move(source));
 
-  base::PostTaskAndReplyWithResult(
-      GetExtensionFileTaskRunner().get(), FROM_HERE,
-      std::move(read_dynamic_rules),
+  GetExtensionFileTaskRunner()->PostTaskAndReplyWithResult(
+      FROM_HERE, std::move(read_dynamic_rules),
       base::BindOnce(
           &DeclarativeNetRequestGetDynamicRulesFunction::OnDynamicRulesFetched,
           this));
@@ -213,8 +213,8 @@ DeclarativeNetRequestGetSessionRulesFunction::Run() {
       declarative_net_request::RulesMonitorService::Get(browser_context());
   DCHECK(rules_monitor_service);
 
-  return RespondNow(OneArgument(
-      rules_monitor_service->GetSessionRulesValue(extension_id()).Clone()));
+  return RespondNow(OneArgument(base::Value(
+      rules_monitor_service->GetSessionRulesValue(extension_id()).Clone())));
 }
 
 DeclarativeNetRequestUpdateEnabledRulesetsFunction::
@@ -625,10 +625,20 @@ DeclarativeNetRequestTestMatchOutcomeFunction::Run() {
         ArgumentList(dnr_api::TestMatchOutcome::Results::Create(result)));
   }
 
+  // Determine if the extension has permission to redirect the request.
+  auto web_request_resource_type =
+      declarative_net_request::GetWebRequestResourceType(params->request.type);
+  PermissionsData::PageAccess page_access =
+      WebRequestPermissions::CanExtensionAccessURL(
+          PermissionHelper::Get(browser_context()), extension_id(), url, tabId,
+          /*crosses_incognito=*/false,
+          WebRequestPermissions::HostPermissionsCheck::
+              REQUIRE_HOST_PERMISSION_FOR_URL_AND_INITIATOR,
+          initiator, web_request_resource_type);
+
   // Check for "before request" matches (e.g. allow/block rules).
   declarative_net_request::CompositeMatcher::ActionInfo before_request_action =
-      matcher->GetBeforeRequestAction(
-          request_params, extensions::PermissionsData::PageAccess::kWithheld);
+      matcher->GetBeforeRequestAction(request_params, page_access);
   if (before_request_action.action) {
     dnr_api::MatchedRule match;
     match.rule_id = before_request_action.action->rule_id;

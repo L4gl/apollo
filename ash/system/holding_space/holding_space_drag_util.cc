@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,9 +13,11 @@
 #include "ash/public/cpp/rounded_image_view.h"
 #include "ash/public/cpp/style/scoped_light_mode_as_default.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/system/holding_space/holding_space_item_view.h"
 #include "base/containers/adapters.h"
 #include "base/i18n/rtl.h"
+#include "base/ranges/algorithm.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/canvas.h"
@@ -219,12 +221,12 @@ class DragImageItemChipView : public DragImageItemView {
     icon->SetImage(item->image().GetImageSkia(
         icon->GetPreferredSize(),
         /*dark_background=*/features::IsDarkLightModeEnabled() &&
-            AshColorProvider::Get()->IsDarkModeEnabled()));
+            DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()));
 
     // Label.
     ScopedLightModeAsDefault scoped_light_mode;
     auto* label = AddChildView(bubble_utils::CreateLabel(
-        bubble_utils::LabelStyle::kChipTitle, item->GetText()));
+        bubble_utils::TypographyStyle::kBody2, item->GetText()));
     label->SetElideBehavior(gfx::ElideBehavior::ELIDE_MIDDLE);
     label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
     layout->SetFlexForView(label, 1);
@@ -262,7 +264,7 @@ class DragImageItemScreenCaptureView : public DragImageItemView {
     image->SetImage(item->image().GetImageSkia(
         image->GetPreferredSize(),
         /*dark_background=*/features::IsDarkLightModeEnabled() &&
-            AshColorProvider::Get()->IsDarkModeEnabled()));
+            DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()));
   }
 };
 
@@ -312,10 +314,11 @@ class DragImageOverflowBadge : public views::View {
 
     // Label.
     auto* label = AddChildView(
-        bubble_utils::CreateLabel(bubble_utils::LabelStyle::kBadge));
-    label->SetEnabledColor(AshColorProvider::Get()->IsDarkModeEnabled()
-                               ? gfx::kGoogleGrey900
-                               : gfx::kGoogleGrey200);
+        bubble_utils::CreateLabel(bubble_utils::TypographyStyle::kButton1));
+    label->SetEnabledColor(
+        DarkLightModeControllerImpl::Get()->IsDarkModeEnabled()
+            ? gfx::kGoogleGrey900
+            : gfx::kGoogleGrey200);
     label->SetText(base::UTF8ToUTF16(base::NumberToString(count)));
   }
 };
@@ -421,8 +424,8 @@ class DragImageView : public views::View {
     container->SetLayoutManager(
         std::make_unique<DragImageLayoutManager>(kDragImageViewChildOffset));
 
-    const bool contains_only_screen_captures = std::all_of(
-        items.begin(), items.end(),
+    const bool contains_only_screen_captures = base::ranges::all_of(
+        items,
         [](const HoldingSpaceItem* item) { return item->IsScreenCapture(); });
 
     // Show at most `kDragImageViewMaxItemsToPaint` items in the drag image. If

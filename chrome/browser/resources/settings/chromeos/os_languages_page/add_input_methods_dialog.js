@@ -1,33 +1,46 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+/**
+ * @fileoverview 'os-settings-add-input-methods-dialog' is a dialog for
+ * adding input methods.
+ */
+
+import './add_items_dialog.js';
+
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {recordSettingChange} from '../metrics_recorder.js';
+
+import {getTemplate} from './add_input_methods_dialog.html.js';
+import {Item} from './add_items_dialog.js';
+import {LanguageHelper, LanguagesModel} from './languages_types.js';
 
 // The IME ID for the Accessibility Common extension used by Dictation.
 /** @type {string} */
 const ACCESSIBILITY_COMMON_IME_ID =
     '_ext_ime_egfdjlfmgnehecnclamagfafdccgfndpdictation';
 
-/**
- * @fileoverview 'os-settings-add-input-methods-dialog' is a dialog for
- * adding input methods.
- */
-import {afterNextRender, Polymer, html, flush, Templatizer, TemplateInstanceBase} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+/** @polymer */
+class OsSettingsAddInputMethodsDialogElement extends PolymerElement {
+  static get is() {
+    return 'os-settings-add-input-methods-dialog';
+  }
 
-import {Item} from './add_items_dialog.js';
-import {recordSettingChange} from '../metrics_recorder.js';
-import {LanguageHelper, LanguagesModel} from './languages_types.js';
+  static get template() {
+    return getTemplate();
+  }
 
-Polymer({
-  _template: html`{__html_template__}`,
-  is: 'os-settings-add-input-methods-dialog',
+  static get properties() {
+    return {
+      /** @type {!LanguagesModel|undefined} */
+      languages: Object,
 
-  properties: {
-    /** @type {!LanguagesModel|undefined} */
-    languages: Object,
-
-    /** @type {!LanguageHelper} */
-    languageHelper: Object,
-  },
+      /** @type {!LanguageHelper} */
+      languageHelper: Object,
+    };
+  }
 
   /**
    * Get suggested input methods based on user's enabled languages and ARC IMEs
@@ -37,11 +50,22 @@ Polymer({
   getSuggestedInputMethodIds_() {
     const languageCodes = [
       ...this.languageHelper.getEnabledLanguageCodes(),
-      this.languageHelper.getArcImeLanguageCode()
+      this.languageHelper.getArcImeLanguageCode(),
     ];
-    return this.languageHelper.getInputMethodsForLanguages(languageCodes)
-        .map(inputMethod => inputMethod.id);
-  },
+    let inputMethods =
+        this.languageHelper.getInputMethodsForLanguages(languageCodes);
+    // Temporary solution for b/237492047: move Vietnamese extension input
+    // methods to the top of the suggested list.
+    // TODO(b/237492047): Remove this once 1P Vietnamese input methods are
+    // suitable for widespread use.
+    const isVietnameseExtension = inputMethod =>
+        (inputMethod.id.startsWith('_ext_ime_') &&
+         inputMethod.languageCodes.includes('vi'));
+    inputMethods = inputMethods.filter(isVietnameseExtension)
+                       .concat(inputMethods.filter(
+                           inputMethod => !isVietnameseExtension(inputMethod)));
+    return inputMethods.map(inputMethod => inputMethod.id);
+  }
 
   /**
    * @return {!Array<!Item>} A list of possible input methods.
@@ -65,9 +89,9 @@ Polymer({
                id: inputMethod.id,
                name: inputMethod.displayName,
                searchTerms: inputMethod.tags,
-               disabledByPolicy: !!inputMethod.isProhibitedByPolicy
+               disabledByPolicy: !!inputMethod.isProhibitedByPolicy,
              }));
-  },
+  }
 
   /**
    * Add input methods.
@@ -79,5 +103,9 @@ Polymer({
       this.languageHelper.addInputMethod(id);
     });
     recordSettingChange();
-  },
-});
+  }
+}
+
+customElements.define(
+    OsSettingsAddInputMethodsDialogElement.is,
+    OsSettingsAddInputMethodsDialogElement);

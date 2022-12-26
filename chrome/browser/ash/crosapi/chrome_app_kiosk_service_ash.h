@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,8 +12,9 @@
 
 namespace crosapi {
 
-// The ash-chrome implementation of the DownloadController crosapi interface.
-// This is where ash-chrome receives information on download events from lacros.
+// The ash-chrome implementation of the ChromeAppKioskService crosapi interface.
+// This is used to forward the APIs provided by ChromeKioskLaunchController to
+// Lacros.
 // This class must only be used from the main thread.
 class ChromeAppKioskServiceAsh : public mojom::ChromeAppKioskService {
  public:
@@ -22,18 +23,18 @@ class ChromeAppKioskServiceAsh : public mojom::ChromeAppKioskService {
   ChromeAppKioskServiceAsh& operator=(const ChromeAppKioskServiceAsh&) = delete;
   ~ChromeAppKioskServiceAsh() override;
 
-  // Bind this receiver for `mojom::DownloadController`. This is used by
+  // Bind this receiver for `mojom::ChromeAppKioskService`. This is used by
   // crosapi.
   void BindReceiver(
       mojo::PendingReceiver<mojom::ChromeAppKioskService> receiver);
 
-  // mojom::DownloadController:
+  // mojom::ChromeAppKioskService:
   void BindLaunchController(
       mojo::PendingRemote<mojom::ChromeKioskLaunchController> launch_controller)
       override;
 
   void InstallKioskApp(
-      mojom::AppInstallParamsPtr params,
+      const mojom::AppInstallParams& params,
       mojom::ChromeKioskLaunchController::InstallKioskAppCallback callback);
 
   void LaunchKioskApp(

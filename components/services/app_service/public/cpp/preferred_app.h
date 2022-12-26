@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,31 +55,6 @@ using ReplacedAppPreferences = base::flat_map<std::string, IntentFilters>;
 PreferredApps ClonePreferredApps(const PreferredApps& preferred_apps);
 
 bool IsEqual(const PreferredApps& source, const PreferredApps& target);
-
-// TODO(crbug.com/1253250): Remove these functions after migrating to non-mojo
-// AppService.
-PreferredAppPtr ConvertMojomPreferredAppToPreferredApp(
-    const apps::mojom::PreferredAppPtr& mojom_preferred_app);
-
-apps::mojom::PreferredAppPtr ConvertPreferredAppToMojomPreferredApp(
-    const PreferredAppPtr& preferred_app);
-
-PreferredAppChangesPtr ConvertMojomPreferredAppChangesToPreferredAppChanges(
-    const apps::mojom::PreferredAppChangesPtr& mojom_preferred_app_changes);
-
-apps::mojom::PreferredAppChangesPtr
-ConvertPreferredAppChangesToMojomPreferredAppChanges(
-    const PreferredAppChangesPtr& preferred_app_changes);
-
-PreferredApps ConvertMojomPreferredAppsToPreferredApps(
-    const std::vector<apps::mojom::PreferredAppPtr>& mojom_preferred_apps);
-
-std::vector<apps::mojom::PreferredAppPtr>
-ConvertPreferredAppsToMojomPreferredApps(const PreferredApps& preferred_apps);
-
-apps::mojom::ReplacedAppPreferencesPtr
-ConvertReplacedAppPreferencesToMojomReplacedAppPreferences(
-    const ReplacedAppPreferences& replace_preferences);
 
 }  // namespace apps
 

@@ -1,42 +1,40 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
 
-#include <algorithm>
 #include <cctype>
 #include <utility>
 
 #include "ash/components/arc/arc_util.h"
-#include "ash/components/tpm/install_attributes.h"
+#include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
+#include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chrome/browser/ash/login/demo_mode/demo_resources.h"
+#include "chrome/browser/ash/login/demo_mode/demo_components.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
-#include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
-#include "chrome/browser/ash/policy/core/device_local_account.h"
-#include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
-#include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
+#include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/install_attributes/install_attributes.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -72,64 +70,6 @@ base::span<const DemoSetupStepInfo> GetDemoSetupStepsInfo() {
   return kDemoModeSetupStepsInfo;
 }
 
-// Get the DeviceLocalAccountPolicyStore for the account_id.
-policy::CloudPolicyStore* GetDeviceLocalAccountPolicyStore(
-    const std::string& account_id) {
-  policy::BrowserPolicyConnectorAsh* connector =
-      g_browser_process->platform_part()->browser_policy_connector_ash();
-  if (!connector)
-    return nullptr;
-
-  policy::DeviceLocalAccountPolicyService* local_account_service =
-      connector->GetDeviceLocalAccountPolicyService();
-  if (!local_account_service)
-    return nullptr;
-
-  const std::string user_id = policy::GenerateDeviceLocalAccountUserId(
-      account_id, policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION);
-  policy::DeviceLocalAccountPolicyBroker* broker =
-      local_account_service->GetBrokerForUser(user_id);
-  if (!broker)
-    return nullptr;
-
-  return broker->core()->store();
-}
-
-// A utility function of base::ReadFileToString which returns an optional
-// string.
-// TODO(mukai): move this to base/files.
-absl::optional<std::string> ReadFileToOptionalString(
-    const base::FilePath& file_path) {
-  std::string content;
-  absl::optional<std::string> result;
-  if (base::ReadFileToString(file_path, &content))
-    result = std::move(content);
-  return result;
-}
-
-// Returns whether online FRE check is required.
-bool IsOnlineFreCheckRequired() {
-  policy::AutoEnrollmentTypeChecker::FRERequirement fre_requirement =
-      policy::AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD();
-  bool enrollment_check_required =
-      fre_requirement != policy::AutoEnrollmentTypeChecker::FRERequirement::
-                             kExplicitlyNotRequired &&
-      fre_requirement !=
-          policy::AutoEnrollmentTypeChecker::FRERequirement::kNotRequired &&
-      policy::AutoEnrollmentTypeChecker::IsFREEnabled();
-
-  if (!enrollment_check_required)
-    return false;
-
-  std::string block_dev_mode_value;
-  system::StatisticsProvider* provider =
-      system::StatisticsProvider::GetInstance();
-  provider->GetMachineStatistic(system::kBlockDevModeKey,
-                                &block_dev_mode_value);
-
-  return block_dev_mode_value == "1";
-}
-
 DemoSetupController::DemoSetupError CreateFromClientStatus(
     policy::DeviceManagementStatus status,
     const std::string& debug_message) {
@@ -162,10 +102,12 @@ DemoSetupController::DemoSetupError CreateFromClientStatus(
     case policy::DM_STATUS_SERVICE_ENTERPRISE_ACCOUNT_IS_NOT_ELIGIBLE_TO_ENROLL:
     case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
     case policy::DM_STATUS_SERVICE_ILLEGAL_ACCOUNT_FOR_PACKAGED_EDU_LICENSE:
+    case policy::DM_STATUS_SERVICE_INVALID_PACKAGED_DEVICE_FOR_KIOSK:
       return DemoSetupController::DemoSetupError(ErrorCode::kDemoAccountError,
                                                  RecoveryMethod::kUnknown,
                                                  debug_message);
     case policy::DM_STATUS_SERVICE_DEVICE_NOT_FOUND:
+    case policy::DM_STATUS_SERVICE_DEVICE_NEEDS_RESET:
       return DemoSetupController::DemoSetupError(
           ErrorCode::kDeviceNotFound, RecoveryMethod::kUnknown, debug_message);
     case policy::DM_STATUS_SERVICE_MANAGEMENT_TOKEN_INVALID:
@@ -323,10 +265,11 @@ DemoSetupController::DemoSetupError::CreateFromOtherEnrollmentError(
 // static
 DemoSetupController::DemoSetupError
 DemoSetupController::DemoSetupError::CreateFromComponentError(
-    component_updater::CrOSComponentManager::Error error) {
+    component_updater::CrOSComponentManager::Error error,
+    std::string component_name) {
   const std::string debug_message =
-      "Failed to load demo resources CrOS component with error: " +
-      std::to_string(static_cast<int>(error));
+      base::StringPrintf("Failed to load '%s' CrOS component with error: %d",
+                         component_name.c_str(), static_cast<int>(error));
   return DemoSetupError(ErrorCode::kOnlineComponentError,
                         RecoveryMethod::kCheckNetwork, debug_message);
 }
@@ -485,6 +428,19 @@ bool DemoSetupController::IsOobeDemoSetupFlowInProgress() {
 
 // static
 std::string DemoSetupController::GetSubOrganizationEmail() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  DCHECK(command_line);
+
+  if (command_line->HasSwitch(switches::kDemoModeEnrollingUsername)) {
+    std::string customUser =
+        command_line->GetSwitchValueASCII(switches::kDemoModeEnrollingUsername);
+    if (!customUser.empty()) {
+      std::string email = customUser + "@" + policy::kDemoModeDomain;
+      VLOG(1) << "Enrolling into Demo Mode with user: " << email;
+      return email;
+    }
+  }
+
   const std::string country =
       g_browser_process->local_state()->GetString(prefs::kDemoModeCountry);
 
@@ -492,10 +448,12 @@ std::string DemoSetupController::GetSubOrganizationEmail() {
   std::string country_lowercase = base::ToLowerASCII(country);
 
   // Exclude US as it is the default country.
-  if (std::find(std::begin(DemoSession::kSupportedCountries),
-                std::end(DemoSession::kSupportedCountries),
-                country_uppercase) !=
-      std::end(DemoSession::kSupportedCountries)) {
+  if (base::Contains(DemoSession::kSupportedCountries, country_uppercase)) {
+    if (chromeos::features::IsCloudGamingDeviceEnabled()) {
+      return base::StringPrintf("admin-%s-blazey@%s", country_lowercase.c_str(),
+                                policy::kDemoModeDomain);
+    }
+
     return "admin-" + country_lowercase + "@" + policy::kDemoModeDomain;
   }
   return std::string();
@@ -548,9 +506,11 @@ void DemoSetupController::Enroll(
 
   SetCurrentSetupStep(DemoSetupStep::kDownloadResources);
 
+  SetRetailerAndStoreIdInPref();
+
   switch (demo_config_) {
     case DemoSession::DemoModeConfig::kOnline:
-      LoadDemoResourcesCrOSComponent();
+      LoadDemoComponents();
       return;
     case DemoSession::DemoModeConfig::kNone:
     case DemoSession::DemoModeConfig::kOfflineDeprecated:
@@ -558,31 +518,37 @@ void DemoSetupController::Enroll(
   }
 }
 
-void DemoSetupController::LoadDemoResourcesCrOSComponent() {
-  VLOG(1) << "Loading demo resources component";
+void DemoSetupController::LoadDemoComponents() {
+  VLOG(1) << "Loading demo resources and demo app components";
 
   download_start_time_ = base::TimeTicks::Now();
 
-  if (!demo_resources_)
-    demo_resources_ = std::make_unique<DemoResources>(demo_config_);
+  if (!demo_components_)
+    demo_components_ = std::make_unique<DemoComponents>(demo_config_);
 
   if (DBusThreadManager::Get()->IsUsingFakes()) {
-    demo_resources_->SetCrOSComponentLoadedForTesting(
+    demo_components_->SetCrOSComponentLoadedForTesting(
         base::FilePath(), component_error_for_tests_);
 
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&DemoSetupController::OnDemoResourcesCrOSComponentLoaded,
-                       weak_ptr_factory_.GetWeakPtr()));
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&DemoSetupController::OnDemoComponentsLoaded,
+                                  weak_ptr_factory_.GetWeakPtr()));
     return;
   }
-
-  demo_resources_->EnsureLoaded(
-      base::BindOnce(&DemoSetupController::OnDemoResourcesCrOSComponentLoaded,
-                     weak_ptr_factory_.GetWeakPtr()));
+  base::OnceClosure load_callback =
+      base::BindOnce(&DemoSetupController::OnDemoComponentsLoaded,
+                     weak_ptr_factory_.GetWeakPtr());
+  if (chromeos::features::IsDemoModeSWAEnabled()) {
+    base::RepeatingClosure barrier_closure =
+        base::BarrierClosure(2, std::move(load_callback));
+    demo_components_->LoadResourcesComponent(barrier_closure);
+    demo_components_->LoadAppComponent(barrier_closure);
+  } else {
+    demo_components_->LoadResourcesComponent(std::move(load_callback));
+  }
 }
 
-void DemoSetupController::OnDemoResourcesCrOSComponentLoaded() {
+void DemoSetupController::OnDemoComponentsLoaded() {
   DCHECK_EQ(demo_config_, DemoSession::DemoModeConfig::kOnline);
 
   base::TimeDelta download_duration =
@@ -591,11 +557,26 @@ void DemoSetupController::OnDemoResourcesCrOSComponentLoaded() {
                                  download_duration);
   SetCurrentSetupStep(DemoSetupStep::kEnrollment);
 
-  if (demo_resources_->component_error().value() !=
+  auto resources_component_error =
+      demo_components_->resources_component_error().value_or(
+          component_updater::CrOSComponentManager::Error::NOT_FOUND);
+  if (resources_component_error !=
       component_updater::CrOSComponentManager::Error::NONE) {
     SetupFailed(DemoSetupError::CreateFromComponentError(
-        demo_resources_->component_error().value()));
+        resources_component_error,
+        DemoComponents::kDemoModeResourcesComponentName));
     return;
+  }
+
+  if (chromeos::features::IsDemoModeSWAEnabled()) {
+    auto app_component_error = demo_components_->app_component_error().value_or(
+        component_updater::CrOSComponentManager::Error::NOT_FOUND);
+    if (app_component_error !=
+        component_updater::CrOSComponentManager::Error::NONE) {
+      SetupFailed(DemoSetupError::CreateFromComponentError(
+          app_component_error, DemoComponents::kDemoModeAppComponentName));
+      return;
+    }
   }
 
   VLOG(1) << "Starting online enrollment";
@@ -704,6 +685,18 @@ void DemoSetupController::Reset() {
   // `demo_config_` is not reset here, because it is needed for retrying setup.
   enrollment_helper_.reset();
   ClearDemoRequisition();
+}
+
+void DemoSetupController::SetRetailerAndStoreIdInPref() {
+  std::vector<std::string> retailer_and_store_id_list =
+      base::SplitString(retailer_store_id_input_, "-", base::TRIM_WHITESPACE,
+                        base::SPLIT_WANT_NONEMPTY);
+  if (retailer_and_store_id_list.size() != 2)
+    return;
+
+  PrefService* prefs = g_browser_process->local_state();
+  prefs->SetString(prefs::kDemoModeRetailerId, retailer_and_store_id_list[0]);
+  prefs->SetString(prefs::kDemoModeStoreId, retailer_and_store_id_list[1]);
 }
 
 }  //  namespace ash

@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,12 +15,12 @@
 #include "chrome/updater/splash_screen.h"
 
 namespace base {
-class FilePath;
 class Version;
 }
 
 namespace updater {
 
+class ExternalConstants;
 class UpdateService;
 
 // This class defines an interface for installing an application. The interface
@@ -38,7 +38,6 @@ class AppInstallController
 
   virtual void InstallAppOffline(const std::string& app_id,
                                  const std::string& app_name,
-                                 const base::FilePath& offline_dir,
                                  base::OnceCallback<void(int)> callback) = 0;
 
  protected:
@@ -59,8 +58,6 @@ class AppInstall : public App {
   ~AppInstall() override;
 
   // Overrides for App.
-  void Initialize() override;
-  void Uninitialize() override;
   void FirstTaskRun() override;
 
   // Called after the version of the active updater has been retrieved.
@@ -70,7 +67,7 @@ class AppInstall : public App {
 
   void WakeCandidate();
 
-  void WakeCandidateDone();
+  void FetchPolicies();
 
   void RegisterUpdater();
 
@@ -98,10 +95,12 @@ class AppInstall : public App {
 
   scoped_refptr<AppInstallController> app_install_controller_;
 
+  scoped_refptr<ExternalConstants> external_constants_;
+
   scoped_refptr<UpdateService> update_service_;
 };
 
-scoped_refptr<App> MakeAppInstall();
+scoped_refptr<App> MakeAppInstall(bool is_silent_install);
 
 }  // namespace updater
 

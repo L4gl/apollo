@@ -388,7 +388,7 @@ void FrameSerializer::SerializeCSSStyleSheet(CSSStyleSheet& style_sheet,
     for (unsigned i = 0; i < style_sheet.length(); ++i) {
       CSSRule* rule = style_sheet.item(i);
       String item_text = rule->cssText();
-      if (!item_text.IsEmpty()) {
+      if (!item_text.empty()) {
         css_text.Append(item_text);
         if (i < style_sheet.length() - 1)
           css_text.Append("\n\n");
@@ -456,14 +456,17 @@ void FrameSerializer::SerializeCSSRule(CSSRule* rule) {
     // Rules in which no external resources can be referenced
     case CSSRule::kCharsetRule:
     case CSSRule::kFontPaletteValuesRule:
+    case CSSRule::kFontFeatureRule:
+    case CSSRule::kFontFeatureValuesRule:
     case CSSRule::kPageRule:
     case CSSRule::kPropertyRule:
     case CSSRule::kKeyframesRule:
     case CSSRule::kKeyframeRule:
-    case CSSRule::kScrollTimelineRule:
     case CSSRule::kNamespaceRule:
     case CSSRule::kViewportRule:
     case CSSRule::kLayerStatementRule:
+    case CSSRule::kPositionFallbackRule:
+    case CSSRule::kTryRule:
       break;
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,12 +7,17 @@
 
 #include <string>
 
+#include "base/types/strong_alias.h"
+
 // Represents a Web Authentication credential to be displayed on the
 // Touch-To-Fill sheet for user selection.
 class TouchToFillWebAuthnCredential {
  public:
-  TouchToFillWebAuthnCredential(const std::u16string& username,
-                                const std::string& backend_id);
+  using Username = base::StrongAlias<struct UsernameTag, std::u16string>;
+  using BackendId = base::StrongAlias<struct BackendIdTag, std::string>;
+
+  TouchToFillWebAuthnCredential(const Username& username,
+                                const BackendId& backend_id);
   ~TouchToFillWebAuthnCredential();
 
   TouchToFillWebAuthnCredential(const TouchToFillWebAuthnCredential&);
@@ -22,13 +27,13 @@ class TouchToFillWebAuthnCredential {
   TouchToFillWebAuthnCredential(TouchToFillWebAuthnCredential&&);
   TouchToFillWebAuthnCredential& operator=(TouchToFillWebAuthnCredential&&);
 
-  const std::u16string& username() const { return username_; }
+  const Username& username() const { return username_; }
 
-  const std::string& id() const { return backend_id_; }
+  const BackendId& id() const { return backend_id_; }
 
  private:
-  std::u16string username_;
-  std::string backend_id_;
+  Username username_;
+  BackendId backend_id_;
 };
 
 bool operator==(const TouchToFillWebAuthnCredential& lhs,

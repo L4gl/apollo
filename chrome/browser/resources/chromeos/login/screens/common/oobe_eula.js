@@ -1,8 +1,30 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* #js_imports_placeholder */
+import '//resources/cr_elements/cr_shared_style.css.js';
+import '//resources/cr_elements/cr_checkbox/cr_checkbox.js';
+import '//resources/js/action_link.js';
+import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
+import '//resources/polymer/v3_0/paper-styles/color.js';
+import '../../components/oobe_icons.m.js';
+import '../../components/common_styles/oobe_common_styles.css.js';
+import '../../components/common_styles/oobe_dialog_host_styles.css.js';
+import '../../components/buttons/oobe_back_button.js';
+import '../../components/buttons/oobe_text_button.js';
+
+import {assert} from '//resources/ash/common/assert.js';
+import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
+import {afterNextRender, html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
+import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.js';
+import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
+import {OobeAdaptiveDialog} from '../../components/dialogs/oobe_adaptive_dialog.js';
+import {OobeModalDialog} from '../../components/dialogs/oobe_modal_dialog.js';
+import {ContentType, WebViewHelper} from '../../components/web_view_helper.js';
+import {Oobe} from '../../cr_ui.js';
+
 
 // Enum that describes the current state of the Terms Of Service screen
 const EulaScreenState = {
@@ -20,7 +42,7 @@ const EULA_CLEAR_ANCHORS_CONTENT_SCRIPT = {
       '    e.textContent=el.textContent + "(" + el.href + ")";' +
       '  }' +
       '  el.parentNode.replaceChild(e,el);' +
-      '}'
+      '}',
 };
 
 const EULA_FONTS_CSS = {
@@ -30,7 +52,7 @@ const EULA_FONTS_CSS = {
         line-height: 20px !important;}
        body h2 {
          font-size: 15px !important;
-         line-height: 22px !important;}`
+         line-height: 22px !important;}`,
 };
 
 /**
@@ -86,7 +108,13 @@ class EulaLoader {
         js: EULA_CLEAR_ANCHORS_CONTENT_SCRIPT,
       }]);
       webview.addEventListener('contentload', () => {
-        webview.executeScript(EULA_CLEAR_ANCHORS_CONTENT_SCRIPT);
+        webview.executeScript(EULA_CLEAR_ANCHORS_CONTENT_SCRIPT, () => {
+          if (chrome.runtime.lastError) {
+            console.error(
+                'Clear anchors script failed: ' +
+                chrome.runtime.lastError.message);
+          }
+        });
       });
     }
     webview.addEventListener('contentload', () => {
@@ -249,9 +277,8 @@ EulaLoader.instances = {};
  * @implements {MultiStepBehaviorInterface}
  * @implements {OobeI18nBehaviorInterface}
  */
-const EulaScreenBase = Polymer.mixinBehaviors(
-    [OobeI18nBehavior, LoginScreenBehavior, MultiStepBehavior],
-    Polymer.Element);
+const EulaScreenBase = mixinBehaviors(
+    [OobeI18nBehavior, LoginScreenBehavior, MultiStepBehavior], PolymerElement);
 
 
 // TODO(crbug.com/1184731) - Replace PolymerElement with OobeTextButton
@@ -260,12 +287,12 @@ const EulaScreenBase = Polymer.mixinBehaviors(
  * @typedef {{
  *   additionalChromeToSFrame: WebView,
  *   additionalTerms: HTMLElement,
- *   additionalToS: OobeModalDialogElement,
+ *   additionalToS: OobeModalDialog,
  *   closeAdditionalTos: PolymerElement,
  *   crosEulaFrame: WebView,
- *   eulaDialog:  OobeAdaptiveDialogElement,
+ *   eulaDialog:  OobeAdaptiveDialog,
  *   learnMore: HTMLElement,
- *   securitySettings: OobeAdaptiveDialogElement,
+ *   securitySettings: OobeAdaptiveDialog,
  * }}
  */
 EulaScreenBase.$;
@@ -275,17 +302,12 @@ class EulaScreen extends EulaScreenBase {
     return 'oobe-eula-element';
   }
 
-  /* #html_template_placeholder */
+  static get template() {
+    return html`{__html_template__}`;
+  }
 
   static get properties() {
     return {
-      /**
-       * "Accept and continue" button is disabled until content is loaded.
-       */
-      acceptButtonDisabled: {
-        type: Boolean,
-      },
-
       /**
        * If "Report anonymous usage stats" checkbox is checked.
        */
@@ -317,14 +339,13 @@ class EulaScreen extends EulaScreenBase {
        */
       backButtonHidden_: {
         type: Boolean,
-      }
+      },
     };
   }
 
   constructor() {
     super();
     this.UI_STEPS = EulaScreenState;
-    this.acceptButtonDisabled = true;
     this.usageStatsChecked = false;
     this.tpmDescription_ = '';
     this.initialized_ = false;
@@ -334,8 +355,10 @@ class EulaScreen extends EulaScreenBase {
 
   get EXTERNAL_API() {
     return [
-      'setUsageStats', 'showAdditionalTosDialog', 'showSecuritySettingsDialog',
-      'setTpmDesc'
+      'setUsageStats',
+      'showAdditionalTosDialog',
+      'showSecuritySettingsDialog',
+      'setTpmDesc',
     ];
   }
 
@@ -360,9 +383,7 @@ class EulaScreen extends EulaScreenBase {
 
   ready() {
     super.ready();
-    this.initializeLoginScreen('EulaScreen', {
-      resetAllowed: true,
-    });
+    this.initializeLoginScreen('EulaScreen');
   }
 
   /**
@@ -411,7 +432,6 @@ class EulaScreen extends EulaScreenBase {
       return;
     }
 
-    this.acceptButtonDisabled = false;
     this.setUIStep(EulaScreenState.EULA);
     this.$.eulaDialog.scrollToBottom();
   }
@@ -434,7 +454,7 @@ class EulaScreen extends EulaScreenBase {
 
     var loadBundledEula = function() {
       WebViewHelper.loadUrlContentToWebView(
-          webview, EULA_TERMS_URL, WebViewHelper.ContentType.HTML);
+          webview, EULA_TERMS_URL, ContentType.HTML);
     };
 
     // Load online Eula with a timeout to fallback to the offline version.
@@ -518,8 +538,7 @@ class EulaScreen extends EulaScreenBase {
    * @private
    */
   focusAdditionalTermsLink_() {
-    Polymer.RenderStatus.afterNextRender(
-        this, () => this.$.additionalTerms.focus());
+    afterNextRender(this, () => this.$.additionalTerms.focus());
   }
 
   /**
@@ -552,8 +571,7 @@ class EulaScreen extends EulaScreenBase {
    */
   onSecuritySettingsCloseClicked_() {
     this.setUIStep(EulaScreenState.EULA);
-    Polymer.RenderStatus.afterNextRender(
-        this, () => this.$.securitySettings.focus());
+    afterNextRender(this, () => this.$.securitySettings.focus());
   }
 
   /**

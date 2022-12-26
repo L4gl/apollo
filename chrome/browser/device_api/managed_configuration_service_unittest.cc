@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,7 +33,8 @@ class ManagedConfigurationServiceTest : public ChromeRenderViewHostTestHarness {
     content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents,
                                                                GURL(kUrl));
     ManagedConfigurationServiceImpl::Create(
-        web_contents->GetMainFrame(), remote_.BindNewPipeAndPassReceiver());
+        web_contents->GetPrimaryMainFrame(),
+        remote_.BindNewPipeAndPassReceiver());
   }
 
   TestingProfileManager* profile_manager() { return &profile_manager_; }

@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -107,6 +107,9 @@ using ChannelConfig = uint32_t;
 // CHANNEL_LAYOUT_7_1 but the positions of Back L, Back R and Side L, Side R
 // speakers are different in these two definitions.
 MF_UTIL_EXPORT ChannelLayout ChannelConfigToChannelLayout(ChannelConfig config);
+
+// Converts a GUID (little endian) to a bytes array (big endian).
+MF_UTIL_EXPORT std::vector<uint8_t> ByteArrayFromGUID(REFGUID guid);
 
 }  // namespace media
 

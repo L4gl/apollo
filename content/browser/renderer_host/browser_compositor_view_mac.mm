@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,23 +8,18 @@
 #include <stdint.h>
 
 #include <memory>
-#include <tuple>
 #include <utility>
 
-#include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/circular_deque.h"
-#include "base/containers/contains.h"
-#include "base/containers/fixed_flat_map.h"
 #include "base/lazy_instance.h"
-#include "base/trace_event/typed_macros.h"
+#include "base/trace_event/trace_event.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/context_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/perfetto/include/perfetto/tracing/string_helpers.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #include "ui/base/layout.h"
@@ -198,6 +193,13 @@ void BrowserCompositorMac::UpdateVSyncParameters(
 void BrowserCompositorMac::SetRenderWidgetHostIsHidden(bool hidden) {
   render_widget_host_is_hidden_ = hidden;
   UpdateState();
+  if (state_ == UseParentLayerCompositor) {
+    // UpdateState might not call WasShown when showing a frame using the same
+    // ParentLayerCompositor, since it returns early on a no-op state
+    // transition.
+    delegated_frame_host_->WasShown(GetRendererLocalSurfaceId(), dfh_size_dip_,
+                                    {} /* record_tab_switch_time_request */);
+  }
 }
 
 void BrowserCompositorMac::SetViewVisible(bool visible) {
@@ -230,13 +232,6 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
     else
       is_no_op = true;
   }
-  // Record a trace event whose name encodes the old and new states. The states
-  // can be used to trace this function to see if WasShown / WasHidden were
-  // called. When a tab switch is occurring these traces will nest in trace
-  // events recoded by RenderWidgetHostViewMac.
-  // TODO(https://crbug.com/1164477): Remove these when the investigation is
-  // done.
-  TRACE_EVENT("cc", EventNameForStateTransition(state_, new_state, is_no_op));
   if (is_no_op)
     return;
 
@@ -251,8 +246,7 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
   if (state_ == HasOwnCompositor) {
     recyclable_compositor_->widget()->ResetNSView();
     recyclable_compositor_->compositor()->SetRootLayer(nullptr);
-    ui::RecyclableCompositorMacFactory::Get()->RecycleCompositor(
-        std::move(recyclable_compositor_));
+    recyclable_compositor_.reset();
   }
 
   // The compositor is now detached. If this is the target state, we're done.
@@ -273,9 +267,8 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
     state_ = UseParentLayerCompositor;
   }
   if (new_state == HasOwnCompositor) {
-    recyclable_compositor_ =
-        ui::RecyclableCompositorMacFactory::Get()->CreateCompositor(
-            content::GetContextFactory());
+    recyclable_compositor_ = std::make_unique<ui::RecyclableCompositorMac>(
+        content::GetContextFactory());
     display::ScreenInfo current = client_->GetCurrentScreenInfo();
     recyclable_compositor_->UpdateSurface(dfh_size_pixels_,
                                           current.device_scale_factor,
@@ -294,42 +287,6 @@ void BrowserCompositorMac::TransitionToState(State new_state) {
 }
 
 // static
-perfetto::StaticString BrowserCompositorMac::EventNameForStateTransition(
-    State old_state,
-    State new_state,
-    bool is_no_op) {
-  static const auto kEventNames =
-      base::MakeFixedFlatMap<std::tuple<State, State, bool>,
-                             perfetto::StaticString>({
-          {{HasNoCompositor, HasNoCompositor, true},
-           "BrowserCompositorMac.StateTransition.No.No.NoOp"},
-          {{HasNoCompositor, HasOwnCompositor, false},
-           "BrowserCompositorMac.StateTransition.No.Own"},
-          {{HasNoCompositor, UseParentLayerCompositor, false},
-           "BrowserCompositorMac.StateTransition.No.Parent"},
-          {{HasOwnCompositor, HasNoCompositor, false},
-           "BrowserCompositorMac.StateTransition.Own.No"},
-          {{HasOwnCompositor, HasOwnCompositor, true},
-           "BrowserCompositorMac.StateTransition.Own.Own.NoOp"},
-          {{HasOwnCompositor, UseParentLayerCompositor, false},
-           "BrowserCompositorMac.StateTransition.Own.Parent"},
-          {{UseParentLayerCompositor, HasNoCompositor, false},
-           "BrowserCompositorMac.StateTransition.Parent.No"},
-          {{UseParentLayerCompositor, HasOwnCompositor, false},
-           "BrowserCompositorMac.StateTransition.Parent.Own"},
-          // UseParentLayerCompositer -> UseParentLayerCompositer may or may not
-          // be a no-op.
-          {{UseParentLayerCompositor, UseParentLayerCompositor, false},
-           "BrowserCompositorMac.StateTransition.Parent.Parent"},
-          {{UseParentLayerCompositor, UseParentLayerCompositor, true},
-           "BrowserCompositorMac.StateTransition.Parent.Parent.NoOp"},
-      });
-  const auto key = std::make_tuple(old_state, new_state, is_no_op);
-  DCHECK(base::Contains(kEventNames, key));
-  return kEventNames.at(key);
-}
-
-// static
 void BrowserCompositorMac::DisableRecyclingForShutdown() {
   // Ensure that the client has destroyed its BrowserCompositorViewMac before
   // it dependencies are destroyed.
@@ -339,8 +296,6 @@ void BrowserCompositorMac::DisableRecyclingForShutdown() {
         *g_browser_compositors.Get().begin();
     browser_compositor->client_->DestroyCompositorForShutdown();
   }
-
-  ui::RecyclableCompositorMacFactory::Get()->DisableRecyclingForShutdown();
 }
 
 void BrowserCompositorMac::TakeFallbackContentFrom(
@@ -447,7 +402,7 @@ void BrowserCompositorMac::TransformPointToRootSurface(gfx::PointF* point) {
   gfx::Transform transform_to_root;
   if (parent_ui_layer_)
     parent_ui_layer_->GetTargetTransformRelativeTo(nullptr, &transform_to_root);
-  transform_to_root.TransformPoint(point);
+  *point = transform_to_root.MapPoint(*point);
 }
 
 void BrowserCompositorMac::LayerDestroyed(ui::Layer* layer) {

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "chromecast/browser/display_configurator_observer.h"
@@ -27,11 +28,6 @@ class ChildExitObserver;
 }  // namespace crash_reporter
 #endif  // BUILDFLAG(IS_ANDROID)
 
-namespace extensions {
-class ExtensionsClient;
-class ExtensionsBrowserClient;
-}  // namespace extensions
-
 #if defined(USE_AURA)
 namespace views {
 class ViewsDelegate;
@@ -44,12 +40,10 @@ class CastWebService;
 class DisplaySettingsManager;
 class ServiceConnector;
 class ServiceManagerContext;
-class WaylandServerController;
 
 #if defined(USE_AURA)
 class CastWindowManagerAura;
 class CastScreen;
-class RoundedWindowCornersManager;
 namespace shell {
 class CastUIDevTools;
 }  // namespace shell
@@ -77,7 +71,6 @@ class MetricsHelperImpl;
 }  // namespace metrics
 
 namespace shell {
-class AccessibilityServiceImpl;
 class CastBrowserProcess;
 class CastContentBrowserClient;
 
@@ -104,7 +97,6 @@ class CastBrowserMainParts : public content::BrowserMainParts {
   external_mojo::BrokerService* broker_service();
   external_service_support::ExternalConnector* connector();
   external_service_support::ExternalConnector* media_connector();
-  AccessibilityServiceImpl* accessibility_service();
   CastWebService* web_service();
 
   // content::BrowserMainParts implementation:
@@ -141,20 +133,14 @@ class CastBrowserMainParts : public content::BrowserMainParts {
   std::unique_ptr<views::ViewsDelegate> views_delegate_;
   std::unique_ptr<CastScreen> cast_screen_;
   std::unique_ptr<CastWindowManagerAura> window_manager_;
-  std::unique_ptr<RoundedWindowCornersManager> rounded_window_corners_manager_;
   std::unique_ptr<DisplayConfiguratorObserver> display_change_observer_;
 #else
   std::unique_ptr<CastWindowManager> window_manager_;
 #endif  //  defined(USE_AURA)
   std::unique_ptr<CastWebService> web_service_;
   std::unique_ptr<DisplaySettingsManager> display_settings_manager_;
-  std::unique_ptr<AccessibilityServiceImpl> accessibility_service_;
 
 #if BUILDFLAG(IS_ANDROID)
-  void StartPeriodicCrashReportUpload();
-  void OnStartPeriodicCrashReportUpload();
-  scoped_refptr<base::SequencedTaskRunner> crash_reporter_runner_;
-  std::unique_ptr<base::RepeatingTimer> crash_reporter_timer_;
   std::unique_ptr<crash_reporter::ChildExitObserver> child_exit_observer_;
 #endif
 
@@ -162,24 +148,14 @@ class CastBrowserMainParts : public content::BrowserMainParts {
   std::unique_ptr<media::MediaPipelineBackendManager>
       media_pipeline_backend_manager_;
 
-#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
-  std::unique_ptr<extensions::ExtensionsClient> extensions_client_;
-  std::unique_ptr<extensions::ExtensionsBrowserClient>
-      extensions_browser_client_;
-  std::unique_ptr<PrefService> local_state_;
-  std::unique_ptr<PrefService> user_pref_service_;
-#endif
-
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(USE_OZONE)
-  std::unique_ptr<WaylandServerController> wayland_server_controller_;
-#endif
-
   std::unique_ptr<CastFeatureUpdateObserver> feature_update_observer_;
 
 #if defined(USE_AURA) && !BUILDFLAG(IS_FUCHSIA)
   // Only used when running with --enable-ui-devtools.
   std::unique_ptr<CastUIDevTools> ui_devtools_;
 #endif  // defined(USE_AURA) && !BUILDFLAG(IS_FUCHSIA)
+
+  base::WeakPtrFactory<CastBrowserMainParts> weak_factory_{this};
 };
 
 }  // namespace shell

@@ -1,11 +1,14 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /**
  * @fileoverview The driver for the UI for incremental search.
  */
-import {PanelInterface} from '/chromevox/panel/panel_interface.js';
+import {constants} from '../../common/constants.js';
+import {BackgroundBridge} from '../common/background_bridge.js';
+
+import {PanelInterface} from './panel_interface.js';
 
 const AutomationNode = chrome.automation.AutomationNode;
 const Dir = constants.Dir;

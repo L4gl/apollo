@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,16 +10,17 @@
 
 #include "base/command_line.h"
 #include "base/version.h"
+#include "chrome/browser/ash/app_mode/app_session_ash.h"
 #include "chrome/browser/ash/app_mode/fake_cws.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
-#include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/network_portal_detector_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "chrome/browser/ash/ownership/fake_owner_settings_service.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
-#include "chromeos/network/portal_detector/network_portal_detector.h"
+#include "chrome/test/base/fake_gaia_mixin.h"
+#include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/mojom/manifest.mojom-shared.h"
@@ -39,6 +40,14 @@ extern const char kTestEnterpriseAccountId[];
 
 extern const test::UIPath kConfigNetwork;
 extern const char kSizeChangedMessage[];
+
+// Waits until |app_session| handles creation of new browser and returns whether
+// the browser has been closed.
+bool ShouldBrowserBeClosedByAppSessionBrowserHander(AppSessionAsh* app_session);
+
+// Opens accessibility settings browser and waits until it will be handled by
+// |app_session|.
+Browser* OpenA11ySettingsBrowser(AppSessionAsh* app_session);
 
 // Base class for Kiosk browser tests.
 class KioskBaseTest : public OobeBaseTest {
@@ -86,6 +95,8 @@ class KioskBaseTest : public OobeBaseTest {
   void PrepareAppLaunch();
 
   void StartAppLaunchFromLoginScreen(
+      NetworkPortalDetector::CaptivePortalStatus network_status);
+  void StartExistingAppLaunchFromLoginScreen(
       NetworkPortalDetector::CaptivePortalStatus network_status);
 
   const extensions::Extension* GetInstalledApp();

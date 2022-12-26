@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -78,10 +78,6 @@ class PixelTest : public testing::Test {
       const base::FilePath& ref_file,
       const PixelComparator& comparator,
       const gfx::Rect* copy_rect);
-
-  viz::ContextProvider* context_provider() const {
-    return output_surface_->context_provider();
-  }
 
   viz::GpuServiceImpl* gpu_service() {
     return gpu_service_holder_->gpu_service();

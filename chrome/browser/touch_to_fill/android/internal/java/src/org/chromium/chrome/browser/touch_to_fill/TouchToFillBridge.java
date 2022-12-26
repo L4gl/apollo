@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -73,10 +73,11 @@ class TouchToFillBridge implements TouchToFillComponent.Delegate {
     }
 
     @CalledByNative
-    private void showCredentials(
-            GURL url, boolean isOriginSecure, Credential[] credentials, boolean submitCredential) {
-        mTouchToFillComponent.showCredentials(
-                url, isOriginSecure, Arrays.asList(credentials), submitCredential);
+    private void showCredentials(GURL url, boolean isOriginSecure,
+            WebAuthnCredential[] webAuthnCredentials, Credential[] credentials,
+            boolean submitCredential) {
+        mTouchToFillComponent.showCredentials(url, isOriginSecure,
+                Arrays.asList(webAuthnCredentials), Arrays.asList(credentials), submitCredential);
     }
 
     @Override
@@ -93,6 +94,13 @@ class TouchToFillBridge implements TouchToFillComponent.Delegate {
     public void onCredentialSelected(Credential credential) {
         if (mNativeView != 0) {
             TouchToFillBridgeJni.get().onCredentialSelected(mNativeView, credential);
+        }
+    }
+
+    @Override
+    public void onWebAuthnCredentialSelected(WebAuthnCredential credential) {
+        if (mNativeView != 0) {
+            TouchToFillBridgeJni.get().onWebAuthnCredentialSelected(mNativeView, credential);
         }
     }
 

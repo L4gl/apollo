@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,9 +18,9 @@
 #include "base/strings/string_util_win.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/windows_version.h"
@@ -168,7 +168,8 @@ NativeWindowOcclusionTrackerWin::NativeWindowOcclusionTrackerWin()
                               base::Unretained(this))),
       power_setting_change_listener_(this) {
   WindowOcclusionCalculator::CreateInstance(
-      update_occlusion_task_runner_, base::SequencedTaskRunnerHandle::Get(),
+      update_occlusion_task_runner_,
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindRepeating(
           &NativeWindowOcclusionTrackerWin::UpdateOcclusionState,
           weak_factory_.GetWeakPtr()));
@@ -254,12 +255,8 @@ bool NativeWindowOcclusionTrackerWin::IsWindowVisibleAndFullyOpaque(
   // not displayed. explorer.exe, in particular has one that's the
   // size of the desktop. It's usually behind Chrome windows in the z-order,
   // but using a remote desktop can move it up in the z-order. So, ignore them.
-  DWORD reason;
-  if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &reason,
-                                      sizeof(reason))) &&
-      reason != 0) {
+  if (gfx::IsWindowCloaked(hwnd))
     return false;
-  }
 
   RECT win_rect;
   // Filter out windows that take up zero area. The call to GetWindowRect is one
@@ -952,6 +949,10 @@ bool NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
 absl::optional<bool> NativeWindowOcclusionTrackerWin::
     WindowOcclusionCalculator::IsWindowOnCurrentVirtualDesktop(HWND hwnd) {
   if (!virtual_desktop_manager_)
+    return true;
+
+  // If the window is not cloaked, it is not on another desktop.
+  if (!gfx::IsWindowCloaked(hwnd))
     return true;
 
   return gfx::IsWindowOnCurrentVirtualDesktop(hwnd, virtual_desktop_manager_);

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,24 +23,20 @@ namespace signin_ui_util {
 class SigninUiDelegate {
  public:
   // Displays a sign-in prompt to the user.
-  // `browser` might be null. In that case, the delegate will find an existing
-  // suitable window for `profile` or create a new one if needed.
   // `enable_sync` indicates whether the sync should be enabled after the user
   // successfully signs in.
-  virtual void ShowSigninUI(Browser* browser,
-                            Profile* profile,
+  virtual void ShowSigninUI(Profile* profile,
                             bool enable_sync,
                             signin_metrics::AccessPoint access_point,
                             signin_metrics::PromoAction promo_action) = 0;
 
   // Displays a reauth prompt to the user for an account with indicated `email`.
   // This account should be already known to Chrome.
-  // `browser` might be null. In that case, the delegate will find an existing
-  // suitable window for `profile` or create a new one if needed.
   // `enable_sync` indicates whether the sync should be enabled after the user
   // successfully re-authenticates.
-  virtual void ShowReauthUI(Browser* browser,
-                            Profile* profile,
+  // Note: if sync is enabled, `enable_sync` has to be false, as it's not valid
+  // to start a new sync setup flow when sync is already enabled.
+  virtual void ShowReauthUI(Profile* profile,
                             const std::string& email,
                             bool enable_sync,
                             signin_metrics::AccessPoint access_point,
@@ -49,10 +45,7 @@ class SigninUiDelegate {
   // Displays a sync confirmation dialog to the user for an account with
   // identified by `account_id`. Account must be a valid (have no auth error)
   // account added to `profile`.
-  // `browser` might be null. In that case, the delegate will find an existing
-  // suitable window for `profile` or create a new one if needed.
   virtual void ShowTurnSyncOnUI(
-      Browser* browser,
       Profile* profile,
       signin_metrics::AccessPoint access_point,
       signin_metrics::PromoAction promo_action,
@@ -61,7 +54,7 @@ class SigninUiDelegate {
       TurnSyncOnHelper::SigninAbortedMode signin_aborted_mode);
 
  protected:
-  static Browser* EnsureBrowser(Browser* browser, Profile* profile);
+  static Browser* EnsureBrowser(Profile* profile);
 };
 
 }  // namespace signin_ui_util

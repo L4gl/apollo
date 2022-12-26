@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,7 @@ class ArcProvisioningThrottleObserverTest : public testing::Test {
  public:
   ArcProvisioningThrottleObserverTest()
       : scoped_user_manager_(std::make_unique<ash::FakeChromeUserManager>()) {
-    chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
+    ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
     SetArcAvailableCommandLineForTesting(
         base::CommandLine::ForCurrentProcess());
 
@@ -79,10 +79,10 @@ class ArcProvisioningThrottleObserverTest : public testing::Test {
   }
 
   void StartArc(bool accept_tos) {
+    session_manager()->AllowActivation();
     session_manager()->RequestEnable();
     if (accept_tos) {
-      session_manager()->OnTermsOfServiceNegotiatedForTesting(true);
-      session_manager()->StartArcForTesting();
+      session_manager()->EmulateRequirementCheckCompletionForTesting();
     }
     DCHECK(session_manager()->state() == ArcSessionManager::State::ACTIVE);
   }

@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,8 +27,8 @@ class UkmDatabase {
   UkmDatabase() = default;
   virtual ~UkmDatabase() = default;
 
-  UkmDatabase(UkmDatabase&) = delete;
-  UkmDatabase& operator=(UkmDatabase&) = delete;
+  UkmDatabase(const UkmDatabase&) = delete;
+  UkmDatabase& operator=(const UkmDatabase&) = delete;
 
   using SuccessCallback = base::OnceCallback<void(bool)>;
 

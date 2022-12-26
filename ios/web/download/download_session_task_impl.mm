@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,6 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/bind_post_task.h"
 #import "base/task/sequenced_task_runner.h"
-#import "base/threading/sequenced_task_runner_handle.h"
 #import "ios/net/cookies/system_cookie_util.h"
 #import "ios/web/common/user_agent.h"
 #import "ios/web/download/download_result.h"
@@ -160,7 +159,7 @@ using TaskFinishedHandler =
                                   NSURLCredential*))handler {
   @synchronized(self) {
     // TODO(crbug.com/780911): use CRWCertVerificationController to get
-    // CertAcceptPolicy for this |challenge|.
+    // CertAcceptPolicy for this `challenge`.
     handler(NSURLSessionAuthChallengeRejectProtectionSpace, nil);
   }
 }
@@ -179,7 +178,7 @@ namespace download {
 namespace internal {
 namespace {
 
-// Asynchronously returns cookies for |context_getter|. Must be called on IO
+// Asynchronously returns cookies for `context_getter`. Must be called on IO
 // thread (due to URLRequestContextGetter thread-affinity). The callback will
 // be called on the IO thread too.
 void GetCookiesFromContextGetter(
@@ -423,12 +422,12 @@ Session::Session(base::File file,
 
   // Invoked when data is received from NSURLSessionTask.
   DataReceivedHandler data_received = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindRepeating(&Session::DataReceived, weak_factory_.GetWeakPtr()));
 
   // Invoked when NSURLSessionTask complete.
   TaskFinishedHandler task_finished = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindRepeating(&Session::TaskFinished, weak_factory_.GetWeakPtr()));
 
   // The delegate passed to NSURLSession. It is strongly retained by the
@@ -643,7 +642,7 @@ void DownloadSessionTaskImpl::OnFileCreated(base::File file) {
       base::BindOnce(
           &GetCookiesFromContextGetter, context_getter,
           base::BindPostTask(
-              base::SequencedTaskRunnerHandle::Get(),
+              base::SequencedTaskRunner::GetCurrentDefault(),
               base::BindOnce(&DownloadSessionTaskImpl::OnCookiesFetched,
                              weak_factory_.GetWeakPtr(), std::move(file)))));
 }

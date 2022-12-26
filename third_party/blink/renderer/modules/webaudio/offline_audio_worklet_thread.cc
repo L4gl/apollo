@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,9 +14,9 @@ namespace {
 
 // Use for ref-counting of all OfflineAudioWorkletThread instances in a
 // process. Incremented by the constructor and decremented by destructor.
-static int ref_count = 0;
+int ref_count = 0;
 
-static void EnsureSharedBackingThread(const ThreadCreationParams& params) {
+void EnsureSharedBackingThread(const ThreadCreationParams& params) {
   DCHECK(IsMainThread());
   DCHECK_EQ(ref_count, 1);
   WorkletThreadHolder<OfflineAudioWorkletThread>::EnsureInstance(params);
@@ -37,8 +37,8 @@ OfflineAudioWorkletThread::OfflineAudioWorkletThread(
   ThreadCreationParams params =
       ThreadCreationParams(ThreadType::kOfflineAudioWorkletThread);
 
-  // OfflineAudioWorkletThread always uses a NORMAL priority thread.
-  params.thread_priority = base::ThreadPriority::NORMAL;
+  // OfflineAudioWorkletThread always uses a kNormal type thread.
+  params.base_thread_type = base::ThreadType::kDefault;
 
   if (++ref_count == 1) {
     EnsureSharedBackingThread(params);

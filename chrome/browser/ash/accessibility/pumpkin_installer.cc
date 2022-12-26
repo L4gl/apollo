@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,32 +14,31 @@ constexpr char kInstallationMetricName[] =
     "PumpkinInstaller.InstallationSuccess";
 constexpr char kPendingDlcRequestError[] =
     "Cannot install Pumpkin, DLC request in progress.";
-constexpr char kPumpkinInstalledError[] = "Pumpkin already installed.";
 constexpr char kPumpkinInstallingError[] = "Pumpkin already installing.";
 }  // namespace
 
 namespace ash {
 
-PumpkinInstaller::PumpkinInstaller(const InstalledCallback& on_installed,
-                                   const ProgressCallback& on_progress,
-                                   const ErrorCallback& on_error)
-    : on_installed_(on_installed),
-      on_progress_(on_progress),
-      on_error_(on_error),
-      pending_dlc_request_(false) {
+PumpkinInstaller::PumpkinInstaller() {
   DCHECK(features::IsExperimentalAccessibilityDictationWithPumpkinEnabled());
 }
 
-PumpkinInstaller::~PumpkinInstaller() {}
+PumpkinInstaller::~PumpkinInstaller() = default;
 
-void PumpkinInstaller::MaybeInstall() {
+void PumpkinInstaller::MaybeInstall(InstalledCallback on_installed,
+                                    ProgressCallback on_progress,
+                                    ErrorCallback on_error) {
   if (pending_dlc_request_) {
-    OnError(kPendingDlcRequestError);
+    std::move(on_error).Run(kPendingDlcRequestError);
     return;
   }
 
+  on_installed_ = std::move(on_installed);
+  on_progress_ = std::move(on_progress);
+  on_error_ = std::move(on_error);
+
   pending_dlc_request_ = true;
-  chromeos::DlcserviceClient::Get()->GetDlcState(
+  DlcserviceClient::Get()->GetDlcState(
       kPumpkinDlcName,
       base::BindOnce(&PumpkinInstaller::MaybeInstallHelper, GetWeakPtr()));
 }
@@ -58,7 +57,9 @@ void PumpkinInstaller::MaybeInstallHelper(
       OnError(kPumpkinInstallingError);
       return;
     case dlcservice::DlcState_State_INSTALLED:
-      OnError(kPumpkinInstalledError);
+      is_pumpkin_installed_ = true;
+      CHECK(!on_installed_.is_null());
+      std::move(on_installed_).Run(true);
       return;
     default:
       break;
@@ -68,15 +69,16 @@ void PumpkinInstaller::MaybeInstallHelper(
   pending_dlc_request_ = true;
   dlcservice::InstallRequest install_request;
   install_request.set_id(kPumpkinDlcName);
-  chromeos::DlcserviceClient::Get()->Install(
+  DlcserviceClient::Get()->Install(
       install_request,
       base::BindOnce(&PumpkinInstaller::OnInstalled, GetWeakPtr()),
       base::BindRepeating(&PumpkinInstaller::OnProgress, GetWeakPtr()));
 }
 
 void PumpkinInstaller::OnInstalled(
-    const chromeos::DlcserviceClient::InstallResult& install_result) {
+    const DlcserviceClient::InstallResult& install_result) {
   pending_dlc_request_ = false;
+  is_pumpkin_installed_ = true;
   base::UmaHistogramBoolean(kInstallationMetricName,
                             install_result.error == dlcservice::kErrorNone);
   if (install_result.error != dlcservice::kErrorNone) {
@@ -84,15 +86,18 @@ void PumpkinInstaller::OnInstalled(
     return;
   }
 
-  on_installed_.Run(install_result.root_path);
+  CHECK(!on_installed_.is_null());
+  std::move(on_installed_).Run(true);
 }
 
 void PumpkinInstaller::OnProgress(double progress) {
-  on_progress_.Run(progress);
+  std::move(on_progress_).Run(progress);
 }
 
 void PumpkinInstaller::OnError(const std::string& error) {
-  on_error_.Run(error);
+  is_pumpkin_installed_ = false;
+  CHECK(!on_error_.is_null());
+  std::move(on_error_).Run(error);
 }
 
 base::WeakPtr<PumpkinInstaller> PumpkinInstaller::GetWeakPtr() {

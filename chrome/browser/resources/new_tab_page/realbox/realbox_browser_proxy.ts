@@ -1,8 +1,8 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {PageCallbackRouter, PageHandler, PageHandlerInterface} from '../realbox.mojom-webui.js';
+import {PageCallbackRouter, PageHandler, PageHandlerInterface} from '../omnibox.mojom-webui.js';
 
 /**
  * @fileoverview This file provides a singleton class that exposes the Mojo

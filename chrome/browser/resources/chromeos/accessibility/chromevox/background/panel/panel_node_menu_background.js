@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,27 +6,39 @@
  * @fileoverview Calculates the menu items for the node menus in the ChromeVox
  * panel.
  */
+import {AutomationPredicate} from '../../../common/automation_predicate.js';
+import {AutomationUtil} from '../../../common/automation_util.js';
+import {constants} from '../../../common/constants.js';
+import {CursorRange} from '../../../common/cursors/range.js';
+import {AutomationTreeWalker} from '../../../common/tree_walker.js';
+import {BridgeCallbackId} from '../../common/bridge_callback_manager.js';
+import {BridgeContext} from '../../common/bridge_constants.js';
+import {Msgs} from '../../common/msgs.js';
+import {PanelBridge} from '../../common/panel_bridge.js';
+import {PanelNodeMenuData, PanelNodeMenuId, PanelNodeMenuItemData} from '../../common/panel_menu_data.js';
+import {ChromeVoxState} from '../chromevox_state.js';
+import {Output} from '../output/output.js';
+import {OutputCustomEvent} from '../output/output_types.js';
+
+const AutomationNode = chrome.automation.AutomationNode;
 
 export class PanelNodeMenuBackground {
   /**
    * @param {!PanelNodeMenuData} menuData
-   * @param {chrome.automation.AutomationNode} node ChromeVox's current
-   *     position.
+   * @param {AutomationNode} node ChromeVox's current position.
    * @param {boolean} isActivated Whether the menu was explicitly activated.
    *     If false, the menu is populated asynchronously by posting a task
    *     after searching each chunk of nodes.
-   * @param {function(!PanelNodeMenuItemData)} addMenuItemFromData A callback
-   *     that adds an item to the corresponding menu in the panel.
    */
-  constructor(menuData, node, isActivated, addMenuItemFromData) {
-    /** @private {chrome.automation.AutomationNode} */
+  constructor(menuData, node, isActivated) {
+    /** @private {AutomationNode} */
     this.node_ = node;
     /** @private {AutomationPredicate.Unary} */
     this.pred_ = menuData.predicate;
+    /** @private {!PanelNodeMenuId} */
+    this.menuId_ = menuData.menuId;
     /** @private {boolean} */
     this.isActivated_ = isActivated;
-    /** @private {function(!PanelNodeMenuItemData)} */
-    this.addMenuItemFromData_ = addMenuItemFromData;
     /** @private {AutomationTreeWalker|undefined} */
     this.walker_;
     /** @private {number} */
@@ -54,7 +66,7 @@ export class PanelNodeMenuBackground {
     this.walker_ = new AutomationTreeWalker(root, constants.Dir.FORWARD, {
       visit(node) {
         return !AutomationPredicate.shouldIgnoreNode(node);
-      }
+      },
     });
     this.nodeCount_ = 0;
     this.findMoreNodes_();
@@ -76,25 +88,25 @@ export class PanelNodeMenuBackground {
       if (this.pred_(node)) {
         this.isEmpty_ = false;
         const output = new Output();
-        const range = cursors.Range.fromNode(node);
+        const range = CursorRange.fromNode(node);
         output.withoutHints();
-        output.withSpeech(range, range, OutputEventType.NAVIGATE);
+        output.withSpeech(range, range, OutputCustomEvent.NAVIGATE);
         const title = output.toString();
 
-        const callback = (() => {
-          chrome.extension.getBackgroundPage()
-              .ChromeVoxState.instance.navigateToRange(
-                  cursors.Range.fromNode(node));
-        });
+        const callbackId = new BridgeCallbackId(
+            BridgeContext.BACKGROUND,
+            () => ChromeVoxState.instance.navigateToRange(
+                CursorRange.fromNode(node)));
         const isActive = node === this.node_ && this.isActivated_;
-        this.addMenuItemFromData_({title, callback, isActive});
+        const menuId = this.menuId_;
+        this.addMenuItemFromData_({title, callbackId, isActive, menuId});
       }
 
       if (!this.isActivated_) {
         this.nodeCount_++;
         if (this.nodeCount_ >= PanelNodeMenuBackground.MAX_NODES_BEFORE_ASYNC) {
           this.nodeCount_ = 0;
-          window.setTimeout(this.findMoreNodes_.bind(this), 0);
+          setTimeout(this.findMoreNodes_.bind(this), 0);
           return;
         }
       }
@@ -111,10 +123,19 @@ export class PanelNodeMenuBackground {
     if (this.isEmpty_) {
       this.addMenuItemFromData_({
         title: Msgs.getMsg('panel_menu_item_none'),
-        callback() {},
-        isActive: false
+        callbackId: null,
+        isActive: false,
+        menuId: this.menuId_,
       });
     }
+  }
+
+  /**
+   * @param {!PanelNodeMenuItemData} itemData
+   * @private
+   */
+  async addMenuItemFromData_(itemData) {
+    await PanelBridge.addMenuItem(itemData);
   }
 }
 

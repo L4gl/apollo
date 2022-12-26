@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,6 +70,15 @@ const DevicePolicyToUserPolicyMapEntry kDevicePoliciesWithPolicyOptionsMap[] = {
     {key::kDeviceLoginScreenExtensions, key::kExtensionInstallForcelist},
     {key::kDeviceLoginScreenPromptOnMultipleMatchingCertificates,
      key::kPromptOnMultipleMatchingCertificates},
+    {key::kDeviceLoginScreenContextAwareAccessSignalsAllowlist,
+     key::kContextAwareAccessSignalsAllowlist},
+
+    // key::kDeviceLoginScreenLocales maps to the ash::kDeviceLoginScreenLocales
+    // CrosSetting elsewhere. Also map it to the key::kForcedLanguages policy in
+    // the login/lock screen profile so web contents within those profiles
+    // generate a corresponding Accept-Languages header
+    // (https://crbug.com/1336382).
+    {key::kDeviceLoginScreenLocales, key::kForcedLanguages},
 };
 
 const DevicePolicyToUserPolicyMapEntry kRecommendedDevicePoliciesMap[] = {
@@ -205,8 +214,8 @@ void LoginProfilePolicyProvider::UpdateFromDevicePolicy() {
   const PolicyNamespace chrome_namespaces(POLICY_DOMAIN_CHROME, std::string());
   const PolicyMap& device_policy_map =
       device_policy_service_->GetPolicies(chrome_namespaces);
-  std::unique_ptr<PolicyBundle> bundle(new PolicyBundle);
-  PolicyMap& user_policy_map = bundle->Get(chrome_namespaces);
+  PolicyBundle bundle;
+  PolicyMap& user_policy_map = bundle.Get(chrome_namespaces);
 
   // The device policies which includes the policy options
   // |kDevicePoliciesWithPolicyOptionsMap| should be applied after

@@ -1,15 +1,15 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/menu/action_factory.h"
 
 #import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/icons/action_icon.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -18,8 +18,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-NSInteger kSymbolToolbarPointSize = 18;
 
 @interface ActionFactory ()
 
@@ -30,7 +28,7 @@ NSInteger kSymbolToolbarPointSize = 18;
 
 @implementation ActionFactory
 
-- (instancetype)initWithScenario:(MenuScenario)scenario {
+- (instancetype)initWithScenario:(MenuScenarioHistogram)scenario {
   if (self = [super init]) {
     _histogram = GetActionsHistogramName(scenario);
   }
@@ -78,6 +76,17 @@ NSInteger kSymbolToolbarPointSize = 18;
                       block:block];
 }
 
+- (UIAction*)actionToPinTabWithBlock:(ProceduralBlock)block {
+  UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
+                                      kPinSymbol, kSymbolActionPointSize)
+                                : [UIImage imageNamed:@"pin"];
+  return [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_PINTAB)
+                image:image
+                 type:MenuActionType::PinTab
+                block:block];
+}
+
 - (UIAction*)actionToDeleteWithBlock:(ProceduralBlock)block {
   UIImage* image = UseSymbols()
                        ? DefaultSymbolWithPointSize(kDeleteActionSymbol,
@@ -94,14 +103,17 @@ NSInteger kSymbolToolbarPointSize = 18;
 
 - (UIAction*)actionToOpenInNewTabWithBlock:(ProceduralBlock)block {
   UIImage* image = UseSymbols()
-                       ? DefaultSymbolWithPointSize(kOpenInNewTabActionSymbol,
+                       ? DefaultSymbolWithPointSize(kNewTabActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"open_in_new_tab"];
+  ProceduralBlock completionBlock =
+      [self recordMobileWebContextMenuOpenTabActionWithBlock:block];
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)
                          image:image
                           type:MenuActionType::OpenInNewTab
-                         block:block];
+                         block:completionBlock];
 }
 
 - (UIAction*)actionToOpenAllTabsWithBlock:(ProceduralBlock)block {
@@ -171,9 +183,10 @@ NSInteger kSymbolToolbarPointSize = 18;
 }
 
 - (UIAction*)actionToMarkAsUnreadWithBlock:(ProceduralBlock)block {
-  UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
-                                      kHideActionSymbol, kSymbolActionPointSize)
-                                : [UIImage imageNamed:@"remove"];
+  UIImage* image = UseSymbols()
+                       ? DefaultSymbolWithPointSize(kMarkAsUnreadActionSymbol,
+                                                    kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"remove"];
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_MARK_AS_UNREAD_ACTION)
                          image:image
@@ -183,11 +196,18 @@ NSInteger kSymbolToolbarPointSize = 18;
 
 - (UIAction*)actionToOpenOfflineVersionInNewTabWithBlock:
     (ProceduralBlock)block {
+  UIImage* image = UseSymbols()
+                       ? DefaultSymbolWithPointSize(kCheckmarkCircleSymbol,
+                                                    kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"offline"];
+  ProceduralBlock completionBlock =
+      [self recordMobileWebContextMenuOpenTabActionWithBlock:block];
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_OPEN_OFFLINE_BUTTON)
-                         image:[UIImage imageNamed:@"offline"]
+                         image:image
                           type:MenuActionType::ViewOffline
-                         block:block];
+                         block:completionBlock];
 }
 
 - (UIAction*)actionToAddToReadingListWithBlock:(ProceduralBlock)block {
@@ -239,9 +259,13 @@ NSInteger kSymbolToolbarPointSize = 18;
 }
 
 - (UIAction*)actionSaveImageWithBlock:(ProceduralBlock)block {
+  UIImage* image = UseSymbols()
+                       ? DefaultSymbolWithPointSize(kSaveImageActionSymbol,
+                                                    kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"download"];
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE)
-                image:[UIImage imageNamed:@"download"]
+                image:image
                  type:MenuActionType::SaveImage
                 block:block];
   return action;
@@ -261,8 +285,12 @@ NSInteger kSymbolToolbarPointSize = 18;
 
 - (UIAction*)actionSearchImageWithTitle:(NSString*)title
                                   Block:(ProceduralBlock)block {
+  UIImage* image =
+      UseSymbols() ? CustomSymbolWithPointSize(kPhotoBadgeMagnifyingglassSymbol,
+                                               kSymbolActionPointSize)
+                   : [UIImage imageNamed:@"search_image"];
   UIAction* action = [self actionWithTitle:title
-                                     image:[UIImage imageNamed:@"search_image"]
+                                     image:image
                                       type:MenuActionType::SearchImage
                                      block:block];
   return action;
@@ -283,22 +311,39 @@ NSInteger kSymbolToolbarPointSize = 18;
 }
 
 - (UIAction*)actionToSelectTabsWithBlock:(ProceduralBlock)block {
+  UIImage* image = UseSymbols()
+                       ? DefaultSymbolWithPointSize(kCheckmarkCircleSymbol,
+                                                    kSymbolActionPointSize)
+                       : [UIImage imageNamed:@"select"];
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_SELECTTABS)
-                image:[UIImage imageNamed:@"select"]
+                image:image
                  type:MenuActionType::SelectTabs
                 block:block];
   return action;
 }
 
 - (UIAction*)actionToSearchImageUsingLensWithBlock:(ProceduralBlock)block {
+  UIImage* image = UseSymbols() ? CustomSymbolWithPointSize(
+                                      kCameraLensSymbol, kSymbolActionPointSize)
+                                : [UIImage imageNamed:@"lens_icon"];
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
-                                IDS_IOS_CONTEXT_MENU_SEARCHIMAGEWITHLENS)
-                      image:[UIImage imageNamed:@"lens_icon"]
+                                IDS_IOS_CONTEXT_MENU_SEARCHIMAGEWITHGOOGLE)
+                      image:image
                        type:MenuActionType::SearchImageWithLens
                       block:block];
   return action;
+}
+
+- (ProceduralBlock)recordMobileWebContextMenuOpenTabActionWithBlock:
+    (ProceduralBlock)block {
+  return ^{
+    base::RecordAction(base::UserMetricsAction("MobileWebContextMenuOpenTab"));
+    if (block) {
+      block();
+    }
+  };
 }
 
 @end

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,13 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/base/cast_features.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
-#include "chromecast/browser/accessibility/accessibility_service_impl.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_web_service.h"
 #include "chromecast/browser/lru_renderer_cache.h"
@@ -104,9 +104,6 @@ CastWebViewDefault::CastWebViewDefault(
                   : web_service->CreateWindow(params_->Clone())) {
   DCHECK(web_service_);
   DCHECK(window_);
-  cast_web_contents_.local_interfaces()
-      ->AddInterface<chromecast::shell::mojom::CastAccessibilityService>(
-          shell::CastBrowserProcess::GetInstance()->accessibility_service());
   window_->SetCastWebContents(&cast_web_contents_);
   web_contents_->SetDelegate(this);
 #if defined(USE_AURA)
@@ -223,11 +220,8 @@ const blink::MediaStreamDevice* GetRequestedDeviceOrDefault(
     const blink::MediaStreamDevices& devices,
     const std::string& requested_device_id) {
   if (!requested_device_id.empty()) {
-    auto it = std::find_if(
-        devices.begin(), devices.end(),
-        [requested_device_id](const blink::MediaStreamDevice& device) {
-          return device.id == requested_device_id;
-        });
+    auto it = base::ranges::find(devices, requested_device_id,
+                                 &blink::MediaStreamDevice::id);
     return it != devices.end() ? &(*it) : nullptr;
   }
 
@@ -245,7 +239,7 @@ void CastWebViewDefault::RequestMediaAccessPermission(
       !params_->allow_media_access) {
     LOG(WARNING) << __func__ << ": media access is disabled.";
     std::move(callback).Run(
-        blink::mojom::StreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED,
         std::unique_ptr<content::MediaStreamUI>());
     return;
@@ -258,7 +252,10 @@ void CastWebViewDefault::RequestMediaAccessPermission(
   DVLOG(2) << __func__ << " audio_devices=" << audio_devices.size()
            << " video_devices=" << video_devices.size();
 
-  blink::mojom::StreamDevices devices;
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  blink::mojom::StreamDevices& devices = *stream_devices_set.stream_devices[0];
   if (request.audio_type ==
       blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE) {
     const blink::MediaStreamDevice* device = GetRequestedDeviceOrDefault(
@@ -281,7 +278,8 @@ void CastWebViewDefault::RequestMediaAccessPermission(
     }
   }
 
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::unique_ptr<content::MediaStreamUI>());
 }
 

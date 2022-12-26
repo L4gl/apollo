@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,7 +15,6 @@
 #include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/load_timing_info.h"
@@ -44,8 +43,7 @@ IPAddress ParseIP(const std::string& ip) {
 class MockConnectClientSocket : public TransportClientSocket {
  public:
   MockConnectClientSocket(const AddressList& addrlist, net::NetLog* net_log)
-      : connected_(false),
-        addrlist_(addrlist),
+      : addrlist_(addrlist),
         net_log_(NetLogWithSource::Make(net_log, NetLogSourceType::SOCKET)) {}
 
   MockConnectClientSocket(const MockConnectClientSocket&) = delete;
@@ -84,9 +82,6 @@ class MockConnectClientSocket : public TransportClientSocket {
   bool WasAlpnNegotiated() const override { return false; }
   NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
-  ConnectionAttempts GetConnectionAttempts() const override {
-    return connection_attempts_;
-  }
   int64_t GetTotalReceivedBytes() const override {
     NOTIMPLEMENTED();
     return 0;
@@ -109,10 +104,9 @@ class MockConnectClientSocket : public TransportClientSocket {
   int SetSendBufferSize(int32_t size) override { return OK; }
 
  private:
-  bool connected_;
+  bool connected_ = false;
   const AddressList addrlist_;
   NetLogWithSource net_log_;
-  ConnectionAttempts connection_attempts_;
 };
 
 class MockFailingClientSocket : public TransportClientSocket {
@@ -135,9 +129,6 @@ class MockFailingClientSocket : public TransportClientSocket {
 
   // StreamSocket implementation.
   int Connect(CompletionOnceCallback callback) override {
-    for (const auto& addr : addrlist_) {
-      connection_attempts_.push_back(ConnectionAttempt(addr, connect_error_));
-    }
     return connect_error_;
   }
 
@@ -157,9 +148,6 @@ class MockFailingClientSocket : public TransportClientSocket {
   bool WasAlpnNegotiated() const override { return false; }
   NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
-  ConnectionAttempts GetConnectionAttempts() const override {
-    return connection_attempts_;
-  }
   int64_t GetTotalReceivedBytes() const override {
     NOTIMPLEMENTED();
     return 0;
@@ -186,7 +174,6 @@ class MockFailingClientSocket : public TransportClientSocket {
   const AddressList addrlist_;
   const Error connect_error_;
   NetLogWithSource net_log_;
-  ConnectionAttempts connection_attempts_;
 };
 
 class MockTriggerableClientSocket : public TransportClientSocket {
@@ -197,7 +184,6 @@ class MockTriggerableClientSocket : public TransportClientSocket {
                               Error connect_error,
                               net::NetLog* net_log)
       : connect_error_(connect_error),
-        is_connected_(false),
         addrlist_(addrlist),
         net_log_(NetLogWithSource::Make(net_log, NetLogSourceType::SOCKET)) {}
 
@@ -219,8 +205,8 @@ class MockTriggerableClientSocket : public TransportClientSocket {
       net::NetLog* net_log) {
     auto socket = std::make_unique<MockTriggerableClientSocket>(
         addrlist, connect_error, net_log);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  socket->GetConnectCallback());
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, socket->GetConnectCallback());
     return std::move(socket);
   }
 
@@ -231,23 +217,18 @@ class MockTriggerableClientSocket : public TransportClientSocket {
       net::NetLog* net_log) {
     auto socket = std::make_unique<MockTriggerableClientSocket>(
         addrlist, connect_error, net_log);
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE, socket->GetConnectCallback(), delay);
     return std::move(socket);
   }
 
   static std::unique_ptr<TransportClientSocket> MakeMockStalledClientSocket(
       const AddressList& addrlist,
-      net::NetLog* net_log,
-      Error connect_error) {
-    auto socket = std::make_unique<MockTriggerableClientSocket>(
-        addrlist, connect_error, net_log);
-    if (connect_error != OK) {
-      DCHECK_LE(1u, addrlist.size());
-      socket->connection_attempts_.push_back(
-          ConnectionAttempt(addrlist[0], connect_error));
-    }
-    return std::move(socket);
+      net::NetLog* net_log) {
+    // We never post `GetConnectCallback()`, so the value of `connect_error`
+    // does not matter.
+    return std::make_unique<MockTriggerableClientSocket>(
+        addrlist, /*connect_error=*/OK, net_log);
   }
 
   // TransportClientSocket implementation.
@@ -286,9 +267,6 @@ class MockTriggerableClientSocket : public TransportClientSocket {
   bool WasAlpnNegotiated() const override { return false; }
   NextProto GetNegotiatedProtocol() const override { return kProtoUnknown; }
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
-  ConnectionAttempts GetConnectionAttempts() const override {
-    return connection_attempts_;
-  }
   int64_t GetTotalReceivedBytes() const override {
     NOTIMPLEMENTED();
     return 0;
@@ -318,11 +296,10 @@ class MockTriggerableClientSocket : public TransportClientSocket {
   }
 
   Error connect_error_;
-  bool is_connected_;
+  bool is_connected_ = false;
   const AddressList addrlist_;
   NetLogWithSource net_log_;
   CompletionOnceCallback callback_;
-  ConnectionAttempts connection_attempts_;
 
   base::WeakPtrFactory<MockTriggerableClientSocket> weak_factory_{this};
 };
@@ -384,8 +361,6 @@ MockTransportClientSocketFactory::Rule::operator=(const Rule&) = default;
 MockTransportClientSocketFactory::MockTransportClientSocketFactory(
     NetLog* net_log)
     : net_log_(net_log),
-      allocation_count_(0),
-      client_socket_type_(Type::kSynchronous),
       delay_(base::Milliseconds(ClientSocketPool::kMaxConnectRetryIntervalMs)) {
 }
 
@@ -442,11 +417,8 @@ MockTransportClientSocketFactory::CreateTransportClientSocket(
       return MockTriggerableClientSocket::MakeMockDelayedClientSocket(
           addresses, rule.connect_error, delay_, net_log_);
     case Type::kStalled:
-      return MockTriggerableClientSocket::MakeMockStalledClientSocket(
-          addresses, net_log_, OK);
-    case Type::kStalledFailing:
-      return MockTriggerableClientSocket::MakeMockStalledClientSocket(
-          addresses, net_log_, rule.connect_error);
+      return MockTriggerableClientSocket::MakeMockStalledClientSocket(addresses,
+                                                                      net_log_);
     case Type::kTriggerable: {
       auto rv = std::make_unique<MockTriggerableClientSocket>(addresses, OK,
                                                               net_log_);

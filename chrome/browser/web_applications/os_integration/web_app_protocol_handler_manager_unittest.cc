@@ -1,13 +1,16 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/web_applications/os_integration/web_app_protocol_handler_manager.h"
 #include "base/strings/escape.h"
-#include "chrome/browser/web_applications/test/fake_web_app_registry_controller.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
+#include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "components/custom_handlers/protocol_handler.h"
 
 using custom_handlers::ProtocolHandler;
@@ -19,26 +22,23 @@ class WebAppProtocolHandlerManagerTest : public WebAppTest {
   void SetUp() override {
     WebAppTest::SetUp();
 
-    fake_registry_controller_ =
-        std::make_unique<FakeWebAppRegistryController>();
-    fake_registry_controller_->SetUp(profile());
+    provider_ = FakeWebAppProvider::Get(profile());
+    test::AwaitStartWebAppProviderAndSubsystems(profile());
+
+    // This is not a WebAppProvider subsystem, so this can be
+    // set after the WebAppProvider has been initialized.
     protocol_handler_manager_ =
         std::make_unique<WebAppProtocolHandlerManager>(profile());
-
     protocol_handler_manager_->SetSubsystems(&app_registrar());
-
-    controller().Init();
   }
 
   WebAppProtocolHandlerManager& protocol_handler_manager() {
     return *protocol_handler_manager_;
   }
 
-  FakeWebAppRegistryController& controller() {
-    return *fake_registry_controller_;
-  }
+  WebAppProvider& provider() { return *provider_; }
 
-  WebAppRegistrar& app_registrar() { return controller().registrar(); }
+  WebAppRegistrar& app_registrar() { return provider().registrar_unsafe(); }
 
   AppId CreateWebAppWithProtocolHandlers(
       const GURL& start_url,
@@ -50,7 +50,10 @@ class WebAppProtocolHandlerManagerTest : public WebAppTest {
     web_app->SetProtocolHandlers(protocol_handler_infos);
     web_app->SetAllowedLaunchProtocols(allowed_launch_protocols);
     web_app->SetDisallowedLaunchProtocols(disallowed_launch_protocols);
-    controller().RegisterApp(std::move(web_app));
+    {
+      ScopedRegistryUpdate update(&provider().sync_bridge_unsafe());
+      update->CreateApp(std::move(web_app));
+    }
     return app_id;
   }
 
@@ -71,7 +74,8 @@ class WebAppProtocolHandlerManagerTest : public WebAppTest {
   }
 
  private:
-  std::unique_ptr<FakeWebAppRegistryController> fake_registry_controller_;
+  raw_ptr<FakeWebAppProvider> provider_;
+
   std::unique_ptr<WebAppProtocolHandlerManager> protocol_handler_manager_;
 };
 
@@ -86,7 +90,10 @@ TEST_F(WebAppProtocolHandlerManagerTest, GetAppProtocolHandlerInfos) {
   ASSERT_EQ(
       protocol_handler_manager().GetAppProtocolHandlerInfos(app_id).size(), 0U);
 
-  controller().RegisterApp(std::move(web_app));
+  {
+    ScopedRegistryUpdate update(&provider().sync_bridge_unsafe());
+    update->CreateApp(std::move(web_app));
+  }
 
   std::vector<apps::ProtocolHandlerInfo> handler_infos =
       protocol_handler_manager().GetAppProtocolHandlerInfos(app_id);
@@ -155,13 +162,13 @@ TEST_F(WebAppProtocolHandlerManagerTest, GetAllowedHandlersForProtocol) {
   std::vector<ProtocolHandler> handlers =
       protocol_handler_manager().GetAllowedHandlersForProtocol("web+test");
   ASSERT_EQ(handlers.size(), 2U);
-  for (size_t i = 0; i < handlers.size(); i++) {
-    ASSERT_EQ(handlers[i].protocol(), "web+test");
-    if (handlers[i].web_app_id() == app_id1) {
-      ASSERT_EQ(handlers[i].url(), GURL("http://example.com/test=%s"));
+  for (const ProtocolHandler& handler : handlers) {
+    ASSERT_EQ(handler.protocol(), "web+test");
+    if (handler.web_app_id() == app_id1) {
+      ASSERT_EQ(handler.url(), GURL("http://example.com/test=%s"));
     } else {
-      ASSERT_EQ(handlers[i].web_app_id(), app_id2);
-      ASSERT_EQ(handlers[i].url(), GURL("http://example2.com/test=%s"));
+      ASSERT_EQ(handler.web_app_id(), app_id2);
+      ASSERT_EQ(handler.url(), GURL("http://example2.com/test=%s"));
     }
   }
 }
@@ -180,13 +187,13 @@ TEST_F(WebAppProtocolHandlerManagerTest, GetDisallowedHandlersForProtocol) {
   std::vector<ProtocolHandler> handlers =
       protocol_handler_manager().GetDisallowedHandlersForProtocol("web+test");
   ASSERT_EQ(handlers.size(), 2U);
-  for (size_t i = 0; i < handlers.size(); i++) {
-    ASSERT_EQ(handlers[i].protocol(), "web+test");
-    if (handlers[i].web_app_id() == app_id1) {
-      ASSERT_EQ(handlers[i].url(), GURL("http://example.com/test=%s"));
+  for (const ProtocolHandler& handler : handlers) {
+    ASSERT_EQ(handler.protocol(), "web+test");
+    if (handler.web_app_id() == app_id1) {
+      ASSERT_EQ(handler.url(), GURL("http://example.com/test=%s"));
     } else {
-      ASSERT_EQ(handlers[i].web_app_id(), app_id2);
-      ASSERT_EQ(handlers[i].url(), GURL("http://example2.com/test=%s"));
+      ASSERT_EQ(handler.web_app_id(), app_id2);
+      ASSERT_EQ(handler.url(), GURL("http://example2.com/test=%s"));
     }
   }
 }

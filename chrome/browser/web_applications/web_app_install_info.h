@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -173,10 +173,14 @@ struct WebAppInstallInfo {
     MOBILE_CAPABLE_APPLE
   };
 
-  WebAppInstallInfo();
+  // Returns a copy of the |other| that has only the fields that should be
+  // copied/derived from various sources (e.g generated icons, manifest
+  // properties). This will strip out app-like fields such as file handlers etc.
+  static WebAppInstallInfo CreateInstallInfoForCreateShortcut(
+      const GURL& document_url,
+      const WebAppInstallInfo& other);
 
-  // TODO(b/227755254): Delete copy constructors and migrate to move assignment.
-  WebAppInstallInfo(const WebAppInstallInfo& other);
+  WebAppInstallInfo();
 
   // Deleted to prevent accidental copying. Use Clone() to deep copy explicitly.
   WebAppInstallInfo& operator=(const WebAppInstallInfo&) = delete;
@@ -236,9 +240,6 @@ struct WebAppInstallInfo {
   // tag.
   MobileCapable mobile_capable = MOBILE_CAPABLE_UNSPECIFIED;
 
-  // The color to use if an icon needs to be generated for the web app.
-  SkColor generated_icon_color = SK_ColorTRANSPARENT;
-
   // The color to use for the web app frame.
   absl::optional<SkColor> theme_color;
 
@@ -294,6 +295,10 @@ struct WebAppInstallInfo {
   // information.
   apps::UrlHandlers url_handlers;
 
+  // URL within scope to launch on the lock screen for a "show on lock screen"
+  // action. Valid iff this is considered a lock-screen-capable app.
+  GURL lock_screen_start_url;
+
   // URL within scope to launch for a "new note" action. Valid iff this is
   // considered a note-taking app.
   GURL note_taking_new_note_url;
@@ -302,10 +307,6 @@ struct WebAppInstallInfo {
   // scope.
   blink::mojom::CaptureLinks capture_links =
       blink::mojom::CaptureLinks::kUndefined;
-
-  // Developer hint for whether app should handle links within its app scope.
-  blink::mojom::HandleLinks handle_links =
-      blink::mojom::HandleLinks::kUndefined;
 
   // Whether the app should be loaded in a dedicated storage partition.
   bool is_storage_isolated = false;
@@ -329,6 +330,14 @@ struct WebAppInstallInfo {
   // populated (especially for user installed or sync installed apps)
   // in which case the URL will not be written to the web_app DB.
   GURL install_url;
+
+  // Customisations to the tab strip. This field is only used when the
+  // display mode is set to 'tabbed'.
+  absl::optional<blink::Manifest::TabStrip> tab_strip;
+
+ private:
+  // Used this method in Clone() method. Use Clone() to deep copy explicitly.
+  WebAppInstallInfo(const WebAppInstallInfo& other);
 };
 
 bool operator==(const IconSizes& icon_sizes1, const IconSizes& icon_sizes2);

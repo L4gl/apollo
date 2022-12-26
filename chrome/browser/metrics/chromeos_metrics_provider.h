@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,23 +14,20 @@
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_provider.h"
 
-namespace arc {
-struct ArcFeatures;
-}
-
 namespace metrics {
-class CachedMetricsProfile;
 class ChromeUserMetricsExtension;
 }  // namespace metrics
 
+class ChromeOSSystemProfileProvider;
 enum class EnrollmentStatus;
 class PrefRegistrySimple;
 
 // Performs ChromeOS specific metrics logging.
 class ChromeOSMetricsProvider : public metrics::MetricsProvider {
  public:
-  explicit ChromeOSMetricsProvider(
-      metrics::MetricsLogUploader::MetricServiceType service_type);
+  ChromeOSMetricsProvider(
+      metrics::MetricsLogUploader::MetricServiceType service_type,
+      ChromeOSSystemProfileProvider* system_profile_provider);
 
   ChromeOSMetricsProvider(const ChromeOSMetricsProvider&) = delete;
   ChromeOSMetricsProvider& operator=(const ChromeOSMetricsProvider&) = delete;
@@ -45,21 +42,8 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
   // Returns Enterprise Enrollment status.
   static EnrollmentStatus GetEnrollmentStatus();
 
-  // Loads hardware class information. When this task is complete, |callback|
-  // is run.
-  void InitTaskGetFullHardwareClass(base::OnceClosure callback);
-
-  // Retrieves ARC features using ArcFeaturesParser. When this task is complete,
-  // |callback| is run.
-  void InitTaskGetArcFeatures(base::OnceClosure callback);
-
-  // Retrieves TPM type using TpmManagerClient. When this task is complete,
-  // |callback| is run.
-  void InitTaskGetTpmType(base::OnceClosure callback);
-
   // metrics::MetricsProvider:
   void Init() override;
-  void AsyncInit(base::OnceClosure done_callback) override;
   void OnDidCreateMetricsLog() override;
   void OnRecordingEnabled() override;
   void OnRecordingDisabled() override;
@@ -69,72 +53,24 @@ class ChromeOSMetricsProvider : public metrics::MetricsProvider {
       metrics::SystemProfileProto* system_profile_proto) override;
   void ProvideCurrentSessionData(
       metrics::ChromeUserMetricsExtension* uma_proto) override;
+  void ProvideCurrentSessionUKMData() override;
 
  private:
   void ProvideAccessibilityMetrics();
   void ProvideSuggestedContentMetrics();
-
-  // Update the number of users logged into a multi-profile session.
-  // If the number of users change while the log is open, the call invalidates
-  // the user count value.
-  void UpdateMultiProfileUserCount(
-      metrics::SystemProfileProto* system_profile_proto);
-
-  // Sets the full hardware class, then calls the callback.
-  void SetFullHardwareClass(base::OnceClosure callback,
-                            std::string full_hardware_class);
-
-  // Updates ARC-related system profile fields, then calls the callback.
-  void OnArcFeaturesParsed(base::OnceClosure callback,
-                           absl::optional<arc::ArcFeatures> features);
-
-  // Sets the TPM version info (tpm family and GSC version), then calls the
-  // callback.
-  void OnTpmManagerGetVersionInfo(
-      base::OnceClosure callback,
-      const tpm_manager::GetVersionInfoReply& reply);
-
-  // Sets the TPM supported features (runtime selection), then calls the
-  // callback.
-  void OnTpmManagerGetSupportedFeatures(
-      base::OnceClosure callback,
-      const tpm_manager::GetSupportedFeaturesReply& reply);
+  void ProvideMetrics(metrics::SystemProfileProto* system_profile_proto,
+                      bool should_include_arc_metrics);
 
   void SetTpmType(metrics::SystemProfileProto* system_profile_proto);
 
   // Called from the ProvideCurrentSessionData(...) to record UserType.
-  void UpdateUserTypeUMA();
-
-  // Writes info about the linked Android phone if there is one.
-  void WriteLinkedAndroidPhoneProto(
-      metrics::SystemProfileProto* system_profile_proto);
+  bool UpdateUserTypeUMA();
 
   // For collecting systemwide performance data via the UMA channel.
   std::unique_ptr<metrics::ProfileProvider> profile_provider_;
 
-  // Use the first signed-in profile for profile-dependent metrics.
-  std::unique_ptr<metrics::CachedMetricsProfile> cached_profile_;
-
-  // Whether the user count was registered at the last log initialization.
-  bool registered_user_count_at_log_initialization_;
-
-  // The user count at the time that a log was last initialized. Contains a
-  // valid value only if |registered_user_count_at_log_initialization_| is
-  // true.
-  uint64_t user_count_at_log_initialization_;
-
-  // Hardware class (e.g., hardware qualification ID). This value identifies
-  // the configured system components such as CPU, WiFi adapter, etc.
-  std::string full_hardware_class_;
-
-  // ARC release version obtained from build properties.
-  absl::optional<std::string> arc_release_ = absl::nullopt;
-
-  // The following three fields together determine the TPM
-  // (go/trusted-platform-module) type.
-  absl::optional<uint32_t> tpm_family_ = absl::nullopt;
-  absl::optional<tpm_manager::GscVersion> gsc_version_ = absl::nullopt;
-  absl::optional<bool> tpm_support_runtime_selection_ = absl::nullopt;
+  // Interface for providing the SystemProfile to metrics.
+  base::raw_ptr<ChromeOSSystemProfileProvider> cros_system_profile_provider_;
 
   base::WeakPtrFactory<ChromeOSMetricsProvider> weak_ptr_factory_{this};
 };

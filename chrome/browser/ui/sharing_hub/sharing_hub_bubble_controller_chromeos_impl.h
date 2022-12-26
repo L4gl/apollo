@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,10 +7,10 @@
 
 #include "base/memory/weak_ptr.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ui/native_window_tracker.h"
 #include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "ui/views/native_window_tracker.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 
@@ -55,7 +55,7 @@ class SharingHubBubbleControllerChromeOsImpl
 
   // SharingHubBubbleController:
   void HideBubble() override;
-  void ShowBubble() override;
+  void ShowBubble(share::ShareAttempt attempt) override;
   SharingHubBubbleView* sharing_hub_bubble_view() const override;
   bool ShouldOfferOmniboxIcon() override;
 
@@ -95,7 +95,7 @@ class SharingHubBubbleControllerChromeOsImpl
 
   views::ViewTracker highlighted_button_tracker_;
   gfx::NativeWindow parent_window_ = nullptr;
-  std::unique_ptr<NativeWindowTracker> parent_window_tracker_ = nullptr;
+  std::unique_ptr<views::NativeWindowTracker> parent_window_tracker_ = nullptr;
   bool bubble_showing_ = false;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();

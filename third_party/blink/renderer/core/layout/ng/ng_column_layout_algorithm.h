@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -125,6 +125,11 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
     return !Node().IsFloatingOrOutOfFlowPositioned();
   }
 
+  // The sum of all the current column children's block-sizes, as if they were
+  // stacked, including any block-size that is added as a result of
+  // ClampedToValidFragmentainerCapacity().
+  LayoutUnit TotalColumnBlockSize() const;
+
   const NGColumnSpannerPath* spanner_path_ = nullptr;
 
   int used_column_count_;
@@ -139,8 +144,6 @@ class CORE_EXPORT NGColumnLayoutAlgorithm
   // the first piece of content of the multicol container. It is used to check
   // if we're at a valid class A  breakpoint (between block-level siblings).
   bool has_processed_first_child_ = false;
-
-  bool has_processed_first_column_ = false;
 };
 
 }  // namespace blink

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,7 +30,7 @@ using media::android_mojo_util::CreateProvisionFetcher;
 namespace media {
 
 std::unique_ptr<VideoDecoder> CreatePlatformVideoDecoder(
-    const VideoDecoderTraits& traits) {
+    VideoDecoderTraits& traits) {
   scoped_refptr<gpu::RefCountedLock> ref_counted_lock;
 
   // When this feature is enabled, CodecImage, CodecBufferWaitCorrdinator and

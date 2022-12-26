@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,12 +13,15 @@
 #include "ash/public/cpp/holding_space/holding_space_controller_observer.h"
 #include "ash/public/cpp/holding_space/holding_space_model.h"
 #include "ash/public/cpp/holding_space/holding_space_model_observer.h"
+#include "ash/shell.h"
 #include "ash/system/progress_indicator/progress_icon_animation.h"
 #include "ash/system/progress_indicator/progress_ring_animation.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase_map.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
+#include "base/task/sequenced_task_runner.h"
 
 namespace ash {
 namespace {
@@ -80,8 +83,8 @@ class HoldingSpaceAnimationRegistry::ProgressIndicatorAnimationDelegate
   void OnHoldingSpaceItemsRemoved(
       const std::vector<const HoldingSpaceItem*>& items) override {
     // The removal of `items` can be safely ignored if none were in progress.
-    const bool removed_in_progress_item = std::any_of(
-        items.begin(), items.end(), [](const HoldingSpaceItem* item) {
+    const bool removed_in_progress_item =
+        base::ranges::any_of(items, [](const HoldingSpaceItem* item) {
           return item->IsInitialized() && !item->progress().IsComplete();
         });
     if (removed_in_progress_item)
@@ -147,7 +150,8 @@ class HoldingSpaceAnimationRegistry::ProgressIndicatorAnimationDelegate
     auto animation = ProgressRingAnimation::CreateOfType(type);
     animation->AddUnsafeAnimationUpdatedCallback(base::BindRepeating(
         &ProgressIndicatorAnimationDelegate::OnRingAnimationUpdatedForKey,
-        base::Unretained(this), key, animation.get()));
+        base::Unretained(this), base::UnsafeDanglingUntriaged(key),
+        animation.get()));
 
     registry_->SetProgressRingAnimationForKey(key, std::move(animation))
         ->Start();
@@ -274,7 +278,7 @@ class HoldingSpaceAnimationRegistry::ProgressIndicatorAnimationDelegate
     // Once `animation` has finished, it can be removed from the registry. Note
     // that this needs to be posted as it is illegal to delete `animation` from
     // its update callback sequence.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
         base::BindOnce(
             [](const base::WeakPtr<ProgressIndicatorAnimationDelegate>&
@@ -286,7 +290,8 @@ class HoldingSpaceAnimationRegistry::ProgressIndicatorAnimationDelegate
               if (registry->GetProgressRingAnimationForKey(key) == animation)
                 registry->SetProgressRingAnimationForKey(key, nullptr);
             },
-            weak_factory_.GetWeakPtr(), key, animation));
+            weak_factory_.GetWeakPtr(), base::UnsafeDanglingUntriaged(key),
+            base::UnsafeDanglingUntriaged(animation)));
   }
 
   ProgressIndicatorAnimationRegistry* const registry_;

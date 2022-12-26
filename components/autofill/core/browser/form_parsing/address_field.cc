@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,13 +11,12 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/strings/string_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/autofill_regex_constants.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/autofill_scanner.h"
 #include "components/autofill/core/browser/form_parsing/regex_patterns.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_regex_constants.h"
 
 namespace autofill {
 
@@ -193,7 +192,7 @@ AddressField::AddressField(LogManager* log_manager)
     : log_manager_(log_manager) {}
 
 void AddressField::AddClassifications(
-    FieldCandidatesMap* field_candidates) const {
+    FieldCandidatesMap& field_candidates) const {
   // The page can request the address lines as a single textarea input or as
   // multiple text fields (or not at all), but it shouldn't be possible to
   // request both.
@@ -248,13 +247,6 @@ bool AddressField::ParseAddressFieldSequence(AutofillScanner* scanner,
   // Search for a sequence of a street name field followed by a house number
   // field. Only if both are found in an abitrary order, the parsing is
   // considered successful.
-
-  // TODO(crbug.com/1125978): Remove once launched.
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableSupportForMoreStructureInAddresses)) {
-    return false;
-  }
-
   const size_t cursor_position = scanner->CursorPosition();
 
   base::span<const MatchPatternRef> street_name_patterns =

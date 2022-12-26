@@ -1,16 +1,15 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include <string>
 #include <vector>
 
-#include "ash/components/disks/disk_mount_manager.h"
-#include "ash/components/settings/cros_settings_names.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/test/gtest_tags.h"
 #include "base/test/scoped_chromeos_version_info.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/file_manager/fake_disk_mount_manager.h"
@@ -20,7 +19,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
-#include "chromeos/dbus/cros_disks/cros_disks_client.h"
+#include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
+#include "chromeos/ash/components/disks/disk_mount_manager.h"
+#include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
@@ -140,8 +141,8 @@ class KioskFakeDiskMountManager : public file_manager::FakeDiskMountManager {
 
   void MountUsbStick() {
     DCHECK(!usb_mount_path_.empty());
-    MountPath(usb_mount_path_, "", "", {}, chromeos::MOUNT_TYPE_DEVICE,
-              chromeos::MOUNT_ACCESS_MODE_READ_ONLY, base::DoNothing());
+    MountPath(usb_mount_path_, "", "", {}, MountType::kDevice,
+              MountAccessMode::kReadOnly, base::DoNothing());
   }
 
   void UnMountUsbStick() {
@@ -724,7 +725,7 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, PreserveLocalData) {
   set_test_app_version("2.0.0");
   set_test_crx_file(test_app_id() + "_v2_read_and_verify_data.crx");
   extensions::ResultCatcher catcher;
-  StartAppLaunchFromLoginScreen(
+  StartExistingAppLaunchFromLoginScreen(
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
   WaitForAppLaunchWithOptions(true /* check_launch_data */,
                               false /* terminate_app */);
@@ -876,6 +877,9 @@ IN_PROC_BROWSER_TEST_F(KioskUpdateTest, UpdateMultiAppKioskAddOneApp) {
 }
 
 IN_PROC_BROWSER_TEST_F(KioskUpdateTest, LaunchKioskAppWithSecondaryExtension) {
+  base::AddFeatureIdTagToTestResult(
+      "screenplay-22a4b826-851a-4065-a32b-273a0e261bf3");
+
   LaunchTestKioskAppWithSeconadayExtension();
 }
 

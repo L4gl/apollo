@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,10 +44,11 @@ scoped_refptr<const extensions::Extension> TestKioskExtensionBuilder::Build()
       .Set("version", version_)
       .Set("manifest_version", 2);
 
-  std::unique_ptr<base::DictionaryValue> background =
+  base::Value background = base::Value(
       DictionaryBuilder()
-          .Set("scripts", ListBuilder().Append("background.js").Build())
-          .Build();
+          .Set("scripts",
+               base::Value(ListBuilder().Append("background.js").BuildList()))
+          .BuildDict());
 
   switch (type_) {
     case extensions::Manifest::TYPE_PLATFORM_APP:
@@ -78,10 +79,10 @@ scoped_refptr<const extensions::Extension> TestKioskExtensionBuilder::Build()
             "enabled_on_launch", secondary_extension.enabled_on_launch.value());
       }
       secondary_extension_list_builder.Append(
-          secondary_extension_builder.Build());
+          secondary_extension_builder.BuildDict());
     }
     manifest_builder.Set("kiosk_secondary_apps",
-                         secondary_extension_list_builder.Build());
+                         secondary_extension_list_builder.BuildList());
   }
 
   return ExtensionBuilder()

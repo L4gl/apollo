@@ -1,4 +1,4 @@
-# Copyright 2021 The Chromium Authors. All rights reserved.
+# Copyright 2021 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -28,7 +28,7 @@ template("rewrite_imports") {
       }
     }
 
-    import_mappings = [ "tslib|//resources/mwc/tslib/tslib.es6.js" ]
+    import_mappings = [ "tslib|//resources/mwc/tslib/tslib.js" ]
     if (defined(invoker.import_mappings)) {
       import_mappings += invoker.import_mappings
     }

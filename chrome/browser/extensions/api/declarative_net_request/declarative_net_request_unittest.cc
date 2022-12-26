@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -263,11 +263,11 @@ class DeclarativeNetRequestUnittest : public DNRTestBase {
                               const std::vector<TestRule>& rules_to_add,
                               RulesetScope scope,
                               const std::string* expected_error = nullptr) {
-    std::unique_ptr<base::Value> ids_to_remove_value =
+    base::Value::List ids_to_remove_value =
         ListBuilder()
             .Append(rule_ids_to_remove.begin(), rule_ids_to_remove.end())
-            .Build();
-    std::unique_ptr<base::Value> rules_to_add_value = ToListValue(rules_to_add);
+            .BuildList();
+    base::Value::List rules_to_add_value = ToListValue(rules_to_add);
 
     constexpr const char kParams[] = R"(
       [{
@@ -275,9 +275,8 @@ class DeclarativeNetRequestUnittest : public DNRTestBase {
         "removeRuleIds": $2
       }]
     )";
-    const std::string json_args =
-        content::JsReplace(kParams, std::move(*rules_to_add_value),
-                           std::move(*ids_to_remove_value));
+    const std::string json_args = content::JsReplace(
+        kParams, std::move(rules_to_add_value), std::move(ids_to_remove_value));
 
     scoped_refptr<ExtensionFunction> update_function;
     switch (scope) {
@@ -335,10 +334,8 @@ class DeclarativeNetRequestUnittest : public DNRTestBase {
       const std::vector<std::string>& ruleset_ids_to_remove,
       const std::vector<std::string>& ruleset_ids_to_add,
       absl::optional<std::string> expected_error) {
-    std::unique_ptr<base::Value> ids_to_remove_value =
-        ToListValue(ruleset_ids_to_remove);
-    std::unique_ptr<base::Value> ids_to_add_value =
-        ToListValue(ruleset_ids_to_add);
+    base::Value::List ids_to_remove_value = ToListValue(ruleset_ids_to_remove);
+    base::Value::List ids_to_add_value = ToListValue(ruleset_ids_to_add);
 
     constexpr const char kParams[] = R"(
       [{
@@ -347,7 +344,7 @@ class DeclarativeNetRequestUnittest : public DNRTestBase {
       }]
     )";
     const std::string json_args = content::JsReplace(
-        kParams, std::move(*ids_to_remove_value), std::move(*ids_to_add_value));
+        kParams, std::move(ids_to_remove_value), std::move(ids_to_add_value));
 
     auto function = base::MakeRefCounted<
         DeclarativeNetRequestUpdateEnabledRulesetsFunction>();
@@ -373,16 +370,15 @@ class DeclarativeNetRequestUnittest : public DNRTestBase {
     function->set_extension(&extension);
     function->set_has_callback(true);
 
-    std::unique_ptr<base::Value> result =
+    absl::optional<base::Value> result =
         api_test_utils::RunFunctionAndReturnSingleResult(
             function.get(), "[]" /* args */, browser_context());
     ASSERT_TRUE(result);
     ASSERT_TRUE(result->is_list());
-    const base::ListValue& ids_value = base::Value::AsListValue(*result);
 
     std::u16string error;
     std::vector<std::string> actual_ids;
-    for (const auto& val : ids_value.GetListDeprecated())
+    for (const auto& val : result->GetList())
       actual_ids.push_back(val.GetString());
 
     EXPECT_THAT(expected_ids, UnorderedElementsAreArray(actual_ids));
@@ -429,7 +425,7 @@ class DeclarativeNetRequestUnittest : public DNRTestBase {
     function->set_extension(&extension);
     function->set_has_callback(true);
 
-    std::unique_ptr<base::Value> result =
+    absl::optional<base::Value> result =
         api_test_utils::RunFunctionAndReturnSingleResult(
             function.get(), "[]" /* args */, browser_context());
     ASSERT_TRUE(result);
@@ -481,9 +477,7 @@ class SingleRulesetTest : public DeclarativeNetRequestUnittest {
   void AddRule(const TestRule& rule) { rules_list_.push_back(rule); }
 
   // This takes precedence over the AddRule method.
-  void SetRules(std::unique_ptr<base::Value> rules) {
-    rules_value_ = std::move(rules);
-  }
+  void SetRules(base::Value rules) { rules_value_ = std::move(rules); }
 
   void set_persist_invalid_json_file() { persist_invalid_json_file_ = true; }
 
@@ -509,7 +503,7 @@ class SingleRulesetTest : public DeclarativeNetRequestUnittest {
     if (expected_rules_count)
       rules_count = *expected_rules_count;
     else if (rules_value_ && rules_value_->is_list())
-      rules_count = rules_value_->GetListDeprecated().size();
+      rules_count = rules_value_->GetList().size();
     else
       rules_count = rules_list_.size();
 
@@ -524,11 +518,12 @@ class SingleRulesetTest : public DeclarativeNetRequestUnittest {
   // DeclarativeNetRequestUnittest override:
   void WriteExtensionData() override {
     if (!rules_value_)
-      rules_value_ = ToListValue(rules_list_);
+      rules_value_ = base::Value(ToListValue(rules_list_));
 
     WriteManifestAndRuleset(
         extension_dir(),
-        TestRulesetInfo(kDefaultRulesetID, kJSONRulesFilename, *rules_value_),
+        TestRulesetInfo(kDefaultRulesetID, kJSONRulesFilename,
+                        rules_value_->Clone()),
         {} /* hosts */);
 
     // Overwrite the JSON rules file with some invalid json.
@@ -549,7 +544,7 @@ class SingleRulesetTest : public DeclarativeNetRequestUnittest {
   }
 
   std::vector<TestRule> rules_list_;
-  std::unique_ptr<base::Value> rules_value_;
+  absl::optional<base::Value> rules_value_;
   bool persist_invalid_json_file_ = false;
   bool persist_initial_indexed_ruleset_ = false;
 };
@@ -638,7 +633,7 @@ TEST_P(SingleRulesetTest, InvalidRedirectURL) {
 }
 
 TEST_P(SingleRulesetTest, ListNotPassed) {
-  SetRules(std::make_unique<base::DictionaryValue>());
+  SetRules(base::Value(base::Value::Dict()));
   LoadAndExpectError(kErrorListNotPassed);
 }
 
@@ -779,7 +774,7 @@ TEST_P(SingleRulesetTest, InvalidJSONRules_Parsed) {
       }
     ]
   )";
-  SetRules(base::JSONReader::ReadDeprecated(kRules));
+  SetRules(*base::JSONReader::Read(kRules));
 
   extension_loader()->set_ignore_manifest_warnings(true);
 
@@ -1043,7 +1038,7 @@ TEST_P(SingleRulesetTest, SessionRules) {
 
   base::Value result(base::Value::Type::LIST);
   RunGetRulesFunction(*extension(), RulesetScope::kSession, &result);
-  EXPECT_TRUE(result.GetListDeprecated().empty());
+  EXPECT_TRUE(result.GetList().empty());
 
   TestRule rule_1 = CreateGenericRule();
   rule_1.id = 1;
@@ -1052,25 +1047,26 @@ TEST_P(SingleRulesetTest, SessionRules) {
   ASSERT_NO_FATAL_FAILURE(RunUpdateRulesFunction(
       *extension(), {}, {rule_1, rule_2}, RulesetScope::kSession));
   RunGetRulesFunction(*extension(), RulesetScope::kSession, &result);
-  EXPECT_THAT(result.GetListDeprecated(),
-              ::testing::UnorderedElementsAre(
-                  ::testing::Eq(std::cref(*rule_1.ToValue())),
-                  ::testing::Eq(std::cref(*rule_2.ToValue()))));
+  base::Value::Dict rule_1_value = rule_1.ToValue();
+  base::Value::Dict rule_2_value = rule_2.ToValue();
+  EXPECT_THAT(result.GetList(), ::testing::UnorderedElementsAre(
+                                    ::testing::Eq(std::cref(rule_1_value)),
+                                    ::testing::Eq(std::cref(rule_2_value))));
   VerifyPublicRulesetIDs(*extension(),
                          {kDefaultRulesetID, dnr_api::SESSION_RULESET_ID});
 
   // No dynamic rules should be returned.
   RunGetRulesFunction(*extension(), RulesetScope::kDynamic, &result);
-  EXPECT_TRUE(result.GetListDeprecated().empty());
+  EXPECT_TRUE(result.GetList().empty());
 
   ASSERT_NO_FATAL_FAILURE(RunUpdateRulesFunction(*extension(), {*rule_2.id}, {},
                                                  RulesetScope::kSession));
   RunGetRulesFunction(*extension(), RulesetScope::kSession, &result);
-  EXPECT_THAT(result.GetListDeprecated(),
-              ::testing::UnorderedElementsAre(
-                  ::testing::Eq(std::cref(*rule_1.ToValue()))));
+  rule_1_value = rule_1.ToValue();
+  EXPECT_THAT(result.GetList(), ::testing::UnorderedElementsAre(
+                                    ::testing::Eq(std::cref(rule_1_value))));
   RunGetRulesFunction(*extension(), RulesetScope::kDynamic, &result);
-  EXPECT_TRUE(result.GetListDeprecated().empty());
+  EXPECT_TRUE(result.GetList().empty());
 }
 
 // Ensure an error is raised when an extension adds a session-scoped regex rule
@@ -1380,7 +1376,7 @@ class MultipleRulesetsTest : public DeclarativeNetRequestUnittest {
     for (size_t i = 0; i < num_regex_rules; ++i, ++id)
       rules.push_back(CreateRegexRule(id));
 
-    return TestRulesetInfo(manifest_id_and_path, *ToListValue(rules), enabled);
+    return TestRulesetInfo(manifest_id_and_path, ToListValue(rules), enabled);
   }
 
   // |expected_rules_count| and |expected_enabled_rules_count| refer to the
@@ -1394,7 +1390,7 @@ class MultipleRulesetsTest : public DeclarativeNetRequestUnittest {
     size_t rules_count = 0u;
     size_t rules_enabled_count = 0u;
     for (const TestRulesetInfo& info : rulesets_) {
-      size_t count = info.rules_value.GetListDeprecated().size();
+      size_t count = info.rules_value.GetList().size();
 
       // We only index up to |static_rule_limit| rules per ruleset, but
       // may index more rules than this limit across rulesets.
@@ -1447,12 +1443,13 @@ TEST_P(MultipleRulesetsTest, EmptyRulesets) {
 // specifying an invalid rules file.
 TEST_P(MultipleRulesetsTest, ListNotPassed) {
     std::vector<TestRule> rules({CreateGenericRule()});
-    AddRuleset(TestRulesetInfo(kId1, "path1", *ToListValue(rules)));
+    AddRuleset(TestRulesetInfo(kId1, "path1", ToListValue(rules)));
 
     // Persist a ruleset with an invalid rules file.
-    AddRuleset(TestRulesetInfo(kId2, "path2", base::DictionaryValue()));
+    AddRuleset(
+        TestRulesetInfo(kId2, "path2", base::Value(base::Value::Type::DICT)));
 
-    AddRuleset(TestRulesetInfo(kId3, "path3", base::ListValue()));
+    AddRuleset(TestRulesetInfo(kId3, "path3", base::Value::List()));
 
     LoadAndExpectError(kErrorListNotPassed, "path2" /* filename */);
 }
@@ -1475,7 +1472,7 @@ TEST_P(MultipleRulesetsTest, InstallWarnings) {
     rule.condition->regex_filter = kLargeRegexFilter;
     rules.push_back(rule);
 
-    TestRulesetInfo info(kId1, "path1", *ToListValue(rules), true);
+    TestRulesetInfo info(kId1, "path1", ToListValue(rules), true);
     AddRuleset(info);
 
     expected_warnings.push_back(
@@ -2148,6 +2145,68 @@ TEST_P(MultipleRulesetsTest, UpdateAndGetEnabledRulesets_RuleCountExceeded) {
   VerifyPublicRulesetIDs(*extension(), {kId1, kId3});
   VerifyGetEnabledRulesetsFunction(*extension(), {kId1, kId3});
   CheckExtensionAllocationInPrefs(extension()->id(), 200);
+}
+
+TEST_P(MultipleRulesetsTest,
+       UpdateAndGetEnabledRulesets_KeepEnabledStaticRulesetsAfterReload) {
+  AddRuleset(CreateRuleset(kId1, 90, 0, false));
+  AddRuleset(CreateRuleset(kId2, 60, 0, false));
+  AddRuleset(CreateRuleset(kId3, 150, 0, false));
+
+  RulesetManagerObserver ruleset_waiter(manager());
+
+  DeclarativeNetRequestUnittest::LoadAndExpectSuccess(
+      300, 0, false /* expect_rulesets_indexed */);
+
+  ruleset_waiter.WaitForExtensionsWithRulesetsCount(0);
+
+  RunUpdateEnabledRulesetsFunction(*extension(), {}, {kId2, kId3},
+                                   absl::nullopt /* expected_error */);
+  VerifyPublicRulesetIDs(*extension(), {kId2, kId3});
+  VerifyGetEnabledRulesetsFunction(*extension(), {kId2, kId3});
+
+  // Ensure the set of enabled rulesets persists across extension reloads.
+  // Regression test for crbug.com/1346185.
+  const ExtensionId extension_id = extension()->id();
+  service()->DisableExtension(extension_id,
+                              disable_reason::DISABLE_USER_ACTION);
+
+  ruleset_waiter.WaitForExtensionsWithRulesetsCount(0);
+
+  service()->EnableExtension(extension_id);
+
+  ruleset_waiter.WaitForExtensionsWithRulesetsCount(1);
+
+  const Extension* extension =
+      registry()->GetExtensionById(extension_id, ExtensionRegistry::ENABLED);
+  ASSERT_TRUE(extension);
+  VerifyPublicRulesetIDs(*extension, {kId2, kId3});
+  VerifyGetEnabledRulesetsFunction(*extension, {kId2, kId3});
+}
+
+// Tests attempting to disable rulesets when there are no rulesets active.
+// Regression test for https://crbug.com/1354385.
+TEST_P(MultipleRulesetsTest,
+       UpdateAndGetEnabledRulesets_DisableRulesetsWhenEmptyEnabledRulesets) {
+  AddRuleset(CreateRuleset(kId1, 90, 0, false));
+  AddRuleset(CreateRuleset(kId2, 60, 0, false));
+  AddRuleset(CreateRuleset(kId3, 150, 0, false));
+
+  RulesetManagerObserver ruleset_waiter(manager());
+
+  DeclarativeNetRequestUnittest::LoadAndExpectSuccess(
+      300, 0, false /* expect_rulesets_indexed */);
+
+  ruleset_waiter.WaitForExtensionsWithRulesetsCount(0);
+
+  // Even though rulesets kId2 and kId3 are already disabled, the service
+  // can't know about that right away because there could be pending calls to
+  // complete. This means the service will still (appropriately) try and
+  // disable these rulesets.
+  RunUpdateEnabledRulesetsFunction(*extension(), {kId2, kId3}, {},
+                                   absl::nullopt /* expected_error */);
+  ASSERT_FALSE(manager()->GetMatcherForExtension(extension()->id()));
+  VerifyGetEnabledRulesetsFunction(*extension(), {});
 }
 
 // Test that getAvailableStaticRuleCount returns the correct number of rules an

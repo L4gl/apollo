@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include "ash/ash_export.h"
 #include "base/auto_reset.h"
 #include "base/containers/flat_map.h"
+#include "base/guid.h"
 #include "base/observer_list.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
@@ -30,7 +31,7 @@ class DeskContainerObserver;
 // container per display (root window) per each desk.
 // Those containers are parent windows of the windows that belong to the
 // associated desk. When the desk is active, those containers are shown, when
-// the desk is in active, those containers are hidden.
+// the desk is inactive, those containers are hidden.
 class ASH_EXPORT Desk {
  public:
   class Observer : public base::CheckedObserver {
@@ -49,6 +50,18 @@ class ASH_EXPORT Desk {
     virtual void OnDeskNameChanged(const std::u16string& new_name) = 0;
   };
 
+  // Tracks stacking order for a window that is visible on all desks. This is
+  // used to support per-desk z-orders for all-desk windows. Entries are stored
+  // in ascending `order`.
+  struct AllDeskWindowStackingData {
+    aura::Window* window = nullptr;
+    // The z-order of the window.
+    // Note: this is reversed from how child windows are ordered in
+    // `aura::Window`, so an entry with `order == 0` means topmost.
+    // Note: this order ignores non-normal windows.
+    size_t order = 0;
+  };
+
   explicit Desk(int associated_container_id, bool desk_being_restored = false);
 
   Desk(const Desk&) = delete;
@@ -60,6 +73,8 @@ class ASH_EXPORT Desk {
   static int GetWeeklyActiveDesks();
 
   int container_id() const { return container_id_; }
+
+  const base::GUID& uuid() const { return uuid_; }
 
   const std::vector<aura::Window*>& windows() const { return windows_; }
 
@@ -98,6 +113,11 @@ class ASH_EXPORT Desk {
     interacted_with_this_week_ = interacted_with_this_week;
   }
 
+  const base::flat_map<aura::Window*, std::vector<AllDeskWindowStackingData>>&
+  all_desk_window_stacking() const {
+    return all_desk_window_stacking_;
+  }
+
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -106,6 +126,8 @@ class ASH_EXPORT Desk {
 
   void AddWindowToDesk(aura::Window* window);
   void RemoveWindowFromDesk(aura::Window* window);
+
+  void WillRemoveWindowFromDesk(aura::Window* window);
 
   base::AutoReset<bool> GetScopedNotifyContentChangedDisabler();
 
@@ -184,8 +206,30 @@ class ASH_EXPORT Desk {
   // accounts for cases where the user removes the active desk.
   void RecordAndResetConsecutiveDailyVisits(bool being_removed);
 
-  // Closes all app windows associated with this desk.
-  void CloseAllAppWindows();
+  // Gets all app windows on this desk that should be closed.
+  std::vector<aura::Window*> GetAllAppWindows() const;
+
+  // Gets desk windows including floated window (if any).
+  // Note that floated window isn't tracked in `windows_` but still "belongs" to
+  // this desk, it's stored in the float container and managed by
+  // `FloatController`.
+  std::vector<aura::Window*> GetAllAssociatedWindows() const;
+
+  // Construct stacking data for windows that appear on all desks. This is done
+  // just as a desk becomes inactive. The stacking data is then later used by
+  // `RestackAllDeskWindows` if the desk becomes active again.
+  void BuildAllDeskStackingData();
+
+  // Uses the data from `BuildAllDeskStackingData` to re-stack all-desk
+  // windows. This is a no-op if there is no data for the current desk.
+  void RestackAllDeskWindows();
+
+  // Called when an all-desk window has been added.
+  void AddAllDeskWindow(aura::Window* window);
+
+  // Called when an all-desk window has been removed (either from being closed
+  // or not longer being all-desk).
+  void RemoveAllDeskWindow(aura::Window* window);
 
  private:
   friend class DesksTestApi;
@@ -193,6 +237,12 @@ class ASH_EXPORT Desk {
   void MoveWindowToDeskInternal(aura::Window* window,
                                 Desk* target_desk,
                                 aura::Window* target_root);
+
+  // Returns true if per-desk z-order tracking is enabled and this desk is
+  // currently *not* active. We do not track changes to the active desk since we
+  // will rebuild stacking data when the desk becomes inactive (see
+  // `BuildAllDeskStackingData`).
+  bool ShouldUpdateAllDeskStackingData();
 
   // If `PrepareForActivationAnimation()` was called during the animation to
   // activate this desk, this function is called from `Activate()` to reset the
@@ -203,6 +253,9 @@ class ASH_EXPORT Desk {
   // If |this| has not been interacted with yet this week, increment
   // |g_weekly_active_desks| and set |this| to interacted with.
   void MaybeIncrementWeeklyActiveDesks();
+
+  // Uniquely identifies the desk.
+  const base::GUID uuid_;
 
   // The associated container ID with this desk.
   const int container_id_;
@@ -222,7 +275,6 @@ class ASH_EXPORT Desk {
 
   base::ObserverList<Observer> observers_;
 
-  // TODO(afakhry): Consider removing this.
   bool is_active_ = false;
 
   // If false, observers won't be notified of desk's contents changes. This is
@@ -254,6 +306,11 @@ class ASH_EXPORT Desk {
   // creation.
   int first_day_visited_ = -1;
   int last_day_visited_ = -1;
+
+  // Stacking data for all all-desk windows. Ordered from topmost and
+  // down. Keyed by root window.
+  base::flat_map<aura::Window*, std::vector<AllDeskWindowStackingData>>
+      all_desk_window_stacking_;
 
   // Tracks whether |this| has been interacted with this week. This value is
   // reset by the DesksController.

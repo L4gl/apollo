@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,6 +33,8 @@ class ASH_EXPORT AdaptiveChargingNotificationController
   // a value), the notification will have higher priority (SYSTEM_PRIORITY).
   void ShowAdaptiveChargingNotification(
       absl::optional<int> hours_to_full = absl::nullopt);
+
+  void CloseAdaptiveChargingNotification(bool by_user = false);
 
   bool ShouldShowNotification();
 

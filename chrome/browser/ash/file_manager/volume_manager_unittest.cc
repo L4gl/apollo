@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,26 +16,30 @@
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_file_system_instance.h"
-#include "ash/components/disks/disk.h"
-#include "ash/components/disks/disk_mount_manager.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_running_on_chromeos.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/ash/arc/fileapi/arc_media_view_util.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/file_manager/fake_disk_mount_manager.h"
+#include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager_observer.h"
 #include "chrome/browser/ash/file_system_provider/fake_extension_provider.h"
 #include "chrome/browser/ash/file_system_provider/service.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
+#include "chromeos/ash/components/disks/disk.h"
+#include "chromeos/ash/components/disks/disk_mount_manager.h"
+#include "chromeos/components/disks/disks_prefs.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "components/prefs/pref_service.h"
@@ -50,8 +54,11 @@
 namespace file_manager {
 namespace {
 
+using ::ash::MountError;
+using ::ash::MountType;
 using ::ash::disks::Disk;
 using ::ash::disks::DiskMountManager;
+using base::FilePath;
 
 std::vector<std::string> arc_volume_ids = {
     arc::kImagesRootDocumentId, arc::kVideosRootDocumentId,
@@ -92,7 +99,7 @@ class LoggingObserver : public VolumeManagerObserver {
     bool mounting;
 
     // Available on VOLUME_MOUNTED and VOLUME_UNMOUNTED.
-    chromeos::MountError mount_error;
+    ash::MountError mount_error;
 
     // Available on FORMAT_STARTED and FORMAT_COMPLETED, PARTITION_STARTED,
     // PARTITION_COMPLETED.
@@ -138,7 +145,7 @@ class LoggingObserver : public VolumeManagerObserver {
     events_.push_back(event);
   }
 
-  void OnVolumeMounted(chromeos::MountError error_code,
+  void OnVolumeMounted(ash::MountError error_code,
                        const Volume& volume) override {
     Event event;
     event.type = Event::VOLUME_MOUNTED;
@@ -148,7 +155,7 @@ class LoggingObserver : public VolumeManagerObserver {
     events_.push_back(event);
   }
 
-  void OnVolumeUnmounted(chromeos::MountError error_code,
+  void OnVolumeUnmounted(ash::MountError error_code,
                          const Volume& volume) override {
     Event event;
     event.type = Event::VOLUME_UNMOUNTED;
@@ -222,6 +229,14 @@ class LoggingObserver : public VolumeManagerObserver {
     event.device_label = device_label;
     event.success = success;
     events_.push_back(event);
+  }
+
+  void OnShutdownStart(VolumeManager* volume_manager) override {
+    // Each test should remove its observer manually, so that they're all gone
+    // by the time VolumeManager shuts down, and this handler is never reached.
+    // In fact, it's more likely for UAF crash to happen before this code is
+    // reached.
+    NOTREACHED();
   }
 
  private:
@@ -369,6 +384,23 @@ class VolumeManagerTest : public testing::Test {
   std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
 };
 
+TEST(VolumeTest, CreateForRemovable) {
+  const std::unique_ptr<Volume> volume = Volume::CreateForRemovable(
+      {"/source/path", "/mount/path", MountType::kDevice,
+       MountError::kUnknownFilesystem},
+      nullptr);
+  ASSERT_TRUE(volume);
+  EXPECT_EQ(volume->source_path(), FilePath("/source/path"));
+  EXPECT_EQ(volume->mount_path(), FilePath("/mount/path"));
+  EXPECT_EQ(volume->type(), VOLUME_TYPE_REMOVABLE_DISK_PARTITION);
+  EXPECT_EQ(volume->mount_condition(), MountError::kUnknownFilesystem);
+  EXPECT_EQ(volume->volume_id(), "removable:path");
+  EXPECT_EQ(volume->volume_label(), "path");
+  EXPECT_EQ(volume->source(), SOURCE_DEVICE);
+  EXPECT_FALSE(volume->is_read_only());
+  EXPECT_TRUE(volume->watchable());
+}
+
 TEST_F(VolumeManagerTest, OnDriveFileSystemMountAndUnmount) {
   LoggingObserver observer;
   volume_manager()->AddObserver(&observer);
@@ -382,7 +414,7 @@ TEST_F(VolumeManagerTest, OnDriveFileSystemMountAndUnmount) {
                 ->GetMountPointPath()
                 .AsUTF8Unsafe(),
             event.device_path);
-  EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->OnFileSystemBeingUnmounted();
 
@@ -393,7 +425,7 @@ TEST_F(VolumeManagerTest, OnDriveFileSystemMountAndUnmount) {
                 ->GetMountPointPath()
                 .AsUTF8Unsafe(),
             event.device_path);
-  EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -452,7 +484,8 @@ TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_Hidden) {
 
 TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_Added) {
   // Enable external storage.
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageDisabled, false);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageDisabled,
+                                    false);
 
   LoggingObserver observer;
   volume_manager()->AddObserver(&observer);
@@ -478,14 +511,15 @@ TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_Added) {
   EXPECT_EQ("device1", mount_request.source_path);
   EXPECT_EQ("", mount_request.source_format);
   EXPECT_EQ("", mount_request.mount_label);
-  EXPECT_EQ(chromeos::MOUNT_TYPE_DEVICE, mount_request.type);
+  EXPECT_EQ(ash::MountType::kDevice, mount_request.type);
 
   volume_manager()->RemoveObserver(&observer);
 }
 
 TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_AddedNonMounting) {
   // Enable external storage.
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageDisabled, false);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageDisabled,
+                                    false);
 
   // Device which is already mounted.
   {
@@ -533,7 +567,8 @@ TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_AddedNonMounting) {
 
   // External storage is disabled.
   {
-    profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageDisabled, true);
+    profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageDisabled,
+                                      true);
 
     LoggingObserver observer;
     volume_manager()->AddObserver(&observer);
@@ -609,14 +644,15 @@ TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_Changed) {
   EXPECT_EQ(1U, disk_mount_manager_->mount_requests().size());
   EXPECT_EQ(0U, disk_mount_manager_->unmount_requests().size());
   // Read-write mode by default.
-  EXPECT_EQ(chromeos::MOUNT_ACCESS_MODE_READ_WRITE,
+  EXPECT_EQ(ash::MountAccessMode::kReadWrite,
             disk_mount_manager_->mount_requests()[0].access_mode);
 
   volume_manager()->RemoveObserver(&observer);
 }
 
 TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_ChangedInReadonly) {
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageReadOnly, true);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageReadOnly,
+                                    true);
 
   // Changed event should cause mounting (if possible).
   LoggingObserver observer;
@@ -630,8 +666,8 @@ TEST_F(VolumeManagerTest, OnAutoMountableDiskEvent_ChangedInReadonly) {
   EXPECT_EQ(1U, observer.events().size());
   EXPECT_EQ(1U, disk_mount_manager_->mount_requests().size());
   EXPECT_EQ(0U, disk_mount_manager_->unmount_requests().size());
-  // Shoule mount a disk in read-only mode.
-  EXPECT_EQ(chromeos::MOUNT_ACCESS_MODE_READ_ONLY,
+  // Should mount a disk in read-only mode.
+  EXPECT_EQ(ash::MountAccessMode::kReadOnly,
             disk_mount_manager_->mount_requests()[0].access_mode);
 
   volume_manager()->RemoveObserver(&observer);
@@ -681,27 +717,26 @@ TEST_F(VolumeManagerTest, OnMountEvent_MountingAndUnmounting) {
   LoggingObserver observer;
   volume_manager()->AddObserver(&observer);
 
-  const DiskMountManager::MountPointInfo kMountPoint(
-      "device1", "mount1", chromeos::MOUNT_TYPE_DEVICE,
-      ash::disks::MOUNT_CONDITION_NONE);
+  const DiskMountManager::MountPoint kMountPoint{"device1", "mount1",
+                                                 ash::MountType::kDevice};
 
   volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
-                                 chromeos::MOUNT_ERROR_NONE, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   ASSERT_EQ(1U, observer.events().size());
   LoggingObserver::Event event = observer.events()[0];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, event.type);
   EXPECT_EQ("device1", event.device_path);
-  EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->OnMountEvent(DiskMountManager::UNMOUNTING,
-                                 chromeos::MOUNT_ERROR_NONE, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   ASSERT_EQ(2U, observer.events().size());
   event = observer.events()[1];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED, event.type);
   EXPECT_EQ("device1", event.device_path);
-  EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -712,16 +747,15 @@ TEST_F(VolumeManagerTest, OnMountEvent_Remounting) {
                                    .SetFileSystemUUID("uuid1")
                                    .Build();
   disk_mount_manager_->AddDiskForTest(std::move(disk));
-  disk_mount_manager_->MountPath(
-      "device1", "", "", {}, chromeos::MOUNT_TYPE_DEVICE,
-      chromeos::MOUNT_ACCESS_MODE_READ_WRITE, base::DoNothing());
+  disk_mount_manager_->MountPath("device1", "", "", {}, ash::MountType::kDevice,
+                                 ash::MountAccessMode::kReadWrite,
+                                 base::DoNothing());
 
-  const DiskMountManager::MountPointInfo kMountPoint(
-      "device1", "mount1", chromeos::MOUNT_TYPE_DEVICE,
-      ash::disks::MOUNT_CONDITION_NONE);
+  const DiskMountManager::MountPoint kMountPoint{"device1", "mount1",
+                                                 ash::MountType::kDevice};
 
   volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
-                                 chromeos::MOUNT_ERROR_NONE, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   LoggingObserver observer;
 
@@ -733,20 +767,20 @@ TEST_F(VolumeManagerTest, OnMountEvent_Remounting) {
 
     // After resume, the device is unmounted and then mounted.
     volume_manager()->OnMountEvent(DiskMountManager::UNMOUNTING,
-                                   chromeos::MOUNT_ERROR_NONE, kMountPoint);
+                                   ash::MountError::kSuccess, kMountPoint);
 
     // Observe what happened for the mount event.
     volume_manager()->AddObserver(&observer);
 
     volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
-                                   chromeos::MOUNT_ERROR_NONE, kMountPoint);
+                                   ash::MountError::kSuccess, kMountPoint);
   }
 
   ASSERT_EQ(1U, observer.events().size());
   const LoggingObserver::Event& event = observer.events()[0];
   EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, event.type);
   EXPECT_EQ("device1", event.device_path);
-  EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
+  EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -755,12 +789,11 @@ TEST_F(VolumeManagerTest, OnMountEvent_UnmountingWithoutMounting) {
   LoggingObserver observer;
   volume_manager()->AddObserver(&observer);
 
-  const DiskMountManager::MountPointInfo kMountPoint(
-      "device1", "mount1", chromeos::MOUNT_TYPE_DEVICE,
-      ash::disks::MOUNT_CONDITION_NONE);
+  const DiskMountManager::MountPoint kMountPoint{"device1", "mount1",
+                                                 ash::MountType::kDevice};
 
   volume_manager()->OnMountEvent(DiskMountManager::UNMOUNTING,
-                                 chromeos::MOUNT_ERROR_NONE, kMountPoint);
+                                 ash::MountError::kSuccess, kMountPoint);
 
   // Unmount event for a disk not mounted in this manager is not reported.
   ASSERT_EQ(0U, observer.events().size());
@@ -773,7 +806,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_Started) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_STARTED,
-                                  chromeos::FORMAT_ERROR_NONE, "device1",
+                                  ash::FormatError::kSuccess, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -791,7 +824,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_StartFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_STARTED,
-                                  chromeos::FORMAT_ERROR_UNKNOWN, "device1",
+                                  ash::FormatError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -809,7 +842,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_Completed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                                  chromeos::FORMAT_ERROR_NONE, "device1",
+                                  ash::FormatError::kSuccess, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -826,7 +859,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_Completed) {
   EXPECT_EQ("device1", mount_request.source_path);
   EXPECT_EQ("", mount_request.source_format);
   EXPECT_EQ("", mount_request.mount_label);
-  EXPECT_EQ(chromeos::MOUNT_TYPE_DEVICE, mount_request.type);
+  EXPECT_EQ(ash::MountType::kDevice, mount_request.type);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -836,7 +869,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_CompletedFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnFormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                                  chromeos::FORMAT_ERROR_UNKNOWN, "device1",
+                                  ash::FormatError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -853,7 +886,7 @@ TEST_F(VolumeManagerTest, OnFormatEvent_CompletedFailed) {
   EXPECT_EQ("device1", mount_request.source_path);
   EXPECT_EQ("", mount_request.source_format);
   EXPECT_EQ("", mount_request.mount_label);
-  EXPECT_EQ(chromeos::MOUNT_TYPE_DEVICE, mount_request.type);
+  EXPECT_EQ(ash::MountType::kDevice, mount_request.type);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -863,7 +896,7 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_Started) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_STARTED,
-                                     chromeos::PARTITION_ERROR_NONE, "device1",
+                                     ash::PartitionError::kSuccess, "device1",
                                      "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -881,7 +914,7 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_StartFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_STARTED,
-                                     chromeos::PARTITION_ERROR_UNKNOWN,
+                                     ash::PartitionError::kUnknownError,
                                      "device1", "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -899,7 +932,7 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_Completed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_COMPLETED,
-                                     chromeos::PARTITION_ERROR_NONE, "device1",
+                                     ash::PartitionError::kSuccess, "device1",
                                      "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -917,7 +950,7 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_CompletedFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnPartitionEvent(DiskMountManager::PARTITION_COMPLETED,
-                                     chromeos::PARTITION_ERROR_UNKNOWN,
+                                     ash::PartitionError::kUnknownError,
                                      "device1", "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -934,34 +967,35 @@ TEST_F(VolumeManagerTest, OnPartitionEvent_CompletedFailed) {
   EXPECT_EQ("device1", mount_request.source_path);
   EXPECT_EQ("", mount_request.source_format);
   EXPECT_EQ("", mount_request.mount_label);
-  EXPECT_EQ(chromeos::MOUNT_TYPE_DEVICE, mount_request.type);
+  EXPECT_EQ(ash::MountType::kDevice, mount_request.type);
 
   volume_manager()->RemoveObserver(&observer);
 }
 
 TEST_F(VolumeManagerTest, OnExternalStorageDisabledChanged) {
   // Here create four mount points.
+  disk_mount_manager_->MountPath("mount1", "", "", {}, ash::MountType::kDevice,
+                                 ash::MountAccessMode::kReadWrite,
+                                 base::DoNothing());
+  disk_mount_manager_->MountPath("mount2", "", "", {}, ash::MountType::kDevice,
+                                 ash::MountAccessMode::kReadOnly,
+                                 base::DoNothing());
   disk_mount_manager_->MountPath(
-      "mount1", "", "", {}, chromeos::MOUNT_TYPE_DEVICE,
-      chromeos::MOUNT_ACCESS_MODE_READ_WRITE, base::DoNothing());
+      "mount3", "", "", {}, ash::MountType::kNetworkStorage,
+      ash::MountAccessMode::kReadOnly, base::DoNothing());
   disk_mount_manager_->MountPath(
-      "mount2", "", "", {}, chromeos::MOUNT_TYPE_DEVICE,
-      chromeos::MOUNT_ACCESS_MODE_READ_ONLY, base::DoNothing());
-  disk_mount_manager_->MountPath(
-      "mount3", "", "", {}, chromeos::MOUNT_TYPE_NETWORK_STORAGE,
-      chromeos::MOUNT_ACCESS_MODE_READ_ONLY, base::DoNothing());
-  disk_mount_manager_->MountPath(
-      "failed_unmount", "", "", {}, chromeos::MOUNT_TYPE_DEVICE,
-      chromeos::MOUNT_ACCESS_MODE_READ_WRITE, base::DoNothing());
+      "failed_unmount", "", "", {}, ash::MountType::kDevice,
+      ash::MountAccessMode::kReadWrite, base::DoNothing());
   disk_mount_manager_->FailUnmountRequest("failed_unmount",
-                                          chromeos::MOUNT_ERROR_UNKNOWN);
+                                          ash::MountError::kUnknownError);
 
   // Initially, there are four mount points.
   ASSERT_EQ(4U, disk_mount_manager_->mount_points().size());
   ASSERT_EQ(0U, disk_mount_manager_->unmount_requests().size());
 
   // Emulate to set kExternalStorageDisabled to false.
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageDisabled, false);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageDisabled,
+                                    false);
   volume_manager()->OnExternalStorageDisabledChanged();
 
   // Expect no effects.
@@ -969,7 +1003,8 @@ TEST_F(VolumeManagerTest, OnExternalStorageDisabledChanged) {
   EXPECT_EQ(0U, disk_mount_manager_->unmount_requests().size());
 
   // Emulate to set kExternalStorageDisabled to true.
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageDisabled, true);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageDisabled,
+                                    true);
   volume_manager()->OnExternalStorageDisabledChanged();
 
   // Wait until all unmount request finishes, so that callback chain to unmount
@@ -1000,9 +1035,10 @@ TEST_F(VolumeManagerTest, ExternalStorageDisabledPolicyMultiProfile) {
 
   // Simulates the case that the main profile has kExternalStorageDisabled set
   // as false, and the secondary profile has the config set to true.
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageDisabled, false);
-  secondary.profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageDisabled,
-                                              true);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageDisabled,
+                                    false);
+  secondary.profile()->GetPrefs()->SetBoolean(
+      disks::prefs::kExternalStorageDisabled, true);
 
   LoggingObserver main_observer, secondary_observer;
   volume_manager()->AddObserver(&main_observer);
@@ -1040,21 +1076,21 @@ TEST_F(VolumeManagerTest, ExternalStorageDisabledPolicyMultiProfile) {
 
 TEST_F(VolumeManagerTest, OnExternalStorageReadOnlyChanged) {
   // Emulate updates of kExternalStorageReadOnly (change to true, then false).
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageReadOnly, true);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageReadOnly,
+                                    true);
   volume_manager()->OnExternalStorageReadOnlyChanged();
-  profile()->GetPrefs()->SetBoolean(prefs::kExternalStorageReadOnly, false);
+  profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageReadOnly,
+                                    false);
   volume_manager()->OnExternalStorageReadOnlyChanged();
 
   // Verify that remount of removable disks is triggered for each update.
   ASSERT_EQ(2U, disk_mount_manager_->remount_all_requests().size());
   const FakeDiskMountManager::RemountAllRequest& remount_request1 =
       disk_mount_manager_->remount_all_requests()[0];
-  EXPECT_EQ(chromeos::MOUNT_ACCESS_MODE_READ_ONLY,
-            remount_request1.access_mode);
+  EXPECT_EQ(ash::MountAccessMode::kReadOnly, remount_request1.access_mode);
   const FakeDiskMountManager::RemountAllRequest& remount_request2 =
       disk_mount_manager_->remount_all_requests()[1];
-  EXPECT_EQ(chromeos::MOUNT_ACCESS_MODE_READ_WRITE,
-            remount_request2.access_mode);
+  EXPECT_EQ(ash::MountAccessMode::kReadWrite, remount_request2.access_mode);
 }
 
 TEST_F(VolumeManagerTest, GetVolumeList) {
@@ -1071,9 +1107,8 @@ TEST_F(VolumeManagerTest, VolumeManagerInitializeMyFilesVolume) {
   std::vector<base::WeakPtr<Volume>> volume_list =
       volume_manager()->GetVolumeList();
   ASSERT_GT(volume_list.size(), 0u);
-  auto volume = base::ranges::find_if(volume_list, [](auto& v) {
-    return v->volume_id() == "downloads:MyFiles";
-  });
+  auto volume =
+      base::ranges::find(volume_list, "downloads:MyFiles", &Volume::volume_id);
   EXPECT_FALSE(volume == volume_list.end());
   EXPECT_EQ(VOLUME_TYPE_DOWNLOADS_DIRECTORY, (*volume)->type());
 }
@@ -1134,17 +1169,13 @@ TEST_F(VolumeManagerTest, ArchiveSourceFiltering) {
 
   // Mount a USB stick.
   volume_manager()->OnMountEvent(
-      DiskMountManager::MOUNTING, chromeos::MOUNT_ERROR_NONE,
-      DiskMountManager::MountPointInfo("/removable/usb", "/removable/usb",
-                                       chromeos::MOUNT_TYPE_DEVICE,
-                                       ash::disks::MOUNT_CONDITION_NONE));
+      DiskMountManager::MOUNTING, ash::MountError::kSuccess,
+      {"/removable/usb", "/removable/usb", ash::MountType::kDevice});
 
   // Mount a zip archive in the stick.
   volume_manager()->OnMountEvent(
-      DiskMountManager::MOUNTING, chromeos::MOUNT_ERROR_NONE,
-      DiskMountManager::MountPointInfo("/removable/usb/1.zip", "/archive/1",
-                                       chromeos::MOUNT_TYPE_ARCHIVE,
-                                       ash::disks::MOUNT_CONDITION_NONE));
+      DiskMountManager::MOUNTING, ash::MountError::kSuccess,
+      {"/removable/usb/1.zip", "/archive/1", ash::MountType::kArchive});
   base::WeakPtr<Volume> volume = volume_manager()->FindVolumeById("archive:1");
   ASSERT_TRUE(volume.get());
   EXPECT_EQ("/archive/1", volume->mount_path().AsUTF8Unsafe());
@@ -1152,10 +1183,8 @@ TEST_F(VolumeManagerTest, ArchiveSourceFiltering) {
 
   // Mount a zip archive in the previous zip archive.
   volume_manager()->OnMountEvent(
-      DiskMountManager::MOUNTING, chromeos::MOUNT_ERROR_NONE,
-      DiskMountManager::MountPointInfo("/archive/1/2.zip", "/archive/2",
-                                       chromeos::MOUNT_TYPE_ARCHIVE,
-                                       ash::disks::MOUNT_CONDITION_NONE));
+      DiskMountManager::MOUNTING, ash::MountError::kSuccess,
+      {"/archive/1/2.zip", "/archive/2", ash::MountType::kArchive});
   base::WeakPtr<Volume> second_volume =
       volume_manager()->FindVolumeById("archive:2");
   ASSERT_TRUE(second_volume.get());
@@ -1164,15 +1193,16 @@ TEST_F(VolumeManagerTest, ArchiveSourceFiltering) {
 
   // A zip file is mounted from other profile. It must be ignored in the current
   // VolumeManager.
-  volume_manager()->OnMountEvent(
-      DiskMountManager::MOUNTING, chromeos::MOUNT_ERROR_NONE,
-      DiskMountManager::MountPointInfo(
-          "/other/profile/drive/folder/3.zip", "/archive/3",
-          chromeos::MOUNT_TYPE_ARCHIVE, ash::disks::MOUNT_CONDITION_NONE));
+  volume_manager()->OnMountEvent(DiskMountManager::MOUNTING,
+                                 ash::MountError::kSuccess,
+                                 {"/other/profile/drive/folder/3.zip",
+                                  "/archive/3", ash::MountType::kArchive});
   base::WeakPtr<Volume> third_volume =
       volume_manager()->FindVolumeById("archive:3");
   ASSERT_FALSE(third_volume.get());
   EXPECT_EQ(3u, observer.events().size());
+
+  volume_manager()->RemoveObserver(&observer);
 }
 
 TEST_F(VolumeManagerTest, MTPPlugAndUnplug) {
@@ -1191,25 +1221,43 @@ TEST_F(VolumeManagerTest, MTPPlugAndUnplug) {
       FILE_PATH_LITERAL("/dummy/device/location2"), u"label2", u"vendor2",
       u"model2", 12345 /* size */);
 
-  // Attach
+  // Attach: expect mount events for the MTP and fusebox MTP volumes.
   volume_manager()->OnRemovableStorageAttached(info);
-  ASSERT_EQ(1u, observer.events().size());
+  ASSERT_EQ(2u, observer.events().size());
   EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, observer.events()[0].type);
+  EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, observer.events()[1].type);
 
+  // The MTP volume should be mounted.
   base::WeakPtr<Volume> volume = volume_manager()->FindVolumeById("mtp:model");
+  ASSERT_TRUE(volume);
+  EXPECT_EQ("", volume->file_system_type());
   EXPECT_EQ(VOLUME_TYPE_MTP, volume->type());
 
-  // Non MTP events from storage monitor are ignored.
+  // The fusebox MTP volume should be mounted.
+  const auto fusebox_volume_id = base::StrCat({util::kFuseBox, "mtp:model"});
+  base::WeakPtr<Volume> fusebox_volume =
+      volume_manager()->FindVolumeById(fusebox_volume_id);
+  ASSERT_TRUE(fusebox_volume);
+  EXPECT_EQ(util::kFuseBox, fusebox_volume->file_system_type());
+  EXPECT_EQ(VOLUME_TYPE_MTP, fusebox_volume->type());
+
+  // Non MTP attach events from storage monitor are ignored.
   volume_manager()->OnRemovableStorageAttached(non_mtp_info);
-  EXPECT_EQ(1u, observer.events().size());
+  EXPECT_EQ(2u, observer.events().size());
 
-  // Detach
+  // Detach: there should be two more events, bringing the total to four.
   volume_manager()->OnRemovableStorageDetached(info);
-  ASSERT_EQ(2u, observer.events().size());
+  ASSERT_EQ(4u, observer.events().size());
   EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED,
-            observer.events()[1].type);
+            observer.events()[2].type);
+  EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED,
+            observer.events()[3].type);
 
-  EXPECT_FALSE(volume.get());
+  // The unmount events should remove the MTP and fusebox MTP volumes.
+  EXPECT_FALSE(volume);
+  EXPECT_FALSE(fusebox_volume);
+
+  volume_manager()->RemoveObserver(&observer);
 }
 
 TEST_F(VolumeManagerTest, OnRenameEvent_Started) {
@@ -1217,7 +1265,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_Started) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_STARTED,
-                                  chromeos::RENAME_ERROR_NONE, "device1",
+                                  ash::RenameError::kSuccess, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -1235,7 +1283,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_StartFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_STARTED,
-                                  chromeos::RENAME_ERROR_UNKNOWN, "device1",
+                                  ash::RenameError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -1253,7 +1301,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_Completed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_COMPLETED,
-                                  chromeos::RENAME_ERROR_NONE, "device1",
+                                  ash::RenameError::kSuccess, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -1269,7 +1317,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_Completed) {
       disk_mount_manager_->mount_requests()[0];
   EXPECT_EQ("device1", mount_request.source_path);
   EXPECT_EQ("", mount_request.source_format);
-  EXPECT_EQ(chromeos::MOUNT_TYPE_DEVICE, mount_request.type);
+  EXPECT_EQ(ash::MountType::kDevice, mount_request.type);
 
   volume_manager()->RemoveObserver(&observer);
 }
@@ -1279,7 +1327,7 @@ TEST_F(VolumeManagerTest, OnRenameEvent_CompletedFailed) {
   volume_manager()->AddObserver(&observer);
 
   volume_manager()->OnRenameEvent(DiskMountManager::RENAME_COMPLETED,
-                                  chromeos::RENAME_ERROR_UNKNOWN, "device1",
+                                  ash::RenameError::kUnknownError, "device1",
                                   "label1");
 
   ASSERT_EQ(1U, observer.events().size());
@@ -1308,14 +1356,13 @@ TEST_F(VolumeManagerTest, OnArcPlayStoreEnabledChanged_Enabled) {
   unsigned index = 0;
   for (const auto& event : observer.events()) {
     EXPECT_EQ(LoggingObserver::Event::VOLUME_MOUNTED, event.type);
-    EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
+    EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
     if (index < 4) {
       EXPECT_EQ(arc::GetMediaViewVolumeId(arc_volume_ids[index]),
                 event.volume_id);
     } else {
       EXPECT_EQ(arc_volume_ids[index], event.volume_id);
     }
-    EXPECT_TRUE(event.success);
     index++;
   }
 
@@ -1340,14 +1387,13 @@ TEST_F(VolumeManagerTest, OnArcPlayStoreEnabledChanged_Disabled) {
   unsigned index = 0;
   for (const auto& event : observer.events()) {
     EXPECT_EQ(LoggingObserver::Event::VOLUME_UNMOUNTED, event.type);
-    EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, event.mount_error);
+    EXPECT_EQ(ash::MountError::kSuccess, event.mount_error);
     if (index < 4) {
       EXPECT_EQ(arc::GetMediaViewVolumeId(arc_volume_ids[index]),
                 event.volume_id);
     } else {
       EXPECT_EQ(arc_volume_ids[index], event.volume_id);
     }
-    EXPECT_TRUE(event.success);
     index++;
   }
 

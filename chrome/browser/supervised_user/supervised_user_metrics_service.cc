@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -56,8 +56,6 @@ SupervisedUserMetricsService::SupervisedUserMetricsService(
 
   CheckForNewDay();
   // Check for a new day every |kTimerInterval| as well.
-  DLOG(WARNING) << "If your test is uses mock timers and hangs, you may need "
-                   "to call Shutdown() on SupervisedUserMetricsService.";
   timer_.Start(FROM_HERE, kTimerInterval, this,
                &SupervisedUserMetricsService::CheckForNewDay);
 }

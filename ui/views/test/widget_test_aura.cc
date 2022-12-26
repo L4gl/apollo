@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,7 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
 #endif
 
-namespace views {
-namespace test {
+namespace views::test {
 
 namespace {
 
@@ -137,7 +136,7 @@ ui::EventSink* WidgetTest::GetEventSink(Widget* widget) {
 }
 
 // static
-ui::internal::InputMethodDelegate* WidgetTest::GetInputMethodDelegateForWidget(
+ui::ImeKeyEventDispatcher* WidgetTest::GetImeKeyEventDispatcherForWidget(
     Widget* widget) {
   return widget->GetNativeWindow()->GetRootWindow()->GetHost();
 }
@@ -173,5 +172,4 @@ Widget::Widgets WidgetTest::GetAllWidgets() {
 // static
 void WidgetTest::WaitForSystemAppActivation() {}
 
-}  // namespace test
-}  // namespace views
+}  // namespace views::test

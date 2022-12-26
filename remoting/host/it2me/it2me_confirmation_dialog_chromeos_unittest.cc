@@ -1,15 +1,15 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "remoting/host/it2me/it2me_confirmation_dialog.h"
 
-#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <string>
 
 #include "base/i18n/message_formatter.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -67,11 +67,8 @@ class It2MeConfirmationDialogChromeOSTest
 
   int FindIndex(const std::vector<message_center::ButtonInfo>& array,
                 const std::u16string& button_title) {
-    auto button_iter =
-        std::find_if(array.cbegin(), array.cend(),
-                     [button_title](const message_center::ButtonInfo& button) {
-                       return button.title == button_title;
-                     });
+    auto button_iter = base::ranges::find(array, button_title,
+                                          &message_center::ButtonInfo::title);
     if (button_iter == array.cend())
       return -1;
 
@@ -194,12 +191,12 @@ TEST_P(It2MeConfirmationDialogChromeOSTest,
   EXPECT_EQ(result_future.Get(), It2MeConfirmationDialog::Result::OK);
 }
 
-INSTANTIATE_TEST_CASE_P(EnterpriseDialog,
-                        It2MeConfirmationDialogChromeOSTest,
-                        testing::Values(DialogStyle::kEnterprise));
+INSTANTIATE_TEST_SUITE_P(EnterpriseDialog,
+                         It2MeConfirmationDialogChromeOSTest,
+                         testing::Values(DialogStyle::kEnterprise));
 
-INSTANTIATE_TEST_CASE_P(ConsumerDialog,
-                        It2MeConfirmationDialogChromeOSTest,
-                        testing::Values(DialogStyle::kConsumer));
+INSTANTIATE_TEST_SUITE_P(ConsumerDialog,
+                         It2MeConfirmationDialogChromeOSTest,
+                         testing::Values(DialogStyle::kConsumer));
 
 }  // namespace remoting

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -160,7 +160,7 @@ class MediaStreamCaptureIndicator
 
   // Reference to our status icon - owned by the StatusTray. If null,
   // the platform doesn't support status icons.
-  raw_ptr<StatusIcon> status_icon_ = nullptr;
+  raw_ptr<StatusIcon, DanglingUntriaged> status_icon_ = nullptr;
 
   // A map that contains the usage counts of the opened capture devices for each
   // WebContents instance.

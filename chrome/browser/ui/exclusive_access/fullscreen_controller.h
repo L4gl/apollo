@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -97,8 +97,11 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   // Returns true if the tab is/will be in fullscreen mode. Note: This does NOT
   // indicate whether the browser window is/will be fullscreened as well. See
   // 'FullscreenWithinTab Note'.
-  bool IsFullscreenForTabOrPending(
-      const content::WebContents* web_contents) const;
+  // Writes the display ID that tab is tab-fullscreen on or transitioning to to
+  // `display_id`. Only writes when the function returns true and display_id is
+  // non-null.
+  bool IsFullscreenForTabOrPending(const content::WebContents* web_contents,
+                                   int64_t* display_id = nullptr) const;
 
   // Returns true if |web_contents| is in fullscreen mode as a screen-captured
   // tab. See 'FullscreenWithinTab Note'.
@@ -116,12 +119,11 @@ class FullscreenController : public ExclusiveAccessControllerBase {
 
   // Enter tab-initiated fullscreen mode. FullscreenController decides whether
   // to also fullscreen the browser window. See 'FullscreenWithinTab Note'.
-  // |requesting_frame| is the specific content frame requesting fullscreen.
-  // If the Window Placement experiment is enabled, fullscreen may be requested
-  // on a particular display. In that case, |display_id| is the display's id;
+  // `requesting_frame` is the specific content frame requesting fullscreen.
+  // Sites with the Window Management permission may request fullscreen on a
+  // particular display. In that case, `display_id` is the display's id;
   // otherwise, display::kInvalidDisplayId indicates no display is specified.
-  //
-  // |CanEnterFullscreenModeForTab()| must return true on entry.
+  // `CanEnterFullscreenModeForTab()` must return true on entry.
   void EnterFullscreenModeForTab(
       content::RenderFrameHost* requesting_frame,
       const int64_t display_id = display::kInvalidDisplayId);
@@ -222,6 +224,8 @@ class FullscreenController : public ExclusiveAccessControllerBase {
   PriorFullscreenState state_prior_to_tab_fullscreen_ = STATE_INVALID;
   // The display that the window was on before entering tab fullscreen mode.
   int64_t display_id_prior_to_tab_fullscreen_ = display::kInvalidDisplayId;
+  // Stores the target display when tab fullscreen is being entered.
+  int64_t tab_fullscreen_target_display_id_ = display::kInvalidDisplayId;
   // True if the site has entered into fullscreen.
   bool tab_fullscreen_ = false;
 

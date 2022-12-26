@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,10 +54,10 @@ class LanguageSettingsPrivateDelegateTest
     feature_list_.InitAndDisableFeature(spellcheck::kWinUseBrowserSpellChecker);
 #endif  // BUILDFLAG(IS_WIN)
 
-    base::ListValue language_codes;
+    base::Value::List language_codes;
     language_codes.Append("fr");
     profile()->GetPrefs()->Set(spellcheck::prefs::kSpellCheckDictionaries,
-                               language_codes);
+                               base::Value(std::move(language_codes)));
 
     SpellcheckServiceFactory::GetInstance()->SetTestingFactory(
         profile(), base::BindRepeating(&BuildSpellcheckService));

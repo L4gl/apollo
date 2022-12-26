@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,8 +39,6 @@ public class ModalDialogViewBinder
             assert checkFilterTouchConsistency(model);
             view.setButtonText(ModalDialogProperties.ButtonType.POSITIVE,
                     model.get(ModalDialogProperties.POSITIVE_BUTTON_TEXT));
-        } else if (ModalDialogProperties.POSITIVE_BUTTON_ICON == propertyKey) {
-            view.setPositiveButtonIcon(model.get(ModalDialogProperties.POSITIVE_BUTTON_ICON));
         } else if (ModalDialogProperties.POSITIVE_BUTTON_CONTENT_DESCRIPTION == propertyKey) {
             view.setButtonContentDescription(ModalDialogProperties.ButtonType.POSITIVE,
                     model.get(ModalDialogProperties.POSITIVE_BUTTON_CONTENT_DESCRIPTION));
@@ -82,8 +80,12 @@ public class ModalDialogViewBinder
             assert checkCustomButtonsConsistency(model);
             // Intentionally left empty since this is only read once before the dialog is inflated.
         } else if (ModalDialogProperties.FULLSCREEN_DIALOG == propertyKey
-                || ModalDialogProperties.DIALOG_WHEN_LARGE == propertyKey) {
-            view.setIgnoreWidthConstraints(true);
+                || ModalDialogProperties.DIALOG_WHEN_LARGE == propertyKey
+                || ModalDialogProperties.EXCEED_MAX_HEIGHT == propertyKey) {
+            boolean ignoreWidthConstraints = model.get(ModalDialogProperties.FULLSCREEN_DIALOG)
+                    || model.get(ModalDialogProperties.DIALOG_WHEN_LARGE);
+            boolean ignoreHeightConstraint = model.get(ModalDialogProperties.EXCEED_MAX_HEIGHT);
+            view.setIgnoreConstraints(ignoreWidthConstraints, ignoreHeightConstraint);
             assert !(model.get(ModalDialogProperties.FULLSCREEN_DIALOG)
                     && model.get(ModalDialogProperties.DIALOG_WHEN_LARGE))
                 : "Both FULLSCREEN_DIALOG and DIALOG_WHEN_LARGE cannot be set to true.";

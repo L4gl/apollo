@@ -1,13 +1,13 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_test_utils.h"
+#include "chrome/browser/lookalikes/lookalike_test_helper.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "chrome/browser/reputation/reputation_web_contents_observer.h"
 #include "chrome/browser/reputation/safety_tip_ui.h"
@@ -64,6 +65,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/events/test/test_event.h"
 #include "ui/gfx/range/range.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
@@ -83,11 +85,6 @@ const int kHighEngagement = 20;
 
 // An engagement score below MEDIUM.
 const int kLowEngagement = 1;
-
-class ClickEvent : public ui::Event {
- public:
-  ClickEvent() : ui::Event(ui::ET_UNKNOWN, base::TimeTicks(), 0) {}
-};
 
 // A single test case for UKM collection on triggered heuristics.
 // |navigated_url| is the URL that will be navigated to, and |expected_results|
@@ -183,7 +180,7 @@ void OpenPageInfoBubble(Browser* browser) {
   LocationIconView* location_icon_view =
       browser_view->toolbar()->location_bar()->location_icon_view();
   ASSERT_TRUE(location_icon_view);
-  ClickEvent event;
+  ui::test::TestEvent event;
   location_icon_view->ShowBubble(event);
   views::BubbleDialogDelegateView* page_info =
       PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
@@ -229,28 +226,39 @@ void SwitchToTabAndWait(const Browser* browser, int tab_index) {
   }
 }
 
+// Add an allowlist with entries that aren't allowlisted for all domains.
+void ConfigureAllowlistWithScopes() {
+  auto config_proto = reputation::GetOrCreateSafetyTipsConfig();
+  config_proto->clear_allowed_pattern();
+  config_proto->clear_canonical_pattern();
+  config_proto->clear_cohort();
+
+  // Note: allowed_pattern must be sorted, so "googlee" comes before "gooogle".
+
+  // googlee.com may spoof google.com
+  config_proto->add_canonical_pattern()->set_pattern("google.com/");
+  auto* pattern = config_proto->add_allowed_pattern();
+  pattern->set_pattern("googlee.com/");
+  auto* cohort = config_proto->add_cohort();
+  cohort->add_canonical_index(0);  // google.com
+  pattern->add_cohort_index(0);
+
+  // gooogle.com may spoof blogspot, but not google.
+  config_proto->add_canonical_pattern()->set_pattern("blogspot.com/");
+  pattern = config_proto->add_allowed_pattern();
+  pattern->set_pattern("gooogle.com/");
+  cohort = config_proto->add_cohort();
+  cohort->add_canonical_index(1);  // blogspot.com
+  pattern->add_cohort_index(1);
+
+  reputation::SetSafetyTipsRemoteConfigProto(std::move(config_proto));
+}
+
 }  // namespace
 
 class SafetyTipPageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
  protected:
-  virtual bool digital_asset_links_enabled() const { return false; }
-
   void SetUp() override {
-    std::vector<base::test::ScopedFeatureList::FeatureAndParams>
-        enabled_features;
-    std::vector<base::Feature> disabled_features;
-
-    if (digital_asset_links_enabled()) {
-      enabled_features.emplace_back(
-          lookalikes::features::kLookalikeDigitalAssetLinks,
-          base::FieldTrialParams());
-    } else {
-      disabled_features.push_back(
-          lookalikes::features::kLookalikeDigitalAssetLinks);
-    }
-    feature_list_.InitWithFeaturesAndParameters(enabled_features,
-                                                disabled_features);
-
     reputation::InitializeSafetyTipConfig();
     InProcessBrowserTest::SetUp();
   }
@@ -260,6 +268,18 @@ class SafetyTipPageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
 
     test_ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
+    SetUpLookalikeTestParams();
+    // Check that the test top domain list contains google.
+    ASSERT_TRUE(IsTopDomain(GetDomainInfo("google.com")));
+
+    InProcessBrowserTest::SetUpOnMainThread();
+  }
+
+  void TearDownOnMainThread() override {
+    InProcessBrowserTest::TearDownOnMainThread();
+    TearDownLookalikeTestParams();
+    ReputationService::Get(browser()->profile())
+        ->ResetWarningDismissedETLDPlusOnesForTesting();
   }
 
   GURL GetURL(const char* hostname) const {
@@ -346,7 +366,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
     static_cast<views::StyledLabel*>(
         page_info->GetViewByID(
             PageInfoViewFactory::VIEW_ID_PAGE_INFO_SECURITY_DETAILS_LABEL))
-        ->ClickLinkForTesting();
+        ->ClickFirstLinkForTesting();
     EXPECT_EQ(chrome::kSafetyTipHelpCenterURL,
               new_tab_observer.GetWebContents()->GetVisibleURL());
   }
@@ -367,7 +387,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
       static_cast<views::StyledLabel*>(
           page_info->GetViewByID(
               PageInfoViewFactory::VIEW_ID_PAGE_INFO_SECURITY_DETAILS_LABEL))
-          ->ClickLinkForTesting();
+          ->ClickFirstLinkForTesting();
       EXPECT_EQ(chrome::kPageInfoHelpCenterURL,
                 new_tab_observer.GetWebContents()->GetVisibleURL());
     }
@@ -550,6 +570,10 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
+
+  // TODO(crbug.com/1401102): Only one UKM should have been recorded, but
+  // allowlisted domain also records one.
+  CheckRecordedHeuristicsUkmCount(2);
 }
 
 // Ensure sites allowed by enterprise policy don't get blocked.
@@ -567,11 +591,15 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
     EXPECT_FALSE(IsUIShowing());
     ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
   }
+
+  // TODO(crbug.com/1401102): This shouldn't record a UKM.
+  CheckRecordedHeuristicsUkmCount(2);
 }
 
 // After the user clicks 'leave site', the user should end up on a safe domain.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
                        LeaveSiteLeavesSite) {
+  ASSERT_TRUE(IsTopDomain(GetDomainInfo("google.sk")));
   // This domain is a lookalike of a top domain not in the top 500.
   const GURL kNavigatedUrl = GetURL("googlé.sk");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
@@ -736,6 +764,7 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
                      browser()->tab_strip_model()->active_index() + 1);
   EXPECT_FALSE(IsUIShowing());
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
+  CheckRecordedHeuristicsUkmCount(0);
 }
 
 // Tests that Safety Tips do NOT trigger on lookalike domains that trigger an
@@ -746,12 +775,14 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
 }
 
 // Tests that Safety Tips trigger on lookalike domains that don't qualify for an
-// interstitial, but do not impact Page Info.
+// interstitial and Page Info shows Safety Tip information.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
                        TriggersOnLookalike) {
+  ASSERT_TRUE(IsTopDomain(GetDomainInfo("google.sk")));
   // This domain is a lookalike of a top domain not in the top 500.
   const GURL kNavigatedUrl = GetURL("googlé.sk");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
@@ -761,12 +792,14 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoShowsSafetyTipInfo(
       browser(), security_state::SafetyTipStatus::kLookalike,
       GURL("https://google.sk")));
+  CheckRecordedHeuristicsUkmCount(0);
 }
 
 // Tests that Safety Tips don't trigger on lookalike domains that are explicitly
 // allowed by the allowlist.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
                        NoTriggersOnLookalikeAllowlist) {
+  ASSERT_TRUE(IsTopDomain(GetDomainInfo("google.sk")));
   // This domain is a lookalike of a top domain not in the top 500.
   const GURL kNavigatedUrl = GetURL("googlé.sk");
 
@@ -785,6 +818,10 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
 
   EXPECT_FALSE(IsUIShowing());
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
+
+  // TODO(crbug.com/1401102): Only one UKM should have been recorded, but
+  // allowlisted domain also records one.
+  CheckRecordedHeuristicsUkmCount(2);
 }
 
 // Tests that Safety Tips don't trigger on lookalike domains that are explicitly
@@ -806,65 +843,94 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   CheckRecordedHeuristicsUkmCount(0);
 }
 
-// Tests that Safety Tips trigger (or not) on lookalike domains with edit
-// distance when enabled, and not otherwise.
+// Tests that Safety Tips trigger on lookalike domains with edit distance.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
                        TriggersOnEditDistance) {
-  // This domain is an edit distance from google.com.
+  // This domain is one edit from google.com.
   const GURL kNavigatedUrl = GetURL("goooglé.com");
   const GURL kTargetUrl = GetURL("google.com");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+
+  CloseWarningLeaveSite(browser());
+  CheckRecordedHeuristicsUkmCount(1);
 }
 
-// Tests that Character Swap for engaged sites is disabled by default.
+// Tests that Safety Tips don't trigger when using a scoped allowlist.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
-                       TriggersOnCharacterSwap_SiteEngagement_NotLaunched) {
-  const GURL kNavigatedUrl = GetURL("character-wsap.com");
-  const GURL kTargetUrl = GetURL("character-swap.com");
+                       DoesntTriggerOnScopedAllowlist) {
+  // This domain is one edit from google.com, but is allowed to spoof google.
+  const GURL kNavigatedUrl = GetURL("googlee.com");
+  const GURL kTargetUrl = GetURL("google.com");
+  ConfigureAllowlistWithScopes();
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
+  ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
+
+  // TODO(crbug.com/1401102): This shouldn't record metrics.
+  CheckRecordedHeuristicsUkmCount(1);
 }
 
-// Tests that Character Swap for top domains is disabled by default.
+// Tests that Safety Tips trigger when the URL is on the allowlist, but is
+// scoped to a different domain.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
-                       TriggersOnCharacterSwap_TopSite_NotLaunched) {
-  const GURL kNavigatedUrl = GetURL("goolge.com");
+                       TriggersOnWrongScopedAllowlist) {
+  // This domain is one edit from google.com, and may spoof blogspot.com...
+  const GURL kNavigatedUrl = GetURL("gooogle.com");
   const GURL kTargetUrl = GetURL("google.com");
-  // Both the lookalike and the target have low engagement.
+  ConfigureAllowlistWithScopes();
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  SetEngagementScore(browser(), kTargetUrl, kLowEngagement);
+  SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
-  EXPECT_FALSE(IsUIShowing());
+  EXPECT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+
+  CloseWarningLeaveSite(browser());
+  CheckRecordedHeuristicsUkmCount(1);
 }
 
-// Set a launch config with 100% rollout for Character Swap. This should show a
-// Character Swap warning for lookalikes matching engaged sites.
+// Tests that Character Swap is enabled for lookalikes matching engaged sites.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
                        TriggersOnCharacterSwap_SiteEngagement) {
-  reputation::AddSafetyTipHeuristicLaunchConfigForTesting(
-      reputation::HeuristicLaunchConfig::HEURISTIC_CHARACTER_SWAP_ENGAGED_SITES,
-      100);
-
   const GURL kNavigatedUrl = GetURL("character-wsap.com");
   const GURL kTargetUrl = GetURL("character-swap.com");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+
+  CloseWarningLeaveSite(browser());
+  CheckRecordedHeuristicsUkmCount(1);
 }
 
-// Set a launch config with 100% rollout for Character Swap. This should show a
-// Character Swap warning for lookalikes matching top sites.
+// Same as TriggersOnCharacterSwap_SiteEngagement, but this time
+// the match is on the actual hostnames and not skeletons. Note that
+// the skeletons of example.com and éxaplme.com don't have exactly
+// one character swap (exarnple.com and exaprnle.com)
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
+                       TriggersOnCharacterSwap_SiteEngagement_HostnameMatch) {
+  const GURL kNavigatedUrl = GetURL("éxapmle.com");
+  const GURL kTargetUrl = GetURL("example.com");
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+
+  CloseWarningLeaveSite(browser());
+  CheckRecordedHeuristicsUkmCount(1);
+}
+
+// Tests that Character Swap is enabled for lookalikes matching top sites.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
                        TriggersOnCharacterSwap_TopSite) {
-  reputation::AddSafetyTipHeuristicLaunchConfigForTesting(
-      reputation::HeuristicLaunchConfig::HEURISTIC_CHARACTER_SWAP_TOP_SITES,
-      100);
+  base::HistogramTester histograms;
 
   const GURL kNavigatedUrl = GetURL("goolge.com");
   const GURL kTargetUrl = GetURL("google.com");
@@ -873,6 +939,50 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   SetEngagementScore(browser(), kTargetUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+
+  CloseWarningLeaveSite(browser());
+  CheckRecordedHeuristicsUkmCount(1);
+}
+
+// Tests that a hostname on a safe TLD can spoof another hostname without a
+// lookalike warning.
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
+                       TriggersOnCharacterSwapSafeTLD_CanSpoof) {
+  base::HistogramTester histograms;
+
+  const GURL kNavigatedUrl = GetURL("digitla.gov");
+  const GURL kTargetUrl = GetURL("digital.gov");
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_FALSE(IsUIShowing());
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 0);
+  // TODO(crbug.com/1401102): This shouldn't record metrics.
+  CheckRecordedHeuristicsUkmCount(1);
+}
+
+// Navigate to a domain within a character swap of 1 to a top domain,
+// but the character swap is at the registry. This should not be flagged
+// as a character swap match.
+IN_PROC_BROWSER_TEST_F(
+    SafetyTipPageInfoBubbleViewBrowserTest,
+    DoesntTriggerOnCharacterSwap_TopSiteWithDifferentRegistry) {
+  ASSERT_TRUE(IsTopDomain(GetDomainInfo("google.rs")));
+
+  base::HistogramTester histograms;
+  // google.sr is within one character swap of google.rs which is a top domain.
+  const GURL kNavigatedUrl = GetURL("google.sr");
+  // Even if the navigated site has a low engagement score, it should be
+  // considered for lookalike suggestions.
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_FALSE(IsUIShowing());
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 0);
+  CheckRecordedHeuristicsUkmCount(0);
 }
 
 // Tests that Safety Tips trigger on lookalike domains with tail embedding when
@@ -952,6 +1062,7 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   // the safety tip.
   histogram_tester.ExpectTotalCount(
       GetInteractionHistogram("SafetyTip_Lookalike"), 0);
+
   CloseWarningLeaveSite(browser());
   histogram_tester.ExpectUniqueSample(
       GetInteractionHistogram("SafetyTip_Lookalike"),
@@ -1106,19 +1217,22 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
 }
 
-// Ensure that the sensitive-keyword heuristic doesn't show up in PageInfo. Also
+// Ensure that a metrics-only heuristic doesn't show up in PageInfo. Also
 // a regression test for crbug/1061244.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
-                       SensitiveKeywordHeuristicDoesntShowInPageInfo) {
-  const std::vector<const char*> kSensitiveKeywords = {"test"};
-  auto kNavigatedUrl = GetURL("test-secure.com");
-
-  ReputationService* rep_service = ReputationService::Get(browser()->profile());
-  rep_service->SetSensitiveKeywordsForTesting(kSensitiveKeywords.data(),
-                                              kSensitiveKeywords.size());
-
+                       MetricsOnlyHeuristicDoesntShowInPageInfo) {
+  // This URL will trigger Combo Squatting. Combo Squatting UI is disabled by
+  // default so this should only record metrics.
+  const GURL kNavigatedUrl = GetURL("google-login.com");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  base::HistogramTester histograms;
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  // Make sure that the UI isn't showing but interstitial histogram is recorded.
+  ASSERT_FALSE(IsUIShowing());
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
+  histograms.ExpectBucketCount(lookalikes::kHistogramName,
+                               NavigationSuggestionEvent::kComboSquatting, 1);
 
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
 }
@@ -1126,12 +1240,9 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
 // Tests that UKM data gets properly recorded when safety tip heuristics get
 // triggered.
 IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
-                       DISABLED_HeuristicsUkmRecorded) {
-  const std::vector<const char*> kSensitiveKeywords = {"test"};
-
-  ReputationService* rep_service = ReputationService::Get(browser()->profile());
-  rep_service->SetSensitiveKeywordsForTesting(kSensitiveKeywords.data(),
-                                              kSensitiveKeywords.size());
+                       HeuristicsUkmRecorded) {
+  SetEngagementScore(browser(), GURL("https://google.com"), kHighEngagement);
+  SetEngagementScore(browser(), GURL("https://youtube.com"), kHighEngagement);
 
   // Note that we only want the lookalike heuristic to trigger when our UI
   // status is fully enabled (if it's not, our lookalike heuristic shouldn't
@@ -1139,20 +1250,13 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
   const std::vector<HeuristicsTestCase> test_cases = {
       /*blocklist*/ /*lookalike*/ /*keywords*/
       {GetURL("test.com"), {false, false, false}},
-      {GetURL("test-secure.com"), {false, false, true}},
-      {GetURL("test-insecure.com"), {false, false, true}},
-      {GetURL("test-blocklist.com"), {true, false, true}},
-      {GetURL("other.com"), {false, false, false}},
-      {GetURL("other-insecure.com"), {false, false, false}},
-      {GetURL("other-insecure.com"), {false, false, false}},
-      {GetURL("noblocklist.com"), {false, false, false}},
-      {GetURL("blocklist.com"), {true, false, false}},
-      {GetURL("a-normal-site.com"), {false, false, false}},
-      {GetURL("googlé.sk"), {false, true, false}},
-      {GetURL("test-secure.com"),
-       {true, false,
-        true}},  // This test case expects multiple heuristics to trigger.
-      {GetURL("googlé.sk"), {true, true, false}},
+      {GetURL("googlee.com"), {false, true, false}},
+      // Following tests are disabled because the blocklisted UI doesn't have a
+      // "Leave" button.
+      // TODO(crbug.com/1386300): Remove once the blocklist heuristic is
+      // deleted.
+      // {GetURL("youtubee.com"), {true, true, false}},
+      // {GetURL("blocklist.com"), {true, false, false}},
   };
 
   for (const HeuristicsTestCase& test_case : test_cases) {
@@ -1166,7 +1270,6 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
       NavigateToURL(browser(), test_case.navigated_url,
                     WindowOpenDisposition::CURRENT_TAB);
     }
-
     // If a warning should show, dismiss it to ensure UKM data gets recorded.
     if ((test_case.expected_results.lookalike_heuristic_triggered ||
          test_case.expected_results.blocklist_heuristic_triggered)) {
@@ -1174,11 +1277,10 @@ IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
     }
   }
 
-  size_t expected_event_count =
-      std::count_if(test_cases.begin(), test_cases.end(),
-                    [](const HeuristicsTestCase& test_case) {
-                      return test_case.expected_results.triggered_any();
-                    });
+  size_t expected_event_count = base::ranges::count_if(
+      test_cases, [](const HeuristicsTestCase& test_case) {
+        return test_case.expected_results.triggered_any();
+      });
   CheckRecordedHeuristicsUkmCount(expected_event_count);
 
   size_t expected_event_idx = 0;
@@ -1270,142 +1372,222 @@ IN_PROC_BROWSER_TEST_F(
   CheckHeuristicsUkmRecord({kNavigatedUrl, {true, false, false}}, 1);
 }
 
-// Tests for Digital Asset Links for lookalike checks.
-// TODO(meacer): Refactor the DAL code in LookalikeNavigationThrottle tests and
-// reuse here.
-class SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest
-    : public SafetyTipPageInfoBubbleViewBrowserTest {
- protected:
-  struct TestSite {
-    std::string hostname;
-    std::string manifest;
-  };
-
-  bool digital_asset_links_enabled() const override { return true; }
-
-  void TearDownOnMainThread() override { url_loader_interceptor_.reset(); }
-
-  void SetUpManifests(const std::vector<TestSite>& sites) {
-    url_loader_interceptor_ = std::make_unique<
-        content::URLLoaderInterceptor>(base::BindRepeating(
-        &SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest::OnIntercept,
-        base::Unretained(this), sites));
-  }
-
-  static std::string MakeManifestWithTarget(const char* target_domain,
-                                            bool invalid = false) {
-    const char* const format = R"([{
-        "relation": ["%s"],
-        "target": {
-          "namespace": "web",
-          "site": "https://%s"
-        }
-      }])";
-    // Go through MakeURL to convert target_domain to punycode.
-    return base::StringPrintf(format,
-                              (invalid ? "junkvalue" : "lookalikes/allowlist"),
-                              MakeURL(target_domain).host().c_str());
-  }
-
- private:
-  bool OnIntercept(const std::vector<TestSite>& sites,
-                   content::URLLoaderInterceptor::RequestParams* params) {
-    for (const TestSite& site : sites) {
-      if (params->url_request.url == MakeManifestURL(site.hostname)) {
-        DCHECK(!site.manifest.empty());
-        // Serve manifest contents:
-        std::string headers =
-            "HTTP/1.1 200 OK\nContent-Type: application/json; "
-            "charset=utf-8\n";
-        content::URLLoaderInterceptor::WriteResponse(headers, site.manifest,
-                                                     params->client.get());
-        return true;
-      }
-      // Serve site's contents:
-      if (params->url_request.url == MakeURL(site.hostname)) {
-        content::URLLoaderInterceptor::WriteResponse(
-            "HTTP/1.1 200 OK\nContent-Type: text/html; charset=utf-8\n",
-            "<html>Test page</html>", params->client.get());
-        return true;
-      }
-    }
-    return false;
-  }
-
-  static GURL MakeManifestURL(const std::string& hostname) {
-    return GURL("https://" + hostname + "/.well-known/assetlinks.json");
-  }
-
-  static GURL MakeURL(const std::string& hostname) {
-    return GURL("https://" + hostname);
-  }
-
-  std::unique_ptr<content::URLLoaderInterceptor> url_loader_interceptor_;
-};
-
-// Lookalike and target sites' manifests don't match each other. Show the UI.
-// TODO(crbug.com/1191216): Check if there is already an existing manifest
-// validation happening and ignore new validation requests.
-IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest,
-                       ShowOnDigitalAssetLinkMismatch) {
-  const GURL kNavigatedUrl("https://gooogle.com");
-  const GURL kTargetUrl("https://google.com");
-  const std::vector<TestSite> sites{
-      {kNavigatedUrl.host().c_str(), MakeManifestWithTarget("invalid.host")},
-      {kTargetUrl.host().c_str(), MakeManifestWithTarget("invalid.host")},
-  };
-  SetUpManifests(sites);
-
+// Test that a Safety Tip is shown and metrics are recorded when
+// a combo squatting url is flagged with a hard-coded brand name.
+// This test case trigger `keyword` heuristic as well because of `google`
+// in the URL.
+// TODO(crbug.com/1343630): keyword (embedded keyword) heuristic should
+// be removed from the code including CheckHeuristicsUkmRecord.
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
+                       TriggerOnComboSquatting) {
+  // Set a launch config with 100% rollout for Combo Squatting.
+  reputation::AddSafetyTipHeuristicLaunchConfigForTesting(
+      reputation::HeuristicLaunchConfig::HEURISTIC_COMBO_SQUATTING_TOP_DOMAINS,
+      100);
   base::HistogramTester histograms;
-
+  const GURL kNavigatedUrl = GetURL("google-login.com");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
+
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
+  histograms.ExpectBucketCount(lookalikes::kHistogramName,
+                               NavigationSuggestionEvent::kComboSquatting, 1);
+
+  // Make sure that the UI is now showing, and that no UKM data has been
+  // recorded yet.
   ASSERT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
 
-  histograms.ExpectTotalCount(
-      DigitalAssetLinkCrossValidator::kEventHistogramName, 2);
-  histograms.ExpectBucketCount(
-      DigitalAssetLinkCrossValidator::kEventHistogramName,
-      DigitalAssetLinkCrossValidator::Event::kStarted, 1);
-  histograms.ExpectBucketCount(
-      DigitalAssetLinkCrossValidator::kEventHistogramName,
-      DigitalAssetLinkCrossValidator::Event::kLookalikeManifestFailed, 1);
-}
-
-// Same as ShowOnDigitalAssetLinkMismatch but with valid manifests.
-// An edit distance match would normally display a Safety Tip, but the lookalike
-// site properly allowlisted the target site so the Safety Tip is suppressed.
-// TODO(crbug.com/1191216): Check if there is already an existing manifest
-// validation happening and ignore new validation requests.
-IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewDigitalAssetLinksBrowserTest,
-                       NoShowOnDigitalAssetLinkMatch) {
-  const GURL kNavigatedUrl("https://gooogle.com");
-  const GURL kTargetUrl("https://google.com");
-  const std::vector<TestSite> sites{
-      {kNavigatedUrl.host().c_str(),
-       MakeManifestWithTarget(kTargetUrl.host().c_str())},
-      {kTargetUrl.host().c_str(),
-       MakeManifestWithTarget(kNavigatedUrl.host().c_str())},
-  };
-  SetUpManifests(sites);
-
-  base::HistogramTester histograms;
-
-  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  SetEngagementScore(browser(), kTargetUrl, kHighEngagement);
-  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
-
+  // Once we close the warning, ensure that the UI is no longer showing, and
+  // that UKM data has now been recorded.
+  CloseWarningLeaveSite(browser());
   ASSERT_FALSE(IsUIShowing());
 
-  histograms.ExpectTotalCount(
-      DigitalAssetLinkCrossValidator::kEventHistogramName, 2);
+  CheckRecordedHeuristicsUkmCount(1);
+  CheckHeuristicsUkmRecord(
+      {kNavigatedUrl,
+       {/*blocklist=*/false, /*lookalike=*/true, /*keywords=*/false}},
+      0);
+
+  // Navigate to the same site again, but close the warning with an ignore
+  // instead of an accept. This should still record UKM data.
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  ASSERT_TRUE(IsUIShowing());
+
+  // Make sure the already collected UKM data still exists.
+  CheckRecordedHeuristicsUkmCount(1);
+  CheckHeuristicsUkmRecord(
+      {kNavigatedUrl,
+       {/*blocklist=*/false, /*lookalike=*/true, /*keywords=*/false}},
+      0);
+
+  CloseWarningIgnore(views::Widget::ClosedReason::kCloseButtonClicked);
+  ASSERT_FALSE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(2);
+  CheckHeuristicsUkmRecord(
+      {kNavigatedUrl,
+       {/*blocklist=*/false, /*lookalike=*/true, /*keywords=*/false}},
+      0);
+  CheckHeuristicsUkmRecord(
+      {kNavigatedUrl,
+       {/*blocklist=*/false, /*lookalike=*/true, /*keywords=*/false}},
+      1);
+}
+
+// Test that a Safety Tip is shown and metrics are recorded when
+// a combo squatting url is flagged with a hard-coded brand name.
+// In contrast with `TriggerOnComboSquatting`, this test case only
+// triggers `lookalike` heuristic.
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
+                       TriggerOnlyOnComboSquatting) {
+  // Set a launch config with 100% rollout for Combo Squatting.
+  reputation::AddSafetyTipHeuristicLaunchConfigForTesting(
+      reputation::HeuristicLaunchConfig::HEURISTIC_COMBO_SQUATTING_TOP_DOMAINS,
+      100);
+  base::HistogramTester histograms;
+  const GURL kNavigatedUrl = GetURL("costco-login.com");
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
+  histograms.ExpectBucketCount(lookalikes::kHistogramName,
+                               NavigationSuggestionEvent::kComboSquatting, 1);
+
+  // Make sure that the UI is now showing, and that no UKM data has been
+  // recorded yet.
+  ASSERT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+
+  // Once we close the warning, ensure that the UI is no longer showing, and
+  // that UKM data has now been recorded.
+  CloseWarningLeaveSite(browser());
+  ASSERT_FALSE(IsUIShowing());
+
+  CheckRecordedHeuristicsUkmCount(1);
+  // Boolean values are /*blocklist*/ /*lookalike*/ /*keywords*/
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 0);
+
+  // Navigate to the same site again, but close the warning with an ignore
+  // instead of an accept. This should still record UKM data.
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  ASSERT_TRUE(IsUIShowing());
+
+  // Make sure the already collected UKM data still exists.
+  CheckRecordedHeuristicsUkmCount(1);
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 0);
+
+  CloseWarningIgnore(views::Widget::ClosedReason::kCloseButtonClicked);
+  ASSERT_FALSE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(2);
+  // Boolean values are /*blocklist*/ /*lookalike*/ /*keywords*/
+  // The last `false` is different from the previous test because
+  // `keywords heuristic` is not triggered by this test case.
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 0);
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 1);
+  // TODO(crbug.com/1343630): keyword (embedded keyword) heuristic should
+  // be removed from the code including CheckHeuristicsUkmRecord.
+}
+
+// Test that a Safety Tip is shown and metrics are recorded when
+// a combo squatting url is flagged with a brand name from engaged sites.
+// In this test case, engaged site is not one of the keywords in `keyword`
+// heuristic.
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
+                       TriggerOnComboSquattingSiteEngagement) {
+  // Set a launch config with 100% rollout for Combo Squatting.
+  reputation::AddSafetyTipHeuristicLaunchConfigForTesting(
+      reputation::HeuristicLaunchConfig::
+          HEURISTIC_COMBO_SQUATTING_ENGAGED_SITES,
+      100);
+  base::HistogramTester histograms;
+  const GURL kEngagedUrl = GetURL("example.com");
+  const GURL kNavigatedUrl = GetURL("example-login.com");
+  SetEngagementScore(browser(), kEngagedUrl, kHighEngagement);
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
   histograms.ExpectBucketCount(
-      DigitalAssetLinkCrossValidator::kEventHistogramName,
-      DigitalAssetLinkCrossValidator::Event::kStarted, 1);
+      lookalikes::kHistogramName,
+      NavigationSuggestionEvent::kComboSquattingSiteEngagement, 1);
+
+  // Make sure that the UI is now showing, and that no UKM data has been
+  // recorded yet.
+  ASSERT_TRUE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+
+  // Once we close the warning, ensure that the UI is no longer showing, and
+  // that UKM data has now been recorded.
+  CloseWarningLeaveSite(browser());
+  ASSERT_FALSE(IsUIShowing());
+
+  CheckRecordedHeuristicsUkmCount(1);
+  // Boolean values are /*blocklist*/ /*lookalike*/ /*keywords*/
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 0);
+
+  // Navigate to the same site again, but close the warning with an ignore
+  // instead of an accept. This should still record UKM data.
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  ASSERT_TRUE(IsUIShowing());
+
+  // Make sure the already collected UKM data still exists.
+  CheckRecordedHeuristicsUkmCount(1);
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 0);
+
+  CloseWarningIgnore(views::Widget::ClosedReason::kCloseButtonClicked);
+  ASSERT_FALSE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(2);
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 0);
+  CheckHeuristicsUkmRecord({kNavigatedUrl, {false, true, false}}, 1);
+}
+
+// This test checks that Safety Tip is not showing when the Combo Squatting
+// is not enabled for hard coded list by gradual roll out.
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
+                       NotTriggerOnComboSquattingButNotLaunched) {
+  base::HistogramTester histograms;
+  const GURL kNavigatedUrl = GetURL("costco-login.com");
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
+  histograms.ExpectBucketCount(lookalikes::kHistogramName,
+                               NavigationSuggestionEvent::kComboSquatting, 1);
+
+  // Make sure that the UI is not showing, and that no UKM data has been
+  // recorded.
+  ASSERT_FALSE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
+}
+
+// This test checks that Safety Tip is not showing when the Combo Squatting
+// is not enabled for engaged sites by gradual roll out.
+IN_PROC_BROWSER_TEST_F(SafetyTipPageInfoBubbleViewBrowserTest,
+                       NotTriggerOnComboSquattingSiteEngagementNotLaunched) {
+  base::HistogramTester histograms;
+  const GURL kEngagedUrl = GetURL("example.com");
+  const GURL kNavigatedUrl = GetURL("example-login.com");
+  SetEngagementScore(browser(), kEngagedUrl, kHighEngagement);
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+
+  histograms.ExpectTotalCount(lookalikes::kHistogramName, 1);
   histograms.ExpectBucketCount(
-      DigitalAssetLinkCrossValidator::kEventHistogramName,
-      DigitalAssetLinkCrossValidator::Event::kValidationSucceeded, 1);
+      lookalikes::kHistogramName,
+      NavigationSuggestionEvent::kComboSquattingSiteEngagement, 1);
+
+  // Make sure that the UI is not showing, and that no UKM data has been
+  // recorded.
+  ASSERT_FALSE(IsUIShowing());
+  CheckRecordedHeuristicsUkmCount(0);
 }
 
 class SafetyTipPageInfoBubbleViewPrerenderBrowserTest

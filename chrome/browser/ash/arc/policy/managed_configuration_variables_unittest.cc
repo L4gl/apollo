@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,8 +19,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/system/fake_statistics_provider.h"
-#include "chromeos/system/statistics_provider.h"
+#include "chromeos/ash/components/system/fake_statistics_provider.h"
+#include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
@@ -198,9 +198,8 @@ class ManagedConfigurationVariablesBase {
   void DoSetUp(bool is_affiliated) {
     // Set up fake StatisticsProvider.
     statistics_provider_.SetMachineStatistic(
-        chromeos::system::kSerialNumberKeyForTest, kTestDeviceSerialNumber);
-    chromeos::system::StatisticsProvider::SetTestProvider(
-        &statistics_provider_);
+        ash::system::kSerialNumberKeyForTest, kTestDeviceSerialNumber);
+    ash::system::StatisticsProvider::SetTestProvider(&statistics_provider_);
 
     // Set up a fake user and capture its profile.
     auto* const user_manager = new ash::FakeChromeUserManager();
@@ -226,7 +225,7 @@ class ManagedConfigurationVariablesBase {
     fake_device_attributes_ = std::make_unique<policy::FakeDeviceAttributes>();
     fake_device_attributes_->SetFakeDirectoryApiId(kTestDeviceDirectoryId);
     fake_device_attributes_->SetFakeDeviceAssetId(kTestDeviceAssetId);
-    fake_device_attributes_->SetFakeDeviceAnotatedLocation(
+    fake_device_attributes_->SetFakeDeviceAnnotatedLocation(
         kTestDeviceAnnotatedLocation);
   }
 
@@ -251,7 +250,7 @@ class ManagedConfigurationVariablesBase {
 
   TestingProfile* profile_;
 
-  chromeos::system::FakeStatisticsProvider statistics_provider_;
+  ash::system::FakeStatisticsProvider statistics_provider_;
 
   std::unique_ptr<policy::FakeDeviceAttributes> fake_device_attributes_;
 };
@@ -306,7 +305,7 @@ TEST_F(ManagedConfigurationVariablesTest, VariableChains) {
   EXPECT_EQ(*dict.FindStringKey(kKey), kTestDeviceAnnotatedLocation);
 
   // Clear location and expect chain resolves to asset ID.
-  device_attributes()->SetFakeDeviceAnotatedLocation("");
+  device_attributes()->SetFakeDeviceAnnotatedLocation("");
   dict.SetStringKey(kKey, kChain);
   RecursivelyReplaceManagedConfigurationVariables(profile(),
                                                   device_attributes(), &dict);
@@ -352,7 +351,7 @@ TEST_F(ManagedConfigurationVariablesTest, IgnoresInvalidVariables) {
   dict.SetStringKey(kInvalidKey3, kInvalidChain3);
 
   // Clear location, valid chain should resolve to asset ID.
-  device_attributes()->SetFakeDeviceAnotatedLocation("");
+  device_attributes()->SetFakeDeviceAnnotatedLocation("");
   RecursivelyReplaceManagedConfigurationVariables(profile(),
                                                   device_attributes(), &dict);
   // Expect the valid chain was replaced.
@@ -394,7 +393,7 @@ TEST_F(ManagedConfigurationVariablesTest, RecursiveValuesAreReplacedCorrectly) {
 
   // Setup fake asset ID and location that are also valid variables.
   device_attributes()->SetFakeDeviceAssetId(kVariable2);
-  device_attributes()->SetFakeDeviceAnotatedLocation(kVariable1);
+  device_attributes()->SetFakeDeviceAnnotatedLocation(kVariable1);
   RecursivelyReplaceManagedConfigurationVariables(profile(),
                                                   device_attributes(), &dict);
   // Expect variables are replaced only once without an infinite loop.

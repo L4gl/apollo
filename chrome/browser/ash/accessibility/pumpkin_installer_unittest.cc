@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,8 +7,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/dlcservice/fake_dlcservice_client.h"
+#include "chromeos/ash/components/dbus/dlcservice/fake_dlcservice_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/accessibility_features.h"
@@ -25,34 +24,38 @@ class PumpkinInstallerTest : public testing::Test {
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(
         ::features::kExperimentalAccessibilityDictationWithPumpkin);
-    installer_ = std::make_unique<PumpkinInstaller>(
-        base::BindRepeating(&PumpkinInstallerTest::OnInstalled,
-                            base::Unretained(this)),
-        base::BindRepeating(&PumpkinInstallerTest::OnProgress,
-                            base::Unretained(this)),
-        base::BindRepeating(&PumpkinInstallerTest::OnError,
-                            base::Unretained(this)));
+    installer_ = std::make_unique<PumpkinInstaller>();
 
-    chromeos::DBusThreadManager::Initialize();
-    chromeos::DlcserviceClient::InitializeFake();
-    fake_dlcservice_client_ = static_cast<chromeos::FakeDlcserviceClient*>(
-        chromeos::DlcserviceClient::Get());
+    DlcserviceClient::InitializeFake();
+    fake_dlcservice_client_ =
+        static_cast<FakeDlcserviceClient*>(DlcserviceClient::Get());
   }
 
   void TearDown() override {
     installer_.reset();
-    chromeos::DBusThreadManager::Shutdown();
-    chromeos::DlcserviceClient::Shutdown();
+    DlcserviceClient::Shutdown();
   }
 
-  void MaybeInstall() { installer_->MaybeInstall(); }
+  void MaybeInstall() {
+    installer_->MaybeInstall(
+        base::BindOnce(&PumpkinInstallerTest::OnInstalled,
+                       base::Unretained(this)),
+        base::BindRepeating(&PumpkinInstallerTest::OnProgress,
+                            base::Unretained(this)),
+        base::BindOnce(&PumpkinInstallerTest::OnError, base::Unretained(this)));
+  }
 
   void MaybeInstallAndWait() {
-    installer_->MaybeInstall();
+    installer_->MaybeInstall(
+        base::BindOnce(&PumpkinInstallerTest::OnInstalled,
+                       base::Unretained(this)),
+        base::BindRepeating(&PumpkinInstallerTest::OnProgress,
+                            base::Unretained(this)),
+        base::BindOnce(&PumpkinInstallerTest::OnError, base::Unretained(this)));
     task_environment_.RunUntilIdle();
   }
 
-  void OnInstalled(const std::string& root_path) { install_succeeded_ = true; }
+  void OnInstalled(bool success) { install_succeeded_ = success; }
   void OnProgress(double progress) {}
   void OnError(const std::string& error) {
     install_failed_ = true;
@@ -99,7 +102,7 @@ class PumpkinInstallerTest : public testing::Test {
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<PumpkinInstaller> installer_;
-  chromeos::FakeDlcserviceClient* fake_dlcservice_client_;
+  FakeDlcserviceClient* fake_dlcservice_client_;
   base::HistogramTester histogram_tester_;
   bool install_succeeded_ = false;
   bool install_failed_ = false;
@@ -138,11 +141,12 @@ TEST_F(PumpkinInstallerTest, AlreadyInstalled) {
   ASSERT_FALSE(install_succeeded());
   SetPumpkinAlreadyInstalled();
   MaybeInstallAndWait();
-  ASSERT_FALSE(install_succeeded());
-  ASSERT_TRUE(install_failed());
-  EXPECT_EQ("Pumpkin already installed.", last_error());
+  ASSERT_TRUE(install_succeeded());
+  ASSERT_FALSE(install_failed());
+  EXPECT_EQ("", last_error());
 
-  // No metrics are recorded because a download was never attempted.
+  // Pumpkin was already installed, so we shouldn't record any additional
+  // metrics.
   ExpectSuccessHistogramCount(0);
   ExpectFailureHistogramCount(0);
 }

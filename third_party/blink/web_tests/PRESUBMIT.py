@@ -1,4 +1,4 @@
-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Copyright 2013 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -12,8 +12,12 @@ import filecmp
 import inspect
 import os
 import sys
+import tempfile
+import re
+from html.parser import HTMLParser
 
 USE_PYTHON3 = True
+WPT_IMPORTER_EMAIL = "wpt-autoroller@chops-service-accounts.iam.gserviceaccount.com"
 
 
 def _CheckTestharnessResults(input_api, output_api):
@@ -32,31 +36,29 @@ def _CheckTestharnessResults(input_api, output_api):
         '..', 'tools', 'check_testharness_expected_pass.py')
 
     # When running git cl presubmit --all this presubmit may be asked to check
-    # ~19,000 files, leading to a command line that is over 2,000,000 characters.
-    # This goes past the Windows 8191 character cmd.exe limit and causes cryptic
-    # failures. To avoid these we break the command up into smaller pieces. The
-    # non-Windows limit is chosen so that the code that splits up commands will
-    # get some exercise on other platforms.
-    # Depending on how long the command is on Windows the error may be:
-    #     The command line is too long.
-    # Or it may be:
-    #     OSError: Execution failed with error: [WinError 206] The filename or
-    #     extension is too long.
-    # I suspect that the latter error comes from CreateProcess hitting its 32768
-    # character limit.
-    files_per_command = 25 if input_api.is_windows else 1000
-    results = []
-    for i in range(0, len(baseline_files), files_per_command):
-        args = [input_api.python_executable, checker_path]
-        args.extend(baseline_files[i:i + files_per_command])
-        _, errs = input_api.subprocess.Popen(
-            args,
-            stdout=input_api.subprocess.PIPE,
-            stderr=input_api.subprocess.PIPE,
-            universal_newlines=True).communicate()
-        if errs:
-            results.append(output_api.PresubmitError(errs))
-    return results
+    # ~19,000 files. Passing these on the command line would far exceed Windows
+    # limits, so we use --path-files instead.
+
+    # We have to set delete=False and then let the object go out of scope so
+    # that the file can be opened by name on Windows.
+    with tempfile.NamedTemporaryFile('w+', newline='', delete=False) as f:
+        for path in baseline_files:
+            f.write('%s\n' % path)
+        paths_name = f.name
+
+    args = [
+        input_api.python3_executable, checker_path, '--path-files', paths_name
+    ]
+    _, errs = input_api.subprocess.Popen(
+        args,
+        stdout=input_api.subprocess.PIPE,
+        stderr=input_api.subprocess.PIPE,
+        universal_newlines=True).communicate()
+
+    os.remove(paths_name)
+    if errs:
+        return [output_api.PresubmitError(errs)]
+    return []
 
 
 def _TestharnessGenericBaselinesToCheck(input_api):
@@ -69,10 +71,11 @@ def _TestharnessGenericBaselinesToCheck(input_api):
         path = f.AbsoluteLocalPath()
         if not path.endswith('-expected.txt'):
             continue
-        if (input_api.os_path.join(this_dir, 'platform', 'generic') in path and
-                input_api.os_path.join(this_dir, 'platform', 'generic',
-                                       'virtual') not in path):
-            baseline_files.append(path)
+        if (input_api.os_path.join(this_dir, 'platform') in path
+                or input_api.os_path.join(this_dir, 'virtual') in path
+                or input_api.os_path.join(this_dir, 'flag-specific') in path):
+            continue
+        baseline_files.append(path)
     return baseline_files
 
 
@@ -184,6 +187,7 @@ def _CheckForUnlistedTestFolder(input_api, output_api):
         dirs_from_build_gn = []
         start_line = '# === List Test Cases folders here ==='
         end_line = '# === Test Case Folders Ends ==='
+        end_line_count = 0
         find_start_line  = False
         for line in input_api.ReadFile(path_build_gn).splitlines():
             line = line.strip()
@@ -192,7 +196,11 @@ def _CheckForUnlistedTestFolder(input_api, output_api):
                 continue
             if find_start_line:
                 if line.startswith(end_line):
-                    break
+                    find_start_line = False
+                    end_line_count += 1
+                    if end_line_count == 2:
+                        break
+                    continue
                 if len(line.split('/')) > 1:
                     dirs_from_build_gn.append(line.split('/')[-2])
         dirs_from_build_gn.extend(
@@ -228,7 +236,9 @@ def _CheckForExtraVirtualBaselines(input_api, output_api):
         local_path = os_path.relpath(local_path, local_dir)
         path_components = local_path.split(os_path.sep)
         if f.Action() == 'A':
-            if (len(path_components) > 4 and path_components[2] == 'virtual'
+            if len(path_components) > 2 and path_components[0] == 'virtual':
+                check_files.append((local_path, path_components[1]))
+            elif (len(path_components) > 4 and path_components[2] == 'virtual'
                   and (path_components[0] == 'platform'
                        or path_components[0] == 'flag-specific')):
                 check_files.append((local_path, path_components[3]))
@@ -252,6 +262,17 @@ def _CheckForExtraVirtualBaselines(input_api, output_api):
 
     results = []
     if check_all:
+        for f in input_api.change.AllFiles(
+                os_path.join(input_api.PresubmitLocalPath(), "virtual")):
+            suite = f.split('/')[0]
+            if not suite in known_virtual_suites:
+                path = os_path.relpath(
+                    os_path.join(input_api.PresubmitLocalPath(), "virtual", f),
+                    input_api.change.RepositoryRoot())
+                results.append(
+                    output_api.PresubmitError(
+                        "Baseline %s exists, but %s is not a known virtual test suite."
+                        % (path, suite)))
         for subdir in ["platform", "flag-specific"]:
             for f in input_api.change.AllFiles(
                     os_path.join(input_api.PresubmitLocalPath(), subdir)):
@@ -280,6 +301,84 @@ def _CheckForExtraVirtualBaselines(input_api, output_api):
     return results
 
 
+def _CheckWebViewExpectations(input_api, output_api):
+    src_dir = os.path.join(input_api.PresubmitLocalPath(), os.pardir,
+                           os.pardir, os.pardir)
+    webview_data_dir = input_api.os_path.join(src_dir, 'android_webview',
+                                              'tools', 'system_webview_shell',
+                                              'test', 'data', 'webexposed')
+    if webview_data_dir not in sys.path:
+        sys.path.append(webview_data_dir)
+
+    # pylint: disable=import-outside-toplevel
+    from exposed_webview_interfaces_presubmit import (
+        CheckNotWebViewExposedInterfaces)
+    return CheckNotWebViewExposedInterfaces(input_api, output_api)
+
+
+class _DoctypeParser(HTMLParser):
+    """Parses HTML to check if there exists a DOCTYPE declaration before all other tags.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.encountered_tag = False
+        self.doctype = ""
+
+    def handle_starttag(self, *_):
+        self.encountered_tag = True
+
+    def handle_startendtag(self, *_):
+        self.encountered_tag = True
+
+    def handle_decl(self, decl):
+        if not self.encountered_tag:
+            self.doctype = decl
+            self.encountered_tag = True
+
+
+def _IsDoctypeHTMLSet(lines):
+    """Returns true if the given HTML file starts with <!DOCTYPE html>.
+    """
+    parser = _DoctypeParser()
+    for l in lines:
+        parser.feed(l)
+
+    return re.match("DOCTYPE\s*html\s*$", parser.doctype, re.IGNORECASE)
+
+
+def _CheckForDoctypeHTML(input_api, output_api):
+    """Checks that all changed HTML files start with the correct <!DOCTYPE html> tag.
+    """
+    results = []
+
+    if input_api.no_diffs:
+        return results
+
+    # These tests are being imported from WPT, so <!DOCTYPE html> is not required yet.
+    no_errors = (input_api.change.author_email == WPT_IMPORTER_EMAIL)
+
+    for f in input_api.AffectedFiles(include_deletes=False):
+        path = f.LocalPath()
+        fname = os.path.basename(path)
+
+        if not fname.endswith(".html") or "quirk" in fname:
+            continue
+
+        if not _IsDoctypeHTMLSet(f.NewContents()):
+            error = "HTML file \"%s\" does not start with <!DOCTYPE html>. " \
+                    "If you really intend to test in quirks mode, add \"quirk\" " \
+                    "to the name of your test." % path
+
+            if f.Action() == "A" or _IsDoctypeHTMLSet(f.OldContents()):
+                if no_errors:
+                    results.append(output_api.PresubmitPromptWarning(error))
+                else:
+                    results.append(output_api.PresubmitError(error))
+
+    return results
+
+
 def CheckChangeOnUpload(input_api, output_api):
     results = []
     results.extend(_CheckTestharnessResults(input_api, output_api))
@@ -290,6 +389,8 @@ def CheckChangeOnUpload(input_api, output_api):
     results.extend(_CheckRunAfterLayoutAndPaintJS(input_api, output_api))
     results.extend(_CheckForUnlistedTestFolder(input_api, output_api))
     results.extend(_CheckForExtraVirtualBaselines(input_api, output_api))
+    results.extend(_CheckWebViewExpectations(input_api, output_api))
+    results.extend(_CheckForDoctypeHTML(input_api, output_api))
     return results
 
 
@@ -300,4 +401,6 @@ def CheckChangeOnCommit(input_api, output_api):
     results.extend(_CheckTestExpectations(input_api, output_api))
     results.extend(_CheckForUnlistedTestFolder(input_api, output_api))
     results.extend(_CheckForExtraVirtualBaselines(input_api, output_api))
+    results.extend(_CheckWebViewExpectations(input_api, output_api))
+    results.extend(_CheckForDoctypeHTML(input_api, output_api))
     return results

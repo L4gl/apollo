@@ -1,29 +1,31 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import './collapse_radio_button.js';
 import './secure_dns.js';
 import '../controls/settings_radio_group.js';
 import '../controls/settings_toggle_button.js';
-import '../icons.js';
+import '../icons.html.js';
 import '../prefs/prefs.js';
-import '../settings_shared_css.js';
+import '../settings_shared.css.js';
 import './disable_safebrowsing_dialog.js';
 
+import {HelpBubbleMixin, HelpBubbleMixinInterface} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
+import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
-import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/js/i18n_mixin.js';
+import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsRadioGroupElement} from '../controls/settings_radio_group.js';
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
+import {FocusConfig} from '../focus_config.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyElementInteractions, SafeBrowsingInteractions} from '../metrics_browser_proxy.js';
-// <if expr="chromeos_ash or chromeos_lacros">
+// <if expr="is_chromeos or chrome_root_store_supported">
 import {OpenWindowProxyImpl} from '../open_window_proxy.js';
 // </if>
 
@@ -47,8 +49,6 @@ export enum SafeBrowsingSetting {
   DISABLED = 2,
 }
 
-type FocusConfig = Map<string, (string|(() => void))>;
-
 export interface SettingsSecurityPageElement {
   $: {
     passwordsLeakToggle: SettingsToggleButtonElement,
@@ -61,9 +61,11 @@ export interface SettingsSecurityPageElement {
 }
 
 const SettingsSecurityPageElementBase =
-    RouteObserverMixin(I18nMixin(PrefsMixin(PolymerElement))) as {
+    HelpBubbleMixin(
+        RouteObserverMixin(I18nMixin(PrefsMixin(PolymerElement)))) as {
       new (): PolymerElement & I18nMixinInterface &
-          RouteObserverMixinInterface & PrefsMixinInterface,
+          RouteObserverMixinInterface & PrefsMixinInterface &
+          HelpBubbleMixinInterface,
     };
 
 export class SettingsSecurityPageElement extends
@@ -85,6 +87,20 @@ export class SettingsSecurityPageElement extends
         type: Object,
         notify: true,
       },
+
+      // <if expr="chrome_root_store_supported">
+      /**
+       * Whether we should adjust Manage Certificates links to indicate
+       * support for Chrome Root Store.
+       */
+      showChromeRootStoreCertificates_: {
+        type: Boolean,
+        readOnly: true,
+        value: function() {
+          return loadTimeData.getBoolean('showChromeRootStoreCertificates');
+        },
+      },
+      // </if>
 
       /**
        * Whether the HTTPS-Only Mode setting should be displayed.
@@ -108,7 +124,7 @@ export class SettingsSecurityPageElement extends
         },
       },
 
-      // <if expr="chromeos_ash or chromeos_lacros">
+      // <if expr="is_chromeos">
       /**
        * Whether a link to secure DNS OS setting should be displayed.
        */
@@ -134,7 +150,7 @@ export class SettingsSecurityPageElement extends
         readOnly: true,
         value() {
           return loadTimeData.getBoolean('enableSecurityKeysSubpage');
-        }
+        },
       },
 
       // <if expr="is_win">
@@ -146,7 +162,7 @@ export class SettingsSecurityPageElement extends
           // it exists. Thus the phones subpage is only linked from this page
           // if the security keys subpage is disabled.
           return !loadTimeData.getBoolean('enableSecurityKeysSubpage');
-        }
+        },
       },
       // </if>
 
@@ -158,11 +174,13 @@ export class SettingsSecurityPageElement extends
       showDisableSafebrowsingDialog_: Boolean,
     };
   }
-
+  // <if expr="chrome_root_store_supported">
+  private showChromeRootStoreCertificates_: boolean;
+  // </if>
   private showHttpsOnlyModeSetting_: boolean;
   private showSecureDnsSetting_: boolean;
 
-  // <if expr="chromeos_ash or chromeos_lacros">
+  // <if expr="is_chromeos">
   private showSecureDnsSettingLink_: boolean;
   // </if>
 
@@ -180,7 +198,8 @@ export class SettingsSecurityPageElement extends
     // <if expr="use_nss_certs">
     if (routes.CERTIFICATES) {
       this.focusConfig.set(routes.CERTIFICATES.path, () => {
-        const toFocus = this.shadowRoot!.querySelector('#manageCertificates');
+        const toFocus =
+            this.shadowRoot!.querySelector<HTMLElement>('#manageCertificates');
         assert(toFocus);
         focusWithoutInk(toFocus);
       });
@@ -190,7 +209,8 @@ export class SettingsSecurityPageElement extends
     if (routes.SECURITY_KEYS) {
       this.focusConfig.set(routes.SECURITY_KEYS.path, () => {
         const toFocus =
-            this.shadowRoot!.querySelector('#security-keys-subpage-trigger');
+            this.shadowRoot!.querySelector<HTMLElement>(
+                '#security-keys-subpage-trigger');
         assert(toFocus);
         focusWithoutInk(toFocus);
       });
@@ -210,6 +230,10 @@ export class SettingsSecurityPageElement extends
         this.$.safeBrowsingStandard.expanded = true;
       }
     });
+
+    this.registerHelpBubble(
+        'kEnhancedProtectionSettingElementId',
+        this.$.safeBrowsingEnhanced.getBubbleAnchor());
   }
 
   /**
@@ -222,7 +246,8 @@ export class SettingsSecurityPageElement extends
       const queryParams = Router.getInstance().getQueryParameters();
       const section = queryParams.get('q');
       if (section === 'enhanced') {
-        this.$.safeBrowsingEnhanced.expanded = true;
+        this.$.safeBrowsingEnhanced.expanded =
+            !loadTimeData.getBoolean('esbSettingsImprovementsEnabled');
         this.$.safeBrowsingStandard.expanded = false;
       }
     }
@@ -283,11 +308,18 @@ export class SettingsSecurityPageElement extends
     Router.getInstance().navigateTo(routes.CERTIFICATES);
     // </if>
     // <if expr="is_win or is_macosx">
-    this.browserProxy_.showManageSSLCertificates();
+    this.browserProxy_.showManageSslCertificates();
     // </if>
     this.metricsBrowserProxy_.recordSettingsPageHistogram(
         PrivacyElementInteractions.MANAGE_CERTIFICATES);
   }
+
+  // <if expr="chrome_root_store_supported">
+  private onChromeCertificatesClick_() {
+    OpenWindowProxyImpl.getInstance().openUrl(
+        loadTimeData.getString('chromeRootStoreHelpCenterURL'));
+  }
+  // </if>
 
   private onAdvancedProtectionProgramLinkClick_() {
     window.open(loadTimeData.getString('advancedProtectionURL'));
@@ -346,11 +378,11 @@ export class SettingsSecurityPageElement extends
     this.recordActionOnExpandButtonClicked_(SafeBrowsingSetting.STANDARD);
   }
 
-  // <if expr="chromeos_ash or chromeos_lacros">
-  private onOpenChromeOSSecureDnsSettingsClicked_() {
+  // <if expr="is_chromeos">
+  private onOpenChromeOsSecureDnsSettingsClicked_() {
     const path =
         loadTimeData.getString('chromeOSPrivacyAndSecuritySectionPath');
-    OpenWindowProxyImpl.getInstance().openURL(`chrome://os-settings/${path}`);
+    OpenWindowProxyImpl.getInstance().openUrl(`chrome://os-settings/${path}`);
   }
   // </if>
 

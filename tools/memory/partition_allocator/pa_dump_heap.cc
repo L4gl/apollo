@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,6 +12,7 @@
 #include <cstring>
 #include <string>
 
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_ref_count.h"
 #include "base/allocator/partition_allocator/partition_root.h"
@@ -36,9 +37,9 @@ using partition_alloc::internal::kInvalidBucketSize;
 using partition_alloc::internal::kSuperPageSize;
 using partition_alloc::internal::PartitionPage;
 using partition_alloc::internal::PartitionPageSize;
-#if BUILDFLAG(USE_BACKUP_REF_PTR)
+#if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 using partition_alloc::internal::PartitionRefCountPointer;
-#endif  // BUILDFLAG(USE_BACKUP_REF_PTR)
+#endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 using partition_alloc::internal::PartitionSuperPageExtentEntry;
 using partition_alloc::internal::SystemPageSize;
 using partition_alloc::internal::ThreadSafe;

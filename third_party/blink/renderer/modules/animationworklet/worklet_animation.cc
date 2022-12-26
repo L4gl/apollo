@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -38,7 +38,7 @@ bool ConvertAnimationEffects(
     HeapVector<Member<KeyframeEffect>>& keyframe_effects,
     String& error_string) {
   DCHECK(effects);
-  DCHECK(keyframe_effects.IsEmpty());
+  DCHECK(keyframe_effects.empty());
 
   // Currently we only support KeyframeEffect.
   switch (effects->GetContentType()) {
@@ -71,7 +71,7 @@ bool ConvertAnimationEffects(
     }
   }
 
-  if (keyframe_effects.IsEmpty()) {
+  if (keyframe_effects.empty()) {
     error_string = "Effects array must be non-empty";
     return false;
   }
@@ -416,8 +416,10 @@ void WorkletAnimation::cancel() {
   // update the value in the next frame.
   if (IsActive(play_state_)) {
     for (auto& effect : effects_) {
-      effect->UpdateInheritedTime(absl::nullopt, absl::nullopt, false,
-                                  playback_rate_, kTimingUpdateOnDemand);
+      effect->UpdateInheritedTime(absl::nullopt,
+                                  /* at_scroll_timeline_boundary */ false,
+                                  /* is_idle */ false, playback_rate_,
+                                  kTimingUpdateOnDemand);
     }
   }
   SetPlayState(Animation::kIdle);
@@ -503,7 +505,8 @@ void WorkletAnimation::Update(TimingUpdateReason reason) {
         local_times_[i]
             ? absl::make_optional(AnimationTimeDelta(local_times_[i].value()))
             : absl::nullopt,
-        absl::nullopt, false, playback_rate_, reason);
+        /* at_scroll_timeline_boundary */ false,
+        /* is_idle */ false, playback_rate_, reason);
   }
 }
 
@@ -550,7 +553,7 @@ void WorkletAnimation::UpdateCompositingState() {
 #if DCHECK_IS_ON()
     String warning_message;
     DCHECK(CheckCanStart(&warning_message));
-    DCHECK(warning_message.IsEmpty());
+    DCHECK(warning_message.empty());
 #endif  // DCHECK_IS_ON()
     if (StartOnCompositor())
       return;

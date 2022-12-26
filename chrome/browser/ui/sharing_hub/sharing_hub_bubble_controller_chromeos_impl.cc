@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/views/controls/button/button.h"
@@ -21,7 +22,6 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/sharesheet/sharesheet_service.h"
 #include "chrome/browser/sharesheet/sharesheet_service_factory.h"
-#include "components/services/app_service/public/cpp/intent_util.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -112,7 +112,8 @@ void SharingHubBubbleControllerChromeOsImpl::HideBubble() {
   }
 }
 
-void SharingHubBubbleControllerChromeOsImpl::ShowBubble() {
+void SharingHubBubbleControllerChromeOsImpl::ShowBubble(
+    share::ShareAttempt attempt) {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
 
   // Ignore subsequent calls to open the Sharesheet if it already is open. This
@@ -163,11 +164,11 @@ void SharingHubBubbleControllerChromeOsImpl::ShowSharesheet(
   // Save the window in order to close the Sharesheet if the tab is closed. This
   // will return the incorrect window if called later.
   parent_window_ = GetWebContents().GetTopLevelNativeWindow();
-  parent_window_tracker_ = NativeWindowTracker::Create(parent_window_);
+  parent_window_tracker_ = views::NativeWindowTracker::Create(parent_window_);
 }
 
 void SharingHubBubbleControllerChromeOsImpl::CloseSharesheet() {
-  if (parent_window_ && !parent_window_tracker_->WasNativeWindowClosed()) {
+  if (parent_window_ && !parent_window_tracker_->WasNativeWindowDestroyed()) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     CloseSharesheetAsh();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -198,7 +199,7 @@ void SharingHubBubbleControllerChromeOsImpl::ShowSharesheetAsh() {
   if (!sharesheet_service)
     return;
 
-  apps::mojom::IntentPtr intent = apps_util::CreateShareIntentFromText(
+  apps::IntentPtr intent = apps_util::MakeShareIntent(
       GetWebContents().GetLastCommittedURL().spec(),
       base::UTF16ToUTF8(GetWebContents().GetTitle()));
   sharesheet_service->ShowBubble(

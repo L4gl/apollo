@@ -1,12 +1,16 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 /**
  * @fileoverview A drop-down menu in the ChromeVox panel.
  */
-import {PanelNodeMenuBackground} from '/chromevox/background/panel/panel_node_menu_background.js';
-import {PanelMenuItem} from '/chromevox/panel/panel_menu_item.js';
+import {BackgroundBridge} from '../common/background_bridge.js';
+import {BridgeCallbackManager} from '../common/bridge_callback_manager.js';
+import {Msgs} from '../common/msgs.js';
+import {PanelNodeMenuItemData} from '../common/panel_menu_data.js';
+
+import {PanelMenuItem} from './panel_menu_item.js';
 
 export class PanelMenu {
   /**
@@ -44,7 +48,7 @@ export class PanelMenu {
     this.items_ = [];
 
     /**
-     * The return value from window.setTimeout for a function to update the
+     * The return value from setTimeout for a function to update the
      * scroll bars after an item has been added to a menu. Used so that we
      * don't re-layout too many times.
      * @type {?number}
@@ -71,7 +75,8 @@ export class PanelMenu {
    * @param {string} menuItemShortcut The keystrokes to select this item.
    * @param {string} menuItemBraille
    * @param {string} gesture
-   * @param {Function} callback The function to call if this item is selected.
+   * @param {function() : !Promise} callback The function to call if this item
+   *     is selected.
    * @param {string=} opt_id An optional id for the menu item element.
    * @return {!PanelMenuItem} The menu item just created.
    */
@@ -95,7 +100,7 @@ export class PanelMenu {
     // to avoid excessive layout, schedule this once per batch of adding
     // menu items rather than after each add.
     if (!this.updateScrollbarsTimeout_) {
-      this.updateScrollbarsTimeout_ = window.setTimeout(
+      this.updateScrollbarsTimeout_ = setTimeout(
           (function() {
             const menuBounds = this.menuElement.getBoundingClientRect();
             const maxHeight = window.innerHeight - menuBounds.top;
@@ -168,7 +173,7 @@ export class PanelMenu {
     this.menuBarItemElement.classList.remove('active');
     this.activeIndex_ = -1;
 
-    window.setTimeout(
+    setTimeout(
         (function() {
           this.menuContainerElement.style.visibility = 'hidden';
         }).bind(this),
@@ -235,7 +240,7 @@ export class PanelMenu {
 
   /**
    * Get the callback for the active menu item.
-   * @return {Function} The callback.
+   * @return {?function() : !Promise} The callback.
    */
   getCallbackForCurrentItem() {
     if (this.activeIndex_ >= 0 && this.activeIndex_ < this.items_.length) {
@@ -247,7 +252,7 @@ export class PanelMenu {
   /**
    * Get the callback for a menu item given its DOM element.
    * @param {Element} element The DOM element.
-   * @return {Function} The callback.
+   * @return {?function() : !Promise} The callback.
    */
   getCallbackForElement(element) {
     for (let i = 0; i < this.items_.length; i++) {
@@ -311,23 +316,6 @@ export class PanelMenu {
 
 
 export class PanelNodeMenu extends PanelMenu {
-  /**
-   * @param {!PanelNodeMenuData} data
-   * @param {chrome.automation.AutomationNode} node ChromeVox's current
-   *     position.
-   * @param {boolean} isActivated Whether the menu was explicitly activated.
-   *     If false, the menu is populated asynchronously by posting a task
-   *     after searching each chunk of nodes.
-   */
-  constructor(data, node, isActivated) {
-    super(data.titleId);
-    /** @private {!PanelNodeMenuBackground} */
-    this.background_ = new PanelNodeMenuBackground(
-        data, node, isActivated, (itemData) => this.addItemFromData_(itemData));
-
-    this.background_.populate();
-  }
-
   /** @override */
   activate(activateFirstItem) {
     super.activate(false);
@@ -339,12 +327,13 @@ export class PanelNodeMenu extends PanelMenu {
     }
   }
 
-  /**
-   * @param {!PanelNodeMenuItemData} data
-   * @private
-   */
-  addItemFromData_(data) {
-    this.addMenuItem(data.title, '', '', '', data.callback);
+  /** @param {!PanelNodeMenuItemData} data */
+  addItemFromData(data) {
+    this.addMenuItem(data.title, '', '', '', async () => {
+      if (data.callbackId) {
+        BridgeCallbackManager.performCallback(data.callbackId);
+      }
+    });
     if (data.isActive) {
       this.activeIndex_ = this.items_.length - 1;
     }
@@ -444,7 +433,7 @@ export class PanelSearchMenu extends PanelMenu {
         this, menuItemTitle, menuItemShortcut, menuItemBraille, gesture,
         callback, 'result-number-' + this.searchResultCounter_.toString());
     // Ensure that item styling is updated on mouse hovers.
-    item.element.addEventListener('mouseover', (event) => {
+    item.element.addEventListener('mouseover', event => {
       this.resetItemAtActiveIndex();
     }, true);
     return item;

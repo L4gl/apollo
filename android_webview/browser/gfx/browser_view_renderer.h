@@ -1,4 +1,4 @@
-// Copyright (c) 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -180,6 +180,10 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
       viz::FrameSinkId frame_sink_id,
       uint32_t layer_tree_frame_sink_id,
       std::vector<viz::ReturnedResource> resources) override;
+  void OnCompositorFrameTransitionDirectiveProcessed(
+      viz::FrameSinkId frame_sink_id,
+      uint32_t layer_tree_frame_sink_id,
+      uint32_t sequence_id) override;
 
   // Visible for testing.
   content::SynchronousCompositor* GetActiveCompositorForTesting() const {

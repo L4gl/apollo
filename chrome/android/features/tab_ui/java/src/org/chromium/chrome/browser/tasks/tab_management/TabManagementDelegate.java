@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -11,11 +11,16 @@ import android.view.ViewGroup;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 
+import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
+import org.chromium.chrome.browser.compositor.layouts.Layout;
+import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
+import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -31,6 +36,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.module_installer.builder.ModuleInterface;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.lang.annotation.Retention;
@@ -54,19 +60,39 @@ public interface TabManagementDelegate {
     }
 
     /**
+     * Create the {@link TabSwitcherLayout}.
+     * @param context The current Android's context.
+     * @param updateHost The parent {@link LayoutUpdateHost}.
+     * @param renderHost The parent {@link LayoutRenderHost}.
+     * @param tabSwitcher The {@link TabSwitcher} the layout should own.
+     * @param tabSwitcherScrimAnchor {@link ViewGroup} used by tab switcher layout to show scrim
+     *         when overview is visible.
+     * @param scrimCoordinator {@link ScrimCoordinator} to show/hide scrim.
+     * @return The {@link TabSwitcherLayout}.
+     */
+    Layout createTabSwitcherLayout(Context context, LayoutUpdateHost updateHost,
+            LayoutRenderHost renderHost, TabSwitcher tabSwitcher, JankTracker jankTracker,
+            ViewGroup tabSwitcherScrimAnchor, ScrimCoordinator scrimCoordinator);
+
+    /**
      * Create the {@link TabSwitcher} to display Tabs in grid.
      * @param activity The current android {@link Activity}.
      * @param activityLifecycleDispatcher Allows observation of the activity lifecycle.
      * @param tabModelSelector Gives access to the current set of {@TabModel}.
      * @param tabContentManager Gives access to the tab content.
      * @param browserControlsStateProvider Gives access to the state of the browser controls.
-     * @param tabCreatorManger Manages creation of tabs.
+     * @param tabCreatorManager Manages creation of tabs.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
      * @param containerView The {@link ViewGroup} to add the switcher to.
      * @param shareDelegateSupplier Supplies the current {@link ShareDelegate}.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
      * @param scrimCoordinator The {@link ScrimCoordinator} to control the scrim view.
      * @param rootView The root view of the app.
+     * @param dynamicResourceLoaderSupplier Supplies the current {@link DynamicResourceLoader}.
+     * @param snackbarManager Manages the snackbar.
+     * @param modalDialogManager Manages modal dialogs.
+     * @param incognitoReauthControllerSupplier {@link OneshotSupplier<IncognitoReauthController>}
+     *         to detect pending re-auth when tab switcher is shown.
      * @return The {@link TabSwitcher}.
      */
     TabSwitcher createGridTabSwitcher(@NonNull Activity activity,
@@ -79,22 +105,29 @@ public interface TabManagementDelegate {
             @NonNull ViewGroup containerView,
             @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
-            @NonNull ScrimCoordinator scrimCoordinator, @NonNull ViewGroup rootView);
+            @NonNull ScrimCoordinator scrimCoordinator, @NonNull ViewGroup rootView,
+            @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
+            @NonNull SnackbarManager snackbarManager,
+            @NonNull ModalDialogManager modalDialogManager,
+            @NonNull OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier);
 
     /**
      * Create the {@link TabSwitcher} to display Tabs in carousel.
      * @param activity The current Android {@link Activity}.
-     * @param activityLifecycleDispatcher Allows observation of the activity lifecycle.
+     * @param lifecycleDispatcher Allows observation of the activity lifecycle.
      * @param tabModelSelector Gives access to the current set of {@TabModel}.
      * @param tabContentManager Gives access to the tab content.
      * @param browserControls Allows observation of the browser controls state.
-     * @param tabCreatorManger Manages creation of tabs.
+     * @param tabCreatorManager Manages creation of tabs.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
      * @param containerView The {@link ViewGroup} to add the switcher to.
      * @param shareDelegateSupplier Supplies the current {@link ShareDelegate}.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
      * @param scrimCoordinator The {@link ScrimCoordinator} to control the scrim view.
      * @param rootView The root view of the app.
+     * @param dynamicResourceLoaderSupplier Supplies the current {@link DynamicResourceLoader}.
+     * @param snackbarManager Manages the snackbar.
+     * @param modalDialogManager Manages modal dialogs.
      * @return The {@link TabSwitcher}.
      */
     TabSwitcher createCarouselTabSwitcher(@NonNull Activity activity,
@@ -107,7 +140,10 @@ public interface TabManagementDelegate {
             @NonNull ViewGroup containerView,
             @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
-            @NonNull ScrimCoordinator scrimCoordinator, @NonNull ViewGroup rootView);
+            @NonNull ScrimCoordinator scrimCoordinator, @NonNull ViewGroup rootView,
+            @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
+            @NonNull SnackbarManager snackbarManager,
+            @NonNull ModalDialogManager modalDialogManager);
 
     /**
      * Create the {@link TabGroupUi}.
@@ -160,11 +196,4 @@ public interface TabManagementDelegate {
     TabSuggestions createTabSuggestions(@NonNull Context context,
             @NonNull TabModelSelector tabModelSelector,
             @NonNull ActivityLifecycleDispatcher activityLifecycleDispatcher);
-
-    /**
-     * Apply the theme overlay for the target activity used for Tab management components. This
-     * theme needs to be applied once before creating any of the tab related component.
-     * @param activity The target {@link Activity} that used Tab theme.
-     */
-    void applyThemeOverlays(@NonNull Activity activity);
 }

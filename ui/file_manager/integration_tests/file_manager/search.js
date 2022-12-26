@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,7 +12,7 @@ import {BASIC_DRIVE_ENTRY_SET, BASIC_LOCAL_ENTRY_SET} from './test_data.js';
 /**
  * Expected files shown in the search results for 'hello'
  *
- * @type {Array<TestEntryInfo>}
+ * @type {!Array<!TestEntryInfo>}
  * @const
  */
 const SEARCH_RESULTS_ENTRY_SET = [
@@ -151,8 +151,7 @@ testcase.searchHidingTextEntryField = async () => {
   const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS, [entry], []);
 
   // Select an entry in the file list.
-  chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
-      'selectFile', appId, [entry.nameText]));
+  await remoteCall.waitUntilSelected(appId, entry.nameText);
 
   // Click the toolbar search button.
   await remoteCall.waitAndClickElement(appId, '#search-button');
@@ -310,4 +309,18 @@ testcase.searchQueryLaunchParam = async () => {
       return pending(caller, 'Waiting files list to be updated.');
     }
   });
+};
+
+/**
+ * Checks that the search options are shown as expected.
+ */
+testcase.searchOptions = async () => {
+  // Open Files app on Downloads.
+  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+
+  // Enter some text in the search box. Minimum one character is needed.
+  await remoteCall.typeSearchText(appId, 'x');
+
+  // Verify that the search options are visible.
+  await remoteCall.waitForElement(appId, 'xf-search-options:not([hidden])');
 };

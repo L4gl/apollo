@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,8 +68,7 @@ class ExtensionSupportsConnectionFromNativeAppTest : public ::testing::Test {
   void RegisterExtension(bool natively_connectable,
                          bool transient_background_permission,
                          bool native_messaging_permission) {
-    DictionaryBuilder manifest_builder(
-        static_cast<base::DictionaryValue&&>(base::test::ParseJson(R"(
+    DictionaryBuilder manifest_builder(base::test::ParseJson(R"(
             {
               "version": "1.0.0.0",
               "manifest_version": 2,
@@ -80,7 +79,8 @@ class ExtensionSupportsConnectionFromNativeAppTest : public ::testing::Test {
                 "persistent": false
               }
             }
-    )")));
+    )")
+                                           .GetDict());
 
     if (natively_connectable) {
       ListBuilder natively_connectable_hosts;
@@ -91,7 +91,7 @@ class ExtensionSupportsConnectionFromNativeAppTest : public ::testing::Test {
           ScopedTestNativeMessagingHost::
               kSupportsNativeInitiatedConnectionsHostName);
       manifest_builder.Set(manifest_keys::kNativelyConnectable,
-                           natively_connectable_hosts.Build());
+                           natively_connectable_hosts.BuildList());
     }
 
     ListBuilder permissions;
@@ -101,14 +101,14 @@ class ExtensionSupportsConnectionFromNativeAppTest : public ::testing::Test {
     if (native_messaging_permission) {
       permissions.Append("nativeMessaging");
     }
-    manifest_builder.Set(manifest_keys::kPermissions, permissions.Build());
+    manifest_builder.Set(manifest_keys::kPermissions, permissions.BuildList());
 
     base::FilePath path;
     EXPECT_TRUE(base::PathService::Get(DIR_TEST_DATA, &path));
 
     std::string error;
     scoped_refptr<Extension> extension(Extension::Create(
-        path, mojom::ManifestLocation::kInternal, *manifest_builder.Build(),
+        path, mojom::ManifestLocation::kInternal, manifest_builder.BuildDict(),
         Extension::NO_FLAGS, &error));
     ASSERT_TRUE(extension.get()) << error;
     ExtensionRegistry::Get(&profile_)->AddEnabled(extension);

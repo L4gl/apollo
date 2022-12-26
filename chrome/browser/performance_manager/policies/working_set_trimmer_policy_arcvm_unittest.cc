@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -45,7 +45,7 @@ class WorkingSetTrimmerPolicyArcVmTest : public testing::Test {
         {"", "--enable-arcvm"});
     arc::prefs::RegisterLocalStatePrefs(local_state_.registry());
     arc::StabilityMetricsManager::Initialize(&local_state_);
-    chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
+    ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
 
     arc_service_manager_ = std::make_unique<arc::ArcServiceManager>();
 
@@ -83,7 +83,7 @@ class WorkingSetTrimmerPolicyArcVmTest : public testing::Test {
     arc_service_manager_.reset();
 
     // All other object must be destroyed before shutting down ConciergeClient.
-    chromeos::ConciergeClient::Shutdown();
+    ash::ConciergeClient::Shutdown();
     arc::StabilityMetricsManager::Shutdown();
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -277,9 +277,6 @@ class MEDIA_GPU_EXPORT VaapiVideoEncodeAccelerator
   // Map of the number of allocated reconstructed surfaces for encoding
   // indexed by a layer resolution.
   EncodeSurfacesCountMap encode_surfaces_count_;
-
-  // VA buffers for coded frames.
-  std::vector<VABufferID> available_va_buffer_ids_;
 
   // Queue of input frames to be encoded.
   base::queue<std::unique_ptr<InputFrameRef>> input_queue_;

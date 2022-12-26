@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -12,13 +12,6 @@
 // for detail.
 interface DocumentOrShadowRoot {
   getSelection(): Selection|null;
-
-  // See https://github.com/microsoft/TypeScript/issues/30022.
-  adoptedStyleSheets: CSSStyleSheet[];
-}
-
-interface CSSStyleSheet {
-  replaceSync(text: string): void;
 }
 
 interface HTMLElement {
@@ -30,4 +23,21 @@ interface HTMLDialogElement {
   open: boolean;
   returnValue: string;
   showModal(): void;
+}
+
+// https://developer.mozilla.org/en-US/docs/Web/API/UIEvent/sourceCapabilities
+interface UIEvent extends Event {
+  readonly sourceCapabilities: InputDeviceCapabilities|null;
+}
+
+// https://developer.mozilla.org/en-US/docs/Web/API/InputDeviceCapabilities
+declare class InputDeviceCapabilities {
+  readonly firesTouchEvents: boolean;
+  readonly pointerMovementScrolls: boolean;
+  constructor(param: {firesTouchEvents: boolean});
+}
+
+interface UIEventInit {
+  // https://developer.mozilla.org/en-US/docs/Web/API/UIEvent/sourceCapabilities
+  sourceCapabilities?: InputDeviceCapabilities|null;
 }

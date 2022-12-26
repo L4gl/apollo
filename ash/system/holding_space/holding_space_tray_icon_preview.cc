@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,6 +15,7 @@
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/shelf/shelf.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/system/holding_space/holding_space_animation_registry.h"
 #include "ash/system/holding_space/holding_space_progress_indicator_util.h"
 #include "ash/system/holding_space/holding_space_tray_icon.h"
@@ -58,13 +59,6 @@ constexpr base::TimeDelta kBounceAnimationBaseDelay = base::Milliseconds(150);
 constexpr base::TimeDelta kShiftAnimationDuration = base::Milliseconds(250);
 
 // Helpers ---------------------------------------------------------------------
-
-// Convenience helper to allow a `closure` to be used in a context which is
-// expecting a callback with arguments.
-template <typename... T>
-base::RepeatingCallback<void(T...)> IgnoreArgs(base::RepeatingClosure closure) {
-  return base::BindRepeating([](T...) {}).Then(std::move(closure));
-}
 
 // Returns true if small previews should be used given the current shelf
 // configuration, false otherwise.
@@ -206,7 +200,7 @@ class HoldingSpaceTrayIconPreview::ImageLayerOwner
         HoldingSpaceAnimationRegistry::GetInstance()
             ->AddProgressRingAnimationChangedCallbackForKey(
                 /*animation_key=*/item_,
-                IgnoreArgs<ProgressRingAnimation*>(
+                base::IgnoreArgs<ProgressRingAnimation*>(
                     base::BindRepeating(&ImageLayerOwner::UpdateTransform,
                                         base::Unretained(this))));
 
@@ -291,7 +285,8 @@ class HoldingSpaceTrayIconPreview::ImageLayerOwner
   void UpdateVisualState() override {
     if (item_ && image_skia_.isNull()) {
       image_skia_ = item_->image().GetImageSkia(
-          layer()->size(), AshColorProvider::Get()->IsDarkModeEnabled());
+          layer()->size(),
+          DarkLightModeControllerImpl::Get()->IsDarkModeEnabled());
     }
   }
 

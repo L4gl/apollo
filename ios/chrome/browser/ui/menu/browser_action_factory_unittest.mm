@@ -1,29 +1,29 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 
 #import "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
+#import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
-#include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
+#import "components/sync_preferences/testing_pref_service_syncable.h"
+#import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#include "ios/chrome/browser/pref_names.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/sessions/test_session_service.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
-#import "ios/chrome/browser/ui/icons/action_icon.h"
-#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/menu/menu_action_type.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -42,7 +42,7 @@
 #endif
 
 namespace {
-MenuScenario kTestMenuScenario = MenuScenario::kHistoryEntry;
+MenuScenarioHistogram kTestMenuScenario = MenuScenarioHistogram::kHistoryEntry;
 }  // namespace
 
 // Test fixture for the BrowserActionFactory.
@@ -51,7 +51,7 @@ class BrowserActionFactoryTest : public PlatformTest {
   BrowserActionFactoryTest()
       : test_title_(@"SomeTitle"),
         scene_state_([[SceneState alloc] initWithAppState:nil]) {
-    feature_list_.InitAndEnableFeature(kUseSFSymbolsSamples);
+    feature_list_.InitAndEnableFeature(kUseSFSymbols);
   }
 
   void SetUp() override {
@@ -74,6 +74,12 @@ class BrowserActionFactoryTest : public PlatformTest {
         startDispatchingToTarget:mock_application_settings_commands_handler_
                      forProtocol:@protocol(ApplicationSettingsCommands)];
 
+    mock_browser_coordinator_commands_handler_ =
+        OCMStrictProtocolMock(@protocol(BrowserCoordinatorCommands));
+    [test_browser_->GetCommandDispatcher()
+        startDispatchingToTarget:mock_browser_coordinator_commands_handler_
+                     forProtocol:@protocol(BrowserCoordinatorCommands)];
+
     mock_qr_scanner_commands_handler_ =
         OCMStrictProtocolMock(@protocol(QRScannerCommands));
     [test_browser_->GetCommandDispatcher()
@@ -95,6 +101,7 @@ class BrowserActionFactoryTest : public PlatformTest {
   std::unique_ptr<TestBrowser> test_browser_;
   id mock_application_commands_handler_;
   id mock_application_settings_commands_handler_;
+  id mock_browser_coordinator_commands_handler_;
   id mock_qr_scanner_commands_handler_;
   id mock_load_query_commands_handler_;
   SceneState* scene_state_;
@@ -109,8 +116,8 @@ TEST_F(BrowserActionFactoryTest, OpenInNewTabAction_URL) {
       [[BrowserActionFactory alloc] initWithBrowser:test_browser_.get()
                                            scenario:kTestMenuScenario];
 
-  UIImage* expectedImage = DefaultSymbolWithPointSize(kOpenInNewTabActionSymbol,
-                                                      kSymbolActionPointSize);
+  UIImage* expectedImage =
+      DefaultSymbolWithPointSize(kNewTabActionSymbol, kSymbolActionPointSize);
   NSString* expectedTitle =
       l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB);
 
@@ -190,7 +197,8 @@ TEST_F(BrowserActionFactoryTest, OpenImageAction) {
 
   GURL testURL = GURL("https://example.com/logo.png");
 
-  UIImage* expectedImage = [UIImage imageNamed:@"open"];
+  UIImage* expectedImage = DefaultSymbolWithPointSize(kOpenImageActionSymbol,
+                                                      kSymbolActionPointSize);
   NSString* expectedTitle =
       l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENIMAGE);
 
@@ -211,7 +219,8 @@ TEST_F(BrowserActionFactoryTest, OpenImageInNewTabAction) {
   GURL testURL = GURL("https://example.com/logo.png");
   UrlLoadParams testParams = UrlLoadParams::InNewTab(testURL);
 
-  UIImage* expectedImage = [UIImage imageNamed:@"open_image_in_new_tab"];
+  UIImage* expectedImage =
+      CustomSymbolWithPointSize(kPhotoBadgePlusSymbol, kSymbolActionPointSize);
   NSString* expectedTitle =
       l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPENIMAGENEWTAB);
 
@@ -255,7 +264,8 @@ TEST_F(BrowserActionFactoryTest, OpenNewIncognitoTabAction) {
       [[BrowserActionFactory alloc] initWithBrowser:test_browser_.get()
                                            scenario:kTestMenuScenario];
 
-  UIImage* expectedImage = nil;
+  UIImage* expectedImage =
+      CustomSymbolWithPointSize(kIncognitoSymbol, kSymbolActionPointSize);
   NSString* expectedTitle =
       l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB);
 
@@ -358,7 +368,8 @@ TEST_F(BrowserActionFactoryTest, NewIncognitoSearchAction) {
       [[BrowserActionFactory alloc] initWithBrowser:test_browser_.get()
                                            scenario:kTestMenuScenario];
 
-  UIImage* expectedImage = nil;
+  UIImage* expectedImage =
+      CustomSymbolWithPointSize(kIncognitoSymbol, kSymbolActionPointSize);
   NSString* expectedTitle =
       l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_SEARCH);
 

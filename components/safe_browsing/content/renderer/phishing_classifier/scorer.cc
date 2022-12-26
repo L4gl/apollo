@@ -1,4 +1,4 @@
-// Copyright (c) 2011 The Chromium Authors. All rights reserved.
+// Copyright 2011 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -233,5 +233,32 @@ double Scorer::LogOdds2Prob(double log_odds) {
 
 Scorer::Scorer() = default;
 Scorer::~Scorer() = default;
+
+// static
+ScorerStorage* ScorerStorage::GetInstance() {
+  static base::NoDestructor<ScorerStorage> instance;
+  return instance.get();
+}
+
+ScorerStorage::ScorerStorage() = default;
+ScorerStorage::~ScorerStorage() = default;
+
+void ScorerStorage::SetScorer(std::unique_ptr<Scorer> scorer) {
+  scorer_ = std::move(scorer);
+  for (Observer& obs : observers_)
+    obs.OnScorerChanged();
+}
+
+Scorer* ScorerStorage::GetScorer() const {
+  return scorer_.get();
+}
+
+void ScorerStorage::AddObserver(ScorerStorage::Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void ScorerStorage::RemoveObserver(ScorerStorage::Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
 
 }  // namespace safe_browsing

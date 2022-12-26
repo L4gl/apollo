@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -158,6 +158,7 @@ absl::optional<WebApp::SyncFallbackData> ParseSyncFallbackDataStruct(
     case DisplayMode::kMinimalUi:
     case DisplayMode::kFullscreen:
     case DisplayMode::kWindowControlsOverlay:
+    case DisplayMode::kBorderless:
       NOTREACHED();
       [[fallthrough]];
     case DisplayMode::kStandalone:

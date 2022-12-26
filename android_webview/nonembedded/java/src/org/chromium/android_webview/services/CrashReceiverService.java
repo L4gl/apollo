@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,6 +16,7 @@ import org.chromium.android_webview.common.crash.CrashInfo;
 import org.chromium.android_webview.common.crash.CrashUploadUtil;
 import org.chromium.android_webview.common.crash.SystemWideCrashDirectories;
 import org.chromium.android_webview.common.services.ICrashReceiverService;
+import org.chromium.android_webview.services.ServicesStatsHelper.NonembeddedService;
 import org.chromium.base.Log;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 
@@ -111,32 +112,27 @@ public class CrashReceiverService extends Service {
         CrashFileManager crashFileManager =
                 new CrashFileManager(SystemWideCrashDirectories.getOrCreateWebViewCrashDir());
         boolean copiedAnything = false;
-        if (fileDescriptors != null) {
-            for (int i = 0; i < fileDescriptors.length; i++) {
-                ParcelFileDescriptor fd = fileDescriptors[i];
-                if (fd == null) continue;
-                try {
-                    File copiedFile = crashFileManager.copyMinidumpFromFD(fd.getFileDescriptor(),
-                            SystemWideCrashDirectories.getWebViewTmpCrashDir(), uid);
-                    if (copiedFile == null) {
-                        Log.w(TAG, "failed to copy minidump from " + fd.toString());
-                        // TODO(gsennton): add UMA metric to ensure we aren't losing too many
-                        // minidumps here.
-                    } else {
-                        copiedAnything = true;
-                        if (crashesInfo != null) {
-                            Map<String, String> crashInfo = crashesInfo.get(i);
-                            File logFile = SystemWideCrashDirectories.createCrashJsonLogFile(
-                                    copiedFile.getName());
-                            writeCrashInfoToLogFile(logFile, copiedFile, crashInfo);
-                        }
-                    }
-                } catch (IOException e) {
-                    Log.w(TAG, "failed to copy minidump from " + fd.toString() + ": "
-                            + e.getMessage());
-                } finally {
-                    deleteFilesInWebViewTmpDirIfExists();
+        for (int i = 0; i < fileDescriptors.length; i++) {
+            ParcelFileDescriptor fd = fileDescriptors[i];
+            Map<String, String> crashInfo = crashesInfo.get(i);
+            if (fd == null) continue;
+            try {
+                File copiedFile = crashFileManager.copyMinidumpFromFD(fd.getFileDescriptor(),
+                        SystemWideCrashDirectories.getWebViewTmpCrashDir(), uid);
+                if (copiedFile == null) {
+                    Log.w(TAG, "failed to copy minidump from " + fd);
+                    // TODO(gsennton): add UMA metric to ensure we aren't losing too many
+                    // minidumps here.
+                } else {
+                    copiedAnything = true;
+                    File logFile =
+                            SystemWideCrashDirectories.createCrashJsonLogFile(copiedFile.getName());
+                    writeCrashInfoToLogFile(logFile, copiedFile, crashInfo);
                 }
+            } catch (IOException e) {
+                Log.w(TAG, "failed to copy minidump from " + fd, e);
+            } finally {
+                deleteFilesInWebViewTmpDirIfExists();
             }
         }
         return copiedAnything;
@@ -186,6 +182,11 @@ public class CrashReceiverService extends Service {
                 }
             }
         }
+    }
+
+    @Override
+    public void onCreate() {
+        ServicesStatsHelper.recordServiceLaunch(NonembeddedService.CRASH_RECEIVER_SERVICE);
     }
 
     @Override

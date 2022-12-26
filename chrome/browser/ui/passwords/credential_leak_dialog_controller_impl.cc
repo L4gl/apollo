@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,19 +10,21 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 
 using password_manager::CreateDialogTraits;
-using password_manager::CredentialLeakFlags;
 using password_manager::CredentialLeakType;
-using password_manager::LeakDialogTraitsImp;
 using password_manager::metrics_util::LeakDialogDismissalReason;
-using password_manager::metrics_util::LeakDialogType;
-using password_manager::metrics_util::LogLeakDialogTypeAndDismissalReason;
+using password_manager::metrics_util::LeakDialogMetricsRecorder;
 
 CredentialLeakDialogControllerImpl::CredentialLeakDialogControllerImpl(
     PasswordsLeakDialogDelegate* delegate,
-    CredentialLeakType leak_type)
+    CredentialLeakType leak_type,
+    const GURL& url,
+    const std::u16string& username,
+    std::unique_ptr<LeakDialogMetricsRecorder> metrics_recorder)
     : delegate_(delegate),
-      leak_type_(leak_type),
-      leak_dialog_traits_(CreateDialogTraits(leak_type)) {}
+      leak_dialog_traits_(CreateDialogTraits(leak_type)),
+      url_(url),
+      username_(username),
+      metrics_recorder_(std::move(metrics_recorder)) {}
 
 CredentialLeakDialogControllerImpl::~CredentialLeakDialogControllerImpl() {
   ResetDialog();
@@ -40,35 +42,26 @@ bool CredentialLeakDialogControllerImpl::IsShowingAccountChooser() const {
 }
 
 void CredentialLeakDialogControllerImpl::OnCancelDialog() {
-  LogLeakDialogTypeAndDismissalReason(
-      password_manager::GetLeakDialogType(leak_type_),
+  metrics_recorder_->LogLeakDialogTypeAndDismissalReason(
       LeakDialogDismissalReason::kClickedClose);
   delegate_->OnLeakDialogHidden();
 }
 
 void CredentialLeakDialogControllerImpl::OnAcceptDialog() {
-  if (ShouldOfferAutomatedPasswordChange()) {
-    delegate_->StartAutomatedPasswordChange();
-    LogLeakDialogTypeAndDismissalReason(
-        password_manager::GetLeakDialogType(leak_type_),
-        LeakDialogDismissalReason::kClickedChangePasswordAutomatically);
-  } else if (ShouldCheckPasswords()) {
-    LogLeakDialogTypeAndDismissalReason(
-        password_manager::GetLeakDialogType(leak_type_),
+  if (ShouldCheckPasswords()) {
+    metrics_recorder_->LogLeakDialogTypeAndDismissalReason(
         LeakDialogDismissalReason::kClickedCheckPasswords);
     delegate_->NavigateToPasswordCheckup(
         password_manager::PasswordCheckReferrer::kPasswordBreachDialog);
   } else {
-    LogLeakDialogTypeAndDismissalReason(
-        password_manager::GetLeakDialogType(leak_type_),
+    metrics_recorder_->LogLeakDialogTypeAndDismissalReason(
         LeakDialogDismissalReason::kClickedOk);
   }
   delegate_->OnLeakDialogHidden();
 }
 
 void CredentialLeakDialogControllerImpl::OnCloseDialog() {
-  LogLeakDialogTypeAndDismissalReason(
-      password_manager::GetLeakDialogType(leak_type_),
+  metrics_recorder_->LogLeakDialogTypeAndDismissalReason(
       LeakDialogDismissalReason::kNoDirectInteraction);
   delegate_->OnLeakDialogHidden();
 }
@@ -100,11 +93,6 @@ std::u16string CredentialLeakDialogControllerImpl::GetTitle() const {
 
 bool CredentialLeakDialogControllerImpl::ShouldCheckPasswords() const {
   return leak_dialog_traits_->ShouldCheckPasswords();
-}
-
-bool CredentialLeakDialogControllerImpl::ShouldOfferAutomatedPasswordChange()
-    const {
-  return password_manager::ShouldShowAutomaticChangePasswordButton(leak_type_);
 }
 
 bool CredentialLeakDialogControllerImpl::ShouldShowCancelButton() const {

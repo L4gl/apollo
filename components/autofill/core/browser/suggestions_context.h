@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -30,6 +30,9 @@ enum class SuppressReason {
 
 // The context for the list of suggestions available for a given field.
 struct SuggestionsContext {
+  SuggestionsContext();
+  ~SuggestionsContext();
+
   FormStructure* form_structure = nullptr;
   AutofillField* focused_field = nullptr;
   bool is_autofill_available = false;

@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -211,7 +211,8 @@ void BrowserWithTestWindowTest::NavigateAndCommitActiveTabWithTitle(
 
 TestingProfile* BrowserWithTestWindowTest::CreateProfile() {
   return profile_manager_->CreateTestingProfile(
-      "testing_profile", nullptr, std::u16string(), 0, GetTestingFactories());
+      TestingProfile::kDefaultProfileUserName, nullptr, std::u16string(), 0,
+      GetTestingFactories());
 }
 
 TestingProfile::TestingFactories

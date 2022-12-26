@@ -44,6 +44,11 @@ The Chromium CQ supports a variety of options that can change what it checks.
   around any intermittent infra failures. If this footer is set, it won't try
   to retry failed shards no matter what happens.
 
+* `Ignore-Freeze: true`
+
+  Whenever there is an active prod freeze (usually around Christmas), it can be
+  bypassed by setting this footer.
+
 * `Include-Ci-Only-Tests: true`
 
   Some builder configurations may run some tests only post-submit (on CI), and
@@ -202,4 +207,4 @@ infra-dev@chromium.org, or file a [trooper bug](https://g.co/bugatrooper).
 
 
 [1]: https://chromium.googlesource.com/chromium/tools/depot_tools/+/HEAD/git_footers.py
-[2]: ../../infra/config/generated/commit-queue.cfg
+[2]: ../../infra/config/generated/luci/commit-queue.cfg

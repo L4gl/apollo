@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,23 +10,26 @@
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/fake_eula_mixin.h"
+#include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/local_state_mixin.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/ash/settings/stub_cros_settings_provider.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/ui/webui/chromeos/login/consolidated_consent_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/login/hardware_data_collection_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/consolidated_consent_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/eula_screen_handler.h"
+#include "chrome/browser/ui/webui/ash/login/hardware_data_collection_screen_handler.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash {
+
 namespace {
 
 const test::UIPath kEulaDialog = {"oobe-eula-md", "eulaDialog"};

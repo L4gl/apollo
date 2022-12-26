@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/common/autofill_clock.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !BUILDFLAG(IS_IOS)
@@ -22,7 +23,7 @@ void SetProfileTestData(AutofillProfile* profile) {
                        "theking@gmail.com", "RCA", "3734 Elvis Presley Blvd.",
                        "Apt. 10", "Memphis", "Tennessee", "38116", "US",
                        "12345678901");
-  profile->set_guid(kTestGuid);
+  profile->set_guid(kTestProfileId);
 }
 }  // namespace
 
@@ -30,7 +31,10 @@ MockAutofillClient::MockAutofillClient() = default;
 MockAutofillClient::~MockAutofillClient() = default;
 
 AutofillMetricsBaseTest::AutofillMetricsBaseTest(bool is_in_any_main_frame)
-    : is_in_any_main_frame_(is_in_any_main_frame) {}
+    : is_in_any_main_frame_(is_in_any_main_frame) {
+  scoped_feature_list_async_parse_form_.InitAndEnableFeature(
+      features::kAutofillParseAsync);
+}
 
 AutofillMetricsBaseTest::~AutofillMetricsBaseTest() = default;
 
@@ -58,7 +62,8 @@ void AutofillMetricsBaseTest::SetUp() {
   autofill_client_->set_test_form_data_importer(
       std::make_unique<TestFormDataImporter>(
           autofill_client_.get(), payments_client,
-          std::move(credit_card_save_manager), &personal_data(), "en-US"));
+          std::move(credit_card_save_manager),
+          /*iban_save_manager=*/nullptr, &personal_data(), "en-US"));
   autofill_client_->set_autofill_offer_manager(
       std::make_unique<AutofillOfferManager>(
           &personal_data(), /*coupon_service_delegate=*/nullptr));
@@ -145,10 +150,10 @@ void AutofillMetricsBaseTest::OnDidGetRealPan(
     AutofillClient::PaymentsRpcResult result,
     const std::string& real_pan,
     bool is_virtual_card) {
-  payments::FullCardRequest* full_card_request =
-      autofill_manager()
-          .credit_card_access_manager_->GetOrCreateCVCAuthenticator()
-          ->full_card_request_.get();
+  payments::FullCardRequest* full_card_request = autofill_manager()
+                                                     .client()
+                                                     ->GetCVCAuthenticator()
+                                                     ->full_card_request_.get();
   DCHECK(full_card_request);
 
   // Fake user response.
@@ -164,10 +169,10 @@ void AutofillMetricsBaseTest::OnDidGetRealPan(
 }
 
 void AutofillMetricsBaseTest::OnDidGetRealPanWithNonHttpOkResponse() {
-  payments::FullCardRequest* full_card_request =
-      autofill_manager()
-          .credit_card_access_manager_->GetOrCreateCVCAuthenticator()
-          ->full_card_request_.get();
+  payments::FullCardRequest* full_card_request = autofill_manager()
+                                                     .client()
+                                                     ->GetCVCAuthenticator()
+                                                     ->full_card_request_.get();
   DCHECK(full_card_request);
 
   // Fake user response.
@@ -189,13 +194,13 @@ void AutofillMetricsBaseTest::OnCreditCardFetchingSuccessful(
                       : CreditCard::RecordType::MASKED_SERVER_CARD);
   credit_card_.SetNumber(real_pan);
 
-  autofill_manager().OnCreditCardFetched(CreditCardFetchResult::kSuccess,
-                                         &credit_card_, u"123");
+  autofill_manager().OnCreditCardFetchedForTest(CreditCardFetchResult::kSuccess,
+                                                &credit_card_, u"123");
 }
 
 void AutofillMetricsBaseTest::OnCreditCardFetchingFailed() {
-  autofill_manager().OnCreditCardFetched(CreditCardFetchResult::kPermanentError,
-                                         nullptr, u"");
+  autofill_manager().OnCreditCardFetchedForTest(
+      CreditCardFetchResult::kPermanentError, nullptr, u"");
 }
 
 void AutofillMetricsBaseTest::RecreateCreditCards(
@@ -205,9 +210,7 @@ void AutofillMetricsBaseTest::RecreateCreditCards(
     bool masked_card_is_enrolled_for_virtual_card) {
   personal_data().ClearCreditCards();
   if (include_local_credit_card) {
-    CreditCard local_credit_card;
-    test::SetCreditCardInfo(&local_credit_card, "Test User",
-                            "4111111111111111" /* Visa */, "11", "2022", "1");
+    CreditCard local_credit_card = test::GetCreditCard();
     local_credit_card.set_guid("10000000-0000-0000-0000-000000000001");
     personal_data().AddCreditCard(local_credit_card);
   }
@@ -234,6 +237,44 @@ void AutofillMetricsBaseTest::RecreateCreditCards(
   personal_data().Refresh();
 }
 
+std::string AutofillMetricsBaseTest::CreateLocalMasterCard(
+    bool clear_existing_cards) {
+  if (clear_existing_cards) {
+    personal_data().ClearCreditCards();
+  }
+  std::string guid("10000000-0000-0000-0000-000000000003");
+  CreditCard local_credit_card = test::GetCreditCard();
+  local_credit_card.SetNumber(u"5454545454545454" /* Mastercard */);
+  local_credit_card.set_guid(guid);
+  personal_data().AddCreditCard(local_credit_card);
+  return guid;
+}
+
+std::vector<std::string>
+AutofillMetricsBaseTest::CreateLocalAndDuplicateServerCreditCard() {
+  personal_data().ClearCreditCards();
+
+  // Local credit card creation.
+  CreditCard local_credit_card = test::GetCreditCard();
+  std::string local_card_guid("10000000-0000-0000-0000-000000000001");
+  local_credit_card.set_guid(local_card_guid);
+  personal_data().AddCreditCard(local_credit_card);
+
+  // Duplicate masked server card with same card information as local card.
+  CreditCard masked_server_credit_card = test::GetCreditCard();
+  masked_server_credit_card.set_record_type(CreditCard::MASKED_SERVER_CARD);
+  masked_server_credit_card.set_server_id("server_id_2");
+  std::string server_card_guid("10000000-0000-0000-0000-000000000002");
+  masked_server_credit_card.set_guid(server_card_guid);
+  masked_server_credit_card.set_instrument_id(1);
+  masked_server_credit_card.SetNetworkForMaskedCard(kVisaCard);
+  masked_server_credit_card.SetNumber(u"1111");
+  personal_data().AddServerCreditCard(masked_server_credit_card);
+
+  personal_data().Refresh();
+  return {local_card_guid, server_card_guid};
+}
+
 void AutofillMetricsBaseTest::AddMaskedServerCreditCardWithOffer(
     std::string guid,
     std::string offer_reward_amount,
@@ -248,17 +289,22 @@ void AutofillMetricsBaseTest::AddMaskedServerCreditCardWithOffer(
   masked_server_credit_card.SetNumber(u"9424");
   personal_data().AddServerCreditCard(masked_server_credit_card);
 
-  AutofillOfferData offer_data;
-  offer_data.offer_id = id;
-  offer_data.offer_reward_amount = offer_reward_amount;
-  if (offer_expired) {
-    offer_data.expiry = AutofillClock::Now() - base::Days(2);
-  } else {
-    offer_data.expiry = AutofillClock::Now() + base::Days(2);
-  }
-  offer_data.merchant_origins = {url};
-  offer_data.eligible_instrument_id = {
+  int64_t offer_id = id;
+  base::Time expiry = offer_expired ? AutofillClock::Now() - base::Days(2)
+                                    : AutofillClock::Now() + base::Days(2);
+  std::vector<GURL> merchant_origins = {GURL{url}};
+  GURL offer_details_url = GURL(url);
+  DisplayStrings display_strings;
+  display_strings.value_prop_text = "Get 5% off your purchase";
+  display_strings.see_details_text = "See details";
+  display_strings.usage_instructions_text =
+      "Check out with this card to activate";
+  std::vector<int64_t> eligible_instrument_id = {
       masked_server_credit_card.instrument_id()};
+
+  AutofillOfferData offer_data = AutofillOfferData::GPayCardLinkedOffer(
+      offer_id, expiry, merchant_origins, offer_details_url, display_strings,
+      eligible_instrument_id, offer_reward_amount);
   personal_data().AddAutofillOfferData(offer_data);
   personal_data().Refresh();
 }
@@ -269,7 +315,7 @@ void AutofillMetricsBaseTest::CreateTestAutofillProfiles() {
                        "theking@gmail.com", "RCA", "3734 Elvis Presley Blvd.",
                        "Apt. 10", "Memphis", "Tennessee", "38116", "US",
                        "12345678901");
-  profile1.set_guid(kTestGuid);
+  profile1.set_guid(kTestProfileId);
   personal_data().AddProfile(profile1);
 
   AutofillProfile profile2;

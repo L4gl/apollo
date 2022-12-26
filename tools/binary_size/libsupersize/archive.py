@@ -1,4 +1,4 @@
-# Copyright 2017 The Chromium Authors. All rights reserved.
+# Copyright 2017 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 """Main Python API for analyzing binary size."""
@@ -21,6 +21,7 @@ import apkanalyzer
 import archive_util
 import data_quality
 import describe
+import dex_deobfuscate
 import dir_metadata
 import file_format
 import function_signature
@@ -129,13 +130,13 @@ def _NormalizeNames(raw_symbols):
           or symbol.IsOther()):
       symbol.template_name = full_name
       symbol.name = full_name
-    elif symbol.IsDex():
-      symbol.full_name, symbol.template_name, symbol.name = (
-          function_signature.ParseJava(full_name))
-    elif symbol.IsStringLiteral():
+    elif symbol.IsStringLiteral():  # Handles native and DEX strings.
       symbol.full_name = full_name
       symbol.template_name = full_name
       symbol.name = full_name
+    elif symbol.IsDex():
+      symbol.full_name, symbol.template_name, symbol.name = (
+          function_signature.ParseJava(full_name))
     elif symbol.IsNative():
       # Remove [clone] suffix, and set flag accordingly.
       # Search from left-to-right, as multiple [clone]s can exist.
@@ -259,17 +260,11 @@ def _CreateMetadata(container_spec, elf_info):
     shorten_path = os.path.basename
 
   if apk_spec:
-    if not container_spec.native_spec:
-      metadata[models.METADATA_APK_SIZE] = os.path.getsize(apk_spec.apk_path)
-      if apk_spec.mapping_path:
-        metadata[models.METADATA_PROGUARD_MAPPING_FILENAME] = shorten_path(
-            apk_spec.mapping_path)
-    if apk_spec.minimal_apks_path:
-      metadata[models.METADATA_APK_FILENAME] = shorten_path(
-          apk_spec.minimal_apks_path)
-      metadata[models.METADATA_APK_SPLIT_NAME] = apk_spec.split_name
-    else:
-      metadata[models.METADATA_APK_FILENAME] = shorten_path(apk_spec.apk_path)
+    apk_metadata = apk.CreateMetadata(apk_spec=apk_spec,
+                                      include_file_details=not native_spec,
+                                      shorten_path=shorten_path)
+    assert not (metadata.keys() & apk_metadata.keys())
+    metadata.update(apk_metadata)
 
   if native_spec:
     native_metadata = native.CreateMetadata(native_spec=native_spec,
@@ -304,7 +299,8 @@ def _CreatePakSymbols(*, pak_spec, pak_id_map, apk_spec, output_directory):
 
 
 def _CreateContainerSymbols(container_spec, apk_file_manager,
-                            apk_analyzer_results, pak_id_map):
+                            apk_analyzer_results, pak_id_map,
+                            dex_deobfuscator_cache):
   container_name = container_spec.container_name
   apk_spec = container_spec.apk_spec
   pak_spec = container_spec.pak_spec
@@ -373,9 +369,13 @@ def _CreateContainerSymbols(container_spec, apk_file_manager,
     apk_infolist = apk_file_manager.InfoList(apk_spec.apk_path)
     dex_total_size = sum(i.file_size for i in apk_infolist
                          if i.filename.endswith('.dex'))
-    add_syms(*apkanalyzer.CreateDexSymbols(apk_analyzer_results[container_name],
-                                           dex_total_size,
-                                           apk_spec.size_info_prefix))
+    if dex_total_size > 0:
+      mapping_path = apk_spec.mapping_path  # May be None.
+      class_deobfuscation_map = (
+          dex_deobfuscator_cache.GetForMappingFile(mapping_path))
+      add_syms(*apkanalyzer.CreateDexSymbols(
+          apk_spec.apk_path, apk_analyzer_results[container_name],
+          dex_total_size, class_deobfuscation_map, apk_spec.size_info_prefix))
   if pak_spec:
     add_syms(*_CreatePakSymbols(pak_spec=pak_spec,
                                 pak_id_map=pak_id_map,
@@ -710,6 +710,9 @@ def _CreateNativeSpecs(*, tentative_output_dir, apk_infolist, elf_path,
         cur_elf_path = elf_path
         elf_path = None
       elif tentative_output_dir:
+        # TODO(crbug.com/1337134): Remove handling the legacy library prefix
+        # 'crazy.' when there is no longer interest in size comparisons for
+        # these pre-N APKs.
         cur_elf_path = os.path.join(
             tentative_output_dir, 'lib.unstripped',
             posixpath.basename(apk_so_path.replace('crazy.', '')))
@@ -745,7 +748,7 @@ def _CreateNativeSpecs(*, tentative_output_dir, apk_infolist, elf_path,
 
 # Cache to prevent excess log messages.
 @functools.lru_cache
-def _DeduceAuxPaths(mapping_path, resources_pathmap_path, apk_prefix):
+def _DeduceMappingPath(mapping_path, apk_prefix):
   if apk_prefix:
     if not mapping_path:
       possible_mapping_path = apk_prefix + '.mapping'
@@ -755,6 +758,13 @@ def _DeduceAuxPaths(mapping_path, resources_pathmap_path, apk_prefix):
       else:
         logging.warning('Could not find proguard mapping file at %s',
                         possible_mapping_path)
+  return mapping_path
+
+
+# Cache to prevent excess log messages.
+@functools.lru_cache
+def _DeducePathmapPath(resources_pathmap_path, apk_prefix):
+  if apk_prefix:
     if not resources_pathmap_path:
       possible_pathmap_path = apk_prefix + '.pathmap.txt'
       # This could be pointing to a stale pathmap file if path shortening was
@@ -766,7 +776,8 @@ def _DeduceAuxPaths(mapping_path, resources_pathmap_path, apk_prefix):
         resources_pathmap_path = possible_pathmap_path
         logging.debug('Detected --resources-pathmap-file=%s',
                       resources_pathmap_path)
-  return mapping_path, resources_pathmap_path
+      # Path shortening is optional, so do not warn for missing file.
+  return resources_pathmap_path
 
 
 def _ReadMultipleArgsFromStream(lines, base_dir, err_prefix, on_config_error):
@@ -828,9 +839,11 @@ def _CreateContainerSpecs(apk_file_manager,
     apk_prefix = apk_prefix.replace('.minimal.apks', '.aab')
     apk_prefix = apk_prefix.replace('.apks', '.aab')
 
-  mapping_path, resources_pathmap_path = _DeduceAuxPaths(
-      sub_args.mapping_file, sub_args.resources_pathmap_file, apk_prefix)
-
+  mapping_path = None
+  if analyze_dex:
+    mapping_path = _DeduceMappingPath(sub_args.mapping_file, apk_prefix)
+  resources_pathmap_path = _DeducePathmapPath(sub_args.resources_pathmap_file,
+                                              apk_prefix)
   apk_spec = None
   if apk_prefix:
     apk_spec = ApkSpec(apk_path=apk_path,
@@ -842,7 +855,7 @@ def _CreateContainerSpecs(apk_file_manager,
       apk_spec.size_info_prefix = os.path.join(top_args.output_directory,
                                                'size-info',
                                                os.path.basename(apk_prefix))
-    apk_spec.analyze_dex = bool(analyze_dex and apk_spec.size_info_prefix)
+    apk_spec.analyze_dex = analyze_dex
     apk_spec.default_component = json_config.DefaultComponentForSplit(
         split_name)
     apk_spec.path_defaults = json_config.ApkPathDefaults()
@@ -1060,9 +1073,11 @@ def CreateSizeInfo(container_specs, build_config, apk_file_manager):
 
   raw_symbols_list = []
   pak_id_map = pakfile.PakIdMap()
+  dex_deobfuscator_cache = dex_deobfuscate.CachedDexDeobfuscators()
   for container_spec in container_specs:
     raw_symbols = _CreateContainerSymbols(container_spec, apk_file_manager,
-                                          apk_analyzer_results, pak_id_map)
+                                          apk_analyzer_results, pak_id_map,
+                                          dex_deobfuscator_cache)
     assert raw_symbols, f'{container_spec.container_name} had no symbols.'
     raw_symbols_list.append(raw_symbols)
 

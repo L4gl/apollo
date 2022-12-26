@@ -1,13 +1,13 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "components/autofill/core/browser/ui/suggestion_selection.h"
 
-#include <algorithm>
 #include <iterator>
 
 #include "base/guid.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -58,10 +58,10 @@ void ExpectSameElements(const std::vector<T*>& expectations,
   std::vector<T*> results_copy = results;
   std::sort(results_copy.begin(), results_copy.end(), CompareElements<T>);
 
-  EXPECT_EQ(std::mismatch(results_copy.begin(), results_copy.end(),
-                          expectations_copy.begin(), ElementsEqual<T>)
-                .first,
-            results_copy.end());
+  EXPECT_EQ(
+      base::ranges::mismatch(results_copy, expectations_copy, ElementsEqual<T>)
+          .first,
+      results_copy.end());
 }
 
 }  // anonymous namespace
@@ -289,6 +289,28 @@ TEST_F(SuggestionSelectionTest, GetUniqueSuggestions_EmptyMatchingProfiles) {
   ASSERT_EQ(0U, unique_suggestions.size());
 }
 
+// Tests that `kAccount` profiles are preferred over `kLocalOrSyncable` profile
+// in case of a duplicate.
+TEST_F(SuggestionSelectionTest, GetUniqueSuggestions_kAccount) {
+  // Create two profiles that only differ by their source.
+  const auto account_profile = CreateProfileUniquePtr("FirstName");
+  account_profile->set_source_for_testing(AutofillProfile::Source::kAccount);
+  const auto local_profile = CreateProfileUniquePtr("FirstName");
+  local_profile->set_source_for_testing(
+      AutofillProfile::Source::kLocalOrSyncable);
+  // Place `account_profile` behind `local_profile`.
+  std::vector<AutofillProfile*> profiles = {local_profile.get(),
+                                            account_profile.get()};
+
+  std::vector<AutofillProfile*> unique_matched_profiles;
+  GetUniqueSuggestions({}, comparator_, app_locale_, profiles,
+                       CreateSuggestions(profiles, NAME_FIRST),
+                       &unique_matched_profiles);
+  // Usually, duplicates are resolved in favour of the earlier profile. Expect
+  // that this is not the case when profiles of different sources are involved.
+  EXPECT_THAT(unique_matched_profiles, ElementsAre(account_profile.get()));
+}
+
 TEST_F(SuggestionSelectionTest, RemoveProfilesNotUsedSinceTimestamp) {
   const char kAddressesSuppressedHistogramName[] =
       "Autofill.AddressesSuppressedForDisuse";
@@ -470,11 +492,15 @@ TEST_F(SuggestionSelectionTest,
           AllOf(Field(&Suggestion::main_text,
                       Suggestion::Text(u"Jon Snow",
                                        Suggestion::Text::IsPrimary(true))),
-                Field(&Suggestion::label, u"2 Beyond-the-Wall Rd")),
+                Field(&Suggestion::labels,
+                      std::vector<std::vector<Suggestion::Text>>{
+                          {Suggestion::Text(u"2 Beyond-the-Wall Rd")}})),
           AllOf(Field(&Suggestion::main_text,
                       Suggestion::Text(u"Jon Snow",
                                        Suggestion::Text::IsPrimary(true))),
-                Field(&Suggestion::label, u"1 Winterfell Ln"))));
+                Field(&Suggestion::labels,
+                      std::vector<std::vector<Suggestion::Text>>{
+                          {Suggestion::Text(u"1 Winterfell Ln")}}))));
 }
 
 TEST_F(SuggestionSelectionTest,
@@ -493,15 +519,20 @@ TEST_F(SuggestionSelectionTest,
           AllOf(Field(&Suggestion::main_text,
                       Suggestion::Text(u"Sansa",
                                        Suggestion::Text::IsPrimary(true))),
-                Field(&Suggestion::label, u"1 Winterfell Ln")),
+                Field(&Suggestion::labels,
+                      std::vector<std::vector<Suggestion::Text>>{
+                          {Suggestion::Text(u"1 Winterfell Ln")}})),
           AllOf(Field(&Suggestion::main_text,
                       Suggestion::Text(u"Sansa",
                                        Suggestion::Text::IsPrimary(true))),
-                Field(&Suggestion::label, u"")),
+                Field(&Suggestion::labels,
+                      std::vector<std::vector<Suggestion::Text>>{})),
           AllOf(Field(&Suggestion::main_text,
                       Suggestion::Text(u"Brienne",
                                        Suggestion::Text::IsPrimary(true))),
-                Field(&Suggestion::label, u"1 Winterfell Ln"))));
+                Field(&Suggestion::labels,
+                      std::vector<std::vector<Suggestion::Text>>{
+                          {Suggestion::Text(u"1 Winterfell Ln")}}))));
 }
 
 TEST_F(SuggestionSelectionTest, PrepareSuggestions_SameStringInValueAndLabel) {
@@ -515,7 +546,8 @@ TEST_F(SuggestionSelectionTest, PrepareSuggestions_SameStringInValueAndLabel) {
                   Field(&Suggestion::main_text,
                         Suggestion::Text(u"4 Mañana Road",
                                          Suggestion::Text::IsPrimary(true))),
-                  Field(&Suggestion::label, std::u16string()))));
+                  Field(&Suggestion::labels,
+                        std::vector<std::vector<Suggestion::Text>>{}))));
 }
 
 }  // namespace suggestion_selection

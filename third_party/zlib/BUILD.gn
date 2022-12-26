@@ -1,4 +1,4 @@
-# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Copyright 2013 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -41,6 +41,8 @@ config("zlib_internal_config") {
 }
 
 source_set("zlib_common_headers") {
+  visibility = [ ":*" ]
+
   sources = [
     "chromeconf.h",
     "deflate.h",
@@ -142,7 +144,7 @@ if (use_arm_neon_optimizations) {
       if (!is_win && !is_clang) {
         assert(!use_thin_lto,
                "ThinLTO fails mixing different module-level targets")
-        cflags_c = [ "-march=armv8-a+crc" ]
+        cflags_c = [ "-march=armv8-a+aes+crc" ]
       }
 
       sources = [
@@ -265,10 +267,11 @@ source_set("zlib_slide_hash_simd") {
 
 config("zlib_warnings") {
   if (is_clang) {
-    cflags = [ "-Wno-deprecated-non-prototype" ]
-    if (use_x86_x64_optimizations) {
-      cflags += [ "-Wno-incompatible-pointer-types" ]
-    }
+    cflags = [
+      "-Wno-deprecated-non-prototype",
+      "-Wno-incompatible-pointer-types",
+      "-Wunused-variable",
+    ]
   }
 }
 

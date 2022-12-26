@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,10 +54,10 @@ TouchToFillWebAuthnCredential ConvertJavaWebAuthnCredential(
     JNIEnv* env,
     const JavaParamRef<jobject>& credential) {
   return TouchToFillWebAuthnCredential(
-      ConvertJavaStringToUTF16(
-          env, Java_WebAuthnCredential_getUsername(env, credential)),
-      ConvertJavaStringToUTF8(env,
-                              Java_WebAuthnCredential_getId(env, credential)));
+      TouchToFillWebAuthnCredential::Username(ConvertJavaStringToUTF16(
+          env, Java_WebAuthnCredential_getUsername(env, credential))),
+      TouchToFillWebAuthnCredential::BackendId(ConvertJavaStringToUTF8(
+          env, Java_WebAuthnCredential_getId(env, credential))));
 }
 
 }  // namespace
@@ -112,15 +112,14 @@ void TouchToFillViewImpl::Show(
     const TouchToFillWebAuthnCredential& credential = webauthn_credentials[i];
     Java_TouchToFillBridge_insertWebAuthnCredential(
         env, webauthn_credential_array, i,
-        ConvertUTF16ToJavaString(env, credential.username()),
-        ConvertUTF8ToJavaString(env, credential.id()));
+        ConvertUTF16ToJavaString(env, credential.username().value()),
+        ConvertUTF8ToJavaString(env, credential.id().value()));
   }
 
-  // TODO(crbug.com/1318942): |webauthn_credentials| will be passed in a
-  // subsequent CL.
   Java_TouchToFillBridge_showCredentials(
       env, java_object_internal_, url::GURLAndroid::FromNativeGURL(env, url),
-      is_origin_secure.value(), credential_array, trigger_submission);
+      is_origin_secure.value(), webauthn_credential_array, credential_array,
+      trigger_submission);
 }
 
 void TouchToFillViewImpl::OnCredentialSelected(const UiCredential& credential) {

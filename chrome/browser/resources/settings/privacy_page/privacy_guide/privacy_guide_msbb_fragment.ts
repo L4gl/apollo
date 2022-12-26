@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,7 +10,7 @@
 import '../../controls/settings_toggle_button.js';
 import '../../prefs/prefs.js';
 import './privacy_guide_description_item.js';
-import './privacy_guide_fragment_shared_css.js';
+import './privacy_guide_fragment_shared.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -65,12 +65,14 @@ export class PrivacyGuideMsbbFragmentElement extends
 
   private onViewEnterStart_() {
     this.startStateMsbbOn_ =
-        this.getPref('url_keyed_anonymized_data_collection.enabled').value;
+        this.getPref<boolean>('url_keyed_anonymized_data_collection.enabled')
+            .value;
   }
 
   private onViewExitFinish_() {
     const endStateMsbbOn =
-        this.getPref('url_keyed_anonymized_data_collection.enabled').value;
+        this.getPref<boolean>('url_keyed_anonymized_data_collection.enabled')
+            .value;
 
     let state: PrivacyGuideSettingsStates|null = null;
     if (this.startStateMsbbOn_) {

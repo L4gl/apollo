@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,6 +7,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_util.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "cert_db_initializer_io_impl.h"
 #include "chromeos/crosapi/mojom/cert_database.mojom.h"
@@ -177,7 +178,7 @@ void CertDbInitializerIOImpl::InitializeNssCertDatabase(
   DCHECK(!nss_cert_database_);
 
   auto load_slots_callback = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(&CertDbInitializerIOImpl::DidLoadSlots,
                      weak_factory_.GetWeakPtr(), std::move(init_callback)));
 

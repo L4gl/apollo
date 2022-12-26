@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -69,7 +69,7 @@ base::CommandLine GetTestProcessCommandLine(UpdaterScope scope) {
 
   base::CommandLine command_line(
       executable_path.Append(kTestProcessExecutableName));
-  if (scope == UpdaterScope::kSystem)
+  if (IsSystemInstall(scope))
     command_line.AppendSwitch(kSystemSwitch);
 
   command_line.AppendSwitch(kEnableLoggingSwitch);

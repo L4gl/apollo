@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -84,11 +84,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest,
           .Set("manifest_version", 2)
           .Set("name", "Extension for options param test")
           .Set("options_ui",
-               DictionaryBuilder().Set("page", "options.html").Build())
+               DictionaryBuilder().Set("page", "options.html").BuildDict())
           .Set("version", "1")
           .ToJSON());
 
-  ExtensionTestMessageListener listener(false /* will_reply */);
+  ExtensionTestMessageListener listener;
   scoped_refptr<const Extension> extension =
       InstallExtension(extension_dir.Pack(), 1);
   ASSERT_TRUE(extension.get());

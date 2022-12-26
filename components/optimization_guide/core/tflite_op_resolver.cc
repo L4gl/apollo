@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 #include "components/optimization_guide/core/tflite_op_resolver.h"
@@ -384,8 +384,9 @@ TFLiteOpResolver::TFLiteOpResolver() {
 
 #if BUILDFLAG(BUILD_TFLITE_WITH_XNNPACK)
   if (features::TFLiteXNNPACKDelegateEnabled()) {
-    delegate_creators_.push_back([](int num_threads) {
-      return tflite::MaybeCreateXNNPACKDelegate(num_threads);
+    delegate_creators_.push_back([](TfLiteContext* context) {
+      return tflite::MaybeCreateXNNPACKDelegate(
+          context, /*enable_xnnpack_unsigned_quantized=*/false);
     });
   }
 #endif

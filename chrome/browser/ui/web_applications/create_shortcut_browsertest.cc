@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,9 +19,9 @@
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
+#include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
-#include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_prefs_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -61,13 +61,13 @@ class CreateShortcutBrowserTest : public WebAppControllerBrowserTest {
   WebAppRegistrar& registrar() {
     auto* provider = WebAppProvider::GetForTest(profile());
     CHECK(provider);
-    return provider->registrar();
+    return provider->registrar_unsafe();
   }
 
   WebAppSyncBridge& sync_bridge() {
     auto* provider = WebAppProvider::GetForTest(profile());
     CHECK(provider);
-    return provider->sync_bridge();
+    return provider->sync_bridge_unsafe();
   }
 };
 
@@ -225,8 +225,9 @@ IN_PROC_BROWSER_TEST_F(CreateShortcutBrowserTest, IgnoreInvalidManifestData) {
   EXPECT_EQ(registrar().GetAppStartUrl(app_id), url);
 }
 
+// TODO(crbug.com/1400778): Un-flake and re-enable this test.
 IN_PROC_BROWSER_TEST_F(CreateShortcutBrowserTest,
-                       CreateShortcutAgainOverwriteUserDisplayMode) {
+                       DISABLED_CreateShortcutAgainOverwriteUserDisplayMode) {
   base::UserActionTester user_action_tester;
   NavigateToURLAndWait(browser(), GetInstallableAppURL());
 
@@ -259,7 +260,7 @@ IN_PROC_BROWSER_TEST_F(CreateShortcutBrowserTest, OpenShortcutWindowOnlyOnce) {
   ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_CREATE_SHORTCUT));
   ASSERT_TRUE(chrome::ExecuteCommand(browser(), IDC_CREATE_SHORTCUT));
 
-  EXPECT_EQ(1u, provider().install_manager().GetInstallTaskCountForTesting());
+  EXPECT_EQ(1u, provider().command_manager().GetCommandCountForTesting());
 }
 
 }  // namespace web_app

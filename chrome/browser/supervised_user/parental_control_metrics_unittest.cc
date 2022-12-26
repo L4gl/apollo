@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
@@ -51,6 +53,9 @@ class ParentalControlMetricsTest : public testing::Test {
     TestingProfile::Builder profile_builder;
     profile_builder.SetPrefService(std::move(prefs));
     profile_builder.SetIsSupervisedProfile();
+    profile_builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
+                                      SyncServiceFactory::GetDefaultFactory());
+
     profile_ = profile_builder.Build();
     EXPECT_TRUE(profile_->IsChild());
     supervised_user_service_ =
@@ -78,7 +83,7 @@ class ParentalControlMetricsTest : public testing::Test {
 
  private:
   std::unique_ptr<ParentalControlMetrics> parental_control_metrics_;
-  SupervisedUserService* supervised_user_service_ = nullptr;
+  raw_ptr<SupervisedUserService> supervised_user_service_ = nullptr;
 };
 
 TEST_F(ParentalControlMetricsTest, WebFilterTypeMetric) {
@@ -149,10 +154,10 @@ TEST_F(ParentalControlMetricsTest, ManagedSiteListTypeMetric) {
 
   // Blocks `kExampleHost0`.
   {
-    DictionaryPrefUpdate hosts_update(GetPrefs(),
+    ScopedDictPrefUpdate hosts_update(GetPrefs(),
                                       prefs::kSupervisedUserManualHosts);
-    base::Value* hosts = hosts_update.Get();
-    hosts->SetBoolKey(kExampleHost0, false);
+    base::Value::Dict& hosts = hosts_update.Get();
+    hosts.Set(kExampleHost0, false);
   }
 
   histogram_tester_.ExpectBucketCount(
@@ -169,10 +174,10 @@ TEST_F(ParentalControlMetricsTest, ManagedSiteListTypeMetric) {
 
   // Approves `kExampleHost0`.
   {
-    DictionaryPrefUpdate hosts_update(GetPrefs(),
+    ScopedDictPrefUpdate hosts_update(GetPrefs(),
                                       prefs::kSupervisedUserManualHosts);
-    base::Value* hosts = hosts_update.Get();
-    hosts->SetBoolKey(kExampleHost0, true);
+    base::Value::Dict& hosts = hosts_update.Get();
+    hosts.Set(kExampleHost0, true);
   }
 
   histogram_tester_.ExpectBucketCount(
@@ -189,10 +194,10 @@ TEST_F(ParentalControlMetricsTest, ManagedSiteListTypeMetric) {
 
   // Blocks `kExampleURL1`.
   {
-    DictionaryPrefUpdate urls_update(GetPrefs(),
+    ScopedDictPrefUpdate urls_update(GetPrefs(),
                                      prefs::kSupervisedUserManualURLs);
-    base::Value* urls = urls_update.Get();
-    urls->SetBoolKey(kExampleURL1, false);
+    base::Value::Dict& urls = urls_update.Get();
+    urls.Set(kExampleURL1, false);
   }
 
   histogram_tester_.ExpectBucketCount(

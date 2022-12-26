@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -94,6 +94,14 @@ class PasswordGenerationAgent : public content::RenderFrameObserver,
 #endif
 
   bool IsPrerendering() const;
+
+  // Previews the generation suggestion for the current generation element.
+  void PreviewGenerationSuggestion(const std::u16string& password);
+
+  // Returns true if a generation suggestion was found and cleared successfully
+  // on |control_element|.
+  bool DidClearGenerationSuggestion(
+      const blink::WebFormControlElement& control_element);
 
  private:
   class DeferringPasswordGenerationDriver;

@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,7 +44,7 @@ void RenderFrameHostDelegate::RequestMediaAccessPermission(
     MediaResponseCallback callback) {
   LOG(ERROR) << "RenderFrameHostDelegate::RequestMediaAccessPermission: "
              << "Not supported.";
-  std::move(callback).Run(blink::mojom::StreamDevices(),
+  std::move(callback).Run(blink::mojom::StreamDevicesSet(),
                           blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED,
                           std::unique_ptr<MediaStreamUI>());
 }
@@ -98,8 +98,7 @@ bool RenderFrameHostDelegate::IsInnerWebContentsForGuest() {
   return false;
 }
 
-RenderFrameHostImpl*
-RenderFrameHostDelegate::GetFocusedFrameIncludingInnerWebContents() {
+RenderFrameHostImpl* RenderFrameHostDelegate::GetFocusedFrame() {
   return nullptr;
 }
 
@@ -153,7 +152,7 @@ void RenderFrameHostDelegate::IsClipboardPasteContentAllowed(
     const ui::ClipboardFormatType& data_type,
     const std::string& data,
     IsClipboardPasteContentAllowedCallback callback) {
-  std::move(callback).Run(ClipboardPasteContentAllowed(true));
+  std::move(callback).Run(data);
 }
 
 bool RenderFrameHostDelegate::HasSeenRecentScreenOrientationChange() {
@@ -180,14 +179,7 @@ RenderWidgetHostImpl* RenderFrameHostDelegate::CreateNewPopupWidget(
 
 bool RenderFrameHostDelegate::ShowPopupMenu(
     RenderFrameHostImpl* render_frame_host,
-    mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,
-    const gfx::Rect& bounds,
-    int32_t item_height,
-    double font_size,
-    int32_t selected_item,
-    std::vector<blink::mojom::MenuItemPtr>* menu_items,
-    bool right_aligned,
-    bool allow_multiple_selection) {
+    const gfx::Rect& bounds) {
   return false;
 }
 

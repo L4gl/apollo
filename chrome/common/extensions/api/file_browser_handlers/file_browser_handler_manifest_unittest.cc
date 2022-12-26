@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,15 +44,14 @@ TEST_F(FileBrowserHandlerManifestTest, GetHandlersRequiresPermission) {
                            .Set("file_filters", extensions::ListBuilder()
                                                     .Append("filesystem:*.txt")
                                                     .Append("filesystem:*.html")
-                                                    .Build())
-                           .Build())
-               .Build());
-  std::unique_ptr<base::DictionaryValue> bad_manifest_value(
-      bad_manifest_builder.Build());
+                                                    .BuildList())
+                           .BuildDict())
+               .BuildList());
+  base::Value::Dict bad_manifest_value(bad_manifest_builder.BuildDict());
 
   // Create a good manifest by extending the bad one with the missing
   // permission.
-  extensions::DictionaryBuilder good_manifest_builder(*bad_manifest_value);
+  extensions::DictionaryBuilder good_manifest_builder(bad_manifest_value);
   good_manifest_builder.Set(
       "permissions",
       extensions::ListBuilder().Append("fileBrowserHandler").Build());
@@ -111,7 +110,7 @@ TEST_F(FileBrowserHandlerManifestTest, ValidFileBrowserHandler) {
                   .Set("manifest_version", 2)
                   .Set("permissions", extensions::ListBuilder()
                                           .Append("fileBrowserHandler")
-                                          .Build())
+                                          .BuildList())
                   .Set("file_browser_handlers",
                        ListBuilder()
                            .Append(DictionaryBuilder()
@@ -121,16 +120,16 @@ TEST_F(FileBrowserHandlerManifestTest, ValidFileBrowserHandler) {
                                        .Set("file_filters",
                                             ListBuilder()
                                                 .Append("filesystem:*.txt")
-                                                .Build())
-                                       .Build())
-                           .Build())
-                  .Build())
+                                                .BuildList())
+                                       .BuildDict())
+                           .BuildList())
+                  .BuildDict())
           .Build();
 
   ASSERT_TRUE(extension.get());
   FileBrowserHandler::List* handlers =
       FileBrowserHandler::GetHandlers(extension.get());
-  ASSERT_TRUE(handlers != NULL);
+  ASSERT_TRUE(handlers != nullptr);
   ASSERT_EQ(1U, handlers->size());
   const FileBrowserHandler* action = handlers->at(0).get();
 
@@ -162,7 +161,7 @@ TEST_F(FileBrowserHandlerManifestTest, ValidFileBrowserHandlerMIMETypes) {
                   .Set("manifest_version", 2)
                   .Set("permissions", extensions::ListBuilder()
                                           .Append("fileBrowserHandler")
-                                          .Build())
+                                          .BuildList())
                   .Set("file_browser_handlers",
                        ListBuilder()
                            .Append(DictionaryBuilder()
@@ -172,16 +171,16 @@ TEST_F(FileBrowserHandlerManifestTest, ValidFileBrowserHandlerMIMETypes) {
                                        .Set("file_filters",
                                             ListBuilder()
                                                 .Append("filesystem:*.txt")
-                                                .Build())
-                                       .Build())
-                           .Build())
-                  .Build())
+                                                .BuildList())
+                                       .BuildDict())
+                           .BuildList())
+                  .BuildDict())
           .Build();
 
   ASSERT_TRUE(extension.get());
   FileBrowserHandler::List* handlers =
       FileBrowserHandler::GetHandlers(extension.get());
-  ASSERT_TRUE(handlers != NULL);
+  ASSERT_TRUE(handlers != nullptr);
   ASSERT_EQ(1U, handlers->size());
   const FileBrowserHandler* action = handlers->at(0).get();
 
@@ -205,29 +204,29 @@ TEST_F(FileBrowserHandlerManifestTest, ValidFileBrowserHandlerWithCreate) {
                   .Set("manifest_version", 2)
                   .Set("permissions", extensions::ListBuilder()
                                           .Append("fileBrowserHandler")
-                                          .Build())
+                                          .BuildList())
                   .Set("file_browser_handlers",
                        ListBuilder()
-                           .Append(
-                               DictionaryBuilder()
-                                   .Set("id", "ID")
-                                   .Set("default_title", "Default title")
-                                   .Set("default_icon", "icon.png")
-                                   .Set("file_filters",
-                                        ListBuilder()
-                                            .Append("filesystem:*.txt")
-                                            .Build())
-                                   .Set("file_access",
-                                        ListBuilder().Append("create").Build())
-                                   .Build())
-                           .Build())
-                  .Build())
+                           .Append(DictionaryBuilder()
+                                       .Set("id", "ID")
+                                       .Set("default_title", "Default title")
+                                       .Set("default_icon", "icon.png")
+                                       .Set("file_filters",
+                                            ListBuilder()
+                                                .Append("filesystem:*.txt")
+                                                .BuildList())
+                                       .Set("file_access", ListBuilder()
+                                                               .Append("create")
+                                                               .BuildList())
+                                       .BuildDict())
+                           .BuildList())
+                  .BuildDict())
           .Build();
 
   ASSERT_TRUE(extension.get());
   FileBrowserHandler::List* handlers =
       FileBrowserHandler::GetHandlers(extension.get());
-  ASSERT_TRUE(handlers != NULL);
+  ASSERT_TRUE(handlers != nullptr);
   ASSERT_EQ(1U, handlers->size());
   const FileBrowserHandler* action = handlers->at(0).get();
   const extensions::URLPatternSet& patterns = action->file_url_patterns();

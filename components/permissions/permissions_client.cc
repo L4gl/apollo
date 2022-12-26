@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -115,8 +115,8 @@ absl::optional<GURL> PermissionsClient::OverrideCanonicalOrigin(
   return absl::nullopt;
 }
 
-bool PermissionsClient::DoOriginsMatchNewTabPage(const GURL& requesting_origin,
-                                                 const GURL& embedding_origin) {
+bool PermissionsClient::DoURLsMatchNewTabPage(const GURL& requesting_origin,
+                                              const GURL& embedding_origin) {
   return false;
 }
 
@@ -151,6 +151,9 @@ PermissionsClient::MaybeCreateMessageUI(
 void PermissionsClient::RepromptForAndroidPermissions(
     content::WebContents* web_contents,
     const std::vector<ContentSettingsType>& content_settings_types,
+    const std::vector<ContentSettingsType>& filtered_content_settings_types,
+    const std::vector<std::string>& required_permissions,
+    const std::vector<std::string>& optional_permissions,
     PermissionsUpdatedCallback callback) {
   std::move(callback).Run(false);
 }

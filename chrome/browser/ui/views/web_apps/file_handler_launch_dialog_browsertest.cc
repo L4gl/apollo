@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -105,14 +105,15 @@ class FileHandlerLaunchDialogTest : public InProcessBrowserTest {
     // `test::InstallWebApp()` forces a kBrowser display mode; see
     // `WebAppInstallFinalizer::FinalizeInstall()`.
     ScopedRegistryUpdate update(
-        &WebAppProvider::GetForTest(browser()->profile())->sync_bridge());
+        &WebAppProvider::GetForTest(browser()->profile())
+             ->sync_bridge_unsafe());
     update->UpdateApp(app_id_)->SetUserDisplayMode(
         UserDisplayMode::kStandalone);
   }
 
   const WebApp* GetApp() {
     return WebAppProvider::GetForTest(browser()->profile())
-        ->registrar()
+        ->registrar_unsafe()
         .GetAppById(app_id_);
   }
 

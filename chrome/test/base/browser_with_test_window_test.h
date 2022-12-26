@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -14,6 +14,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/variations/scoped_variations_ids_provider.h"
+#include "components/variations/variations_client.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -23,10 +25,10 @@
 #include "chrome/test/views/chrome_test_views_delegate.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/tpm/stub_install_attributes.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/ash_test_views_delegate.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #else
 #include "ui/views/test/scoped_views_test_helper.h"
 #endif
@@ -271,6 +273,10 @@ class BrowserWithTestWindowTest : public testing::Test {
 
   // Whether the browser is part of a hosted app.
   const bool hosted_app_;
+
+  // Initialize the variations provider.
+  variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
+      variations::VariationsIdsProvider::Mode::kUseSignedInState};
 };
 
 #endif  // CHROME_TEST_BASE_BROWSER_WITH_TEST_WINDOW_TEST_H_

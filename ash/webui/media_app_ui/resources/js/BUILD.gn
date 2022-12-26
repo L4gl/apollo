@@ -1,4 +1,4 @@
-# Copyright 2019 The Chromium Authors. All rights reserved.
+# Copyright 2019 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -136,8 +136,8 @@ js_library("launch") {
     ":error_reporter",
     ":message_types",
     ":mojo_api_bootstrap",
+    "//ash/webui/common/resources:load_time_data.m",
     "//ash/webui/system_apps/public/js:message_pipe.m",
-    "//ui/webui/resources/js:load_time_data.m",
   ]
 }
 

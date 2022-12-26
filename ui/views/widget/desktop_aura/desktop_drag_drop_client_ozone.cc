@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -193,6 +193,14 @@ DragOperation DesktopDragDropClientOzone::StartDragAndDrop(
 
   return drag_operation_;
 }
+
+#if BUILDFLAG(IS_LINUX)
+void DesktopDragDropClientOzone::UpdateDragImage(const gfx::ImageSkia& image,
+                                                 const gfx::Vector2d& offset) {
+  DCHECK(drag_handler_);
+  drag_handler_->UpdateDragImage(image, offset);
+}
+#endif  // BUILDFLAG(LINUX)
 
 void DesktopDragDropClientOzone::DragCancel() {
   ResetDragDropTarget(true);

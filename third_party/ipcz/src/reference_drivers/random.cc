@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,6 +29,7 @@
 
 #if BUILDFLAG(IS_POSIX)
 #include <fcntl.h>
+#include <unistd.h>
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -44,7 +45,7 @@ namespace ipcz::reference_drivers {
 
 namespace {
 
-#if defined(OS_POSIX)
+#if defined(OS_POSIX) && !BUILDFLAG(IS_MAC)
 void RandomBytesFromDevUrandom(absl::Span<uint8_t> destination) {
   static int urandom_fd = [] {
     for (;;) {
@@ -91,12 +92,10 @@ void RandomBytes(absl::Span<uint8_t> destination) {
     }
   }
 #elif BUILDFLAG(IS_MAC)
-  if (__builtin_available(macOS 10.12, *)) {
-    const bool ok = getentropy(destination.data(), destination.size()) == 0;
-    ABSL_ASSERT(ok);
-  } else {
-    RandomBytesFromDevUrandom(destination);
-  }
+  const bool ok = getentropy(destination.data(), destination.size()) == 0;
+  ABSL_ASSERT(ok);
+#elif BUILDFLAG(IS_IOS)
+  RandomBytesFromDevUrandom(destination);
 #elif BUILDFLAG(IS_NACL)
   while (!destination.empty()) {
     size_t nread;

@@ -1,11 +1,10 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static androidx.test.espresso.Espresso.onView;
-import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
@@ -28,6 +27,7 @@ import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVA
 import static org.chromium.components.browser_ui.widget.RecyclerViewTestUtils.waitForStableRecyclerView;
 
 import android.app.Activity;
+import android.content.Context;
 import android.provider.Settings;
 import android.support.test.InstrumentationRegistry;
 import android.view.View;
@@ -56,38 +56,38 @@ import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.features.start_surface.TabSwitcherAndStartSurfaceLayout;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.content_public.common.ContentUrlConstants;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import java.io.File;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Utilities helper class for tab grid/group tests.
  */
 public class TabUiTestHelper {
-    /**
-     * Apply the necessary theme overlay for activity.
-     * TODO(https://crbug.com/1227875): Move this into a test rule.
-     * @param activity The test activity that will be used to create tab components.
-     */
-    public static void applyThemeOverlays(Activity activity) {
-        activity.setTheme(TabUiThemeProvider.getThemeOverlayStyleResourceId());
-    }
-
     /**
      * Create {@code tabsCount} tabs for {@code cta} in certain tab model based on {@code
      * isIncognito}.
@@ -100,6 +100,23 @@ public class TabUiTestHelper {
         for (int i = 0; i < (isIncognito ? tabsCount : tabsCount - 1); i++) {
             ChromeTabUtils.newTabFromMenu(
                     InstrumentationRegistry.getInstrumentation(), cta, isIncognito, true);
+        }
+    }
+
+    /**
+     * Open additional tabs for the provided activity. The added tabs will be opened to
+     * "about:blank" and will not wait for the page to finish loading.
+     * @param cta The activity to add the tabs to.
+     * @param incognito Whether the tabs should be incognito.
+     * @param count The number of tabs to create.
+     */
+    public static void addBlankTabs(ChromeTabbedActivity cta, boolean incognito, int count) {
+        for (int i = 0; i < count; i++) {
+            TestThreadUtils.runOnUiThreadBlocking(() -> {
+                cta.getTabCreator(incognito).createNewTab(
+                        new LoadUrlParams(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL),
+                        TabLaunchType.FROM_CHROME_UI, null);
+            });
         }
     }
 
@@ -121,7 +138,7 @@ public class TabUiTestHelper {
      */
     public static void leaveTabSwitcher(ChromeTabbedActivity cta) {
         assertTrue(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
-        pressBack();
+        TestThreadUtils.runOnUiThreadBlocking(() -> cta.onBackPressed());
         LayoutTestUtils.waitForLayout(cta.getLayoutManager(), LayoutType.BROWSING);
     }
 
@@ -141,7 +158,7 @@ public class TabUiTestHelper {
      * @param index The index of the target card.
      */
     public static void clickNthCardFromTabSwitcher(ChromeTabbedActivity cta, int index) {
-        clickTabSwitcherCardWithParent(cta, index, org.chromium.chrome.R.id.compositor_view_holder);
+        clickTabSwitcherCardWithParent(cta, index, getTabSwitcherParentId(cta));
     }
 
     private static void clickTabSwitcherCardWithParent(
@@ -149,18 +166,6 @@ public class TabUiTestHelper {
         assertTrue(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
         onView(allOf(withParent(withId(parentId)), withId(R.id.tab_list_view)))
                 .perform(RecyclerViewActions.actionOnItemAtPosition(index, click()));
-    }
-
-    /**
-     * Click the Nth card in grid tab switcher. When group is enabled and the Nth card is a
-     * group, this will open up the dialog; otherwise this will open up the tab page.
-     * @param cta  The current running activity.
-     * @param index The index of the target card.
-     */
-    public static void clickNthCardFromTabletTabSwitcherPolish(
-            ChromeTabbedActivity cta, int index) {
-        clickTabSwitcherCardWithParent(
-                cta, index, org.chromium.chrome.R.id.grid_tab_switcher_view_holder);
     }
 
     /**
@@ -219,16 +224,18 @@ public class TabUiTestHelper {
     }
 
     /** Close the first tab in grid tab switcher. */
-    public static void closeFirstTabInTabSwitcher() {
-        closeNthTabInTabSwitcher(0);
+    public static void closeFirstTabInTabSwitcher(Context context) {
+        closeNthTabInTabSwitcher(context, 0);
     }
 
     /**
      * Close the Nth tab in grid tab switcher.
+     * @param context The activity context.
      * @param index The index of the target tab to close.
      */
-    static void closeNthTabInTabSwitcher(int index) {
-        onView(allOf(withParent(withId(R.id.compositor_view_holder)), withId(R.id.tab_list_view)))
+    static void closeNthTabInTabSwitcher(Context context, int index) {
+        onView(allOf(withParent(withId(getTabSwitcherParentId(context))),
+                       withId(R.id.tab_list_view)))
                 .perform(new ViewAction() {
                     @Override
                     public Matcher<View> getConstraints() {
@@ -364,9 +371,44 @@ public class TabUiTestHelper {
      */
     public static void verifyTabSwitcherCardCount(ChromeTabbedActivity cta, int count) {
         assertTrue(cta.getLayoutManager().isLayoutVisible(LayoutType.TAB_SWITCHER));
-        onView(allOf(withParent(withId(org.chromium.chrome.R.id.compositor_view_holder)),
-                       withId(R.id.tab_list_view)))
+        int viewHolder = getTabSwitcherParentId(cta);
+        onView(allOf(withParent(withId(viewHolder)), withId(R.id.tab_list_view)))
                 .check(ChildrenCountAssertion.havingTabCount(count));
+    }
+
+    /**
+     * Returns parentId of GridTabSwitcher based on form factor and feature enabled.
+     * @param context The activity context.
+     * @return View Id of GTS parent view.
+     */
+    public static int getTabSwitcherParentId(Context context) {
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                && TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(context)) {
+            return R.id.grid_tab_switcher_view_holder;
+        }
+
+        if (getIsStartSurfaceEnabledFromUIThread(context)
+                && !getIsStartSurfaceRefactorEnabledFromUIThread(context)) {
+            return org.chromium.chrome.R.id.tasks_surface_body;
+        }
+
+        return org.chromium.chrome.R.id.compositor_view_holder;
+    }
+
+    private static boolean getIsStartSurfaceEnabledFromUIThread(Context context) {
+        AtomicReference<Boolean> isStartSurfaceEnabled = new AtomicReference<>();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> isStartSurfaceEnabled.set(ReturnToChromeUtil.isStartSurfaceEnabled(context)));
+        return isStartSurfaceEnabled.get();
+    }
+
+    public static boolean getIsStartSurfaceRefactorEnabledFromUIThread(Context context) {
+        AtomicReference<Boolean> isStartSurfaceRefactorEnabled = new AtomicReference<>();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            isStartSurfaceRefactorEnabled.set(
+                    ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context));
+        });
+        return isStartSurfaceRefactorEnabled.get();
     }
 
     /**
@@ -704,6 +746,20 @@ public class TabUiTestHelper {
                 }
             }
             assertEquals(mExpectedCount, tabSuggestionMessageCount);
+        }
+    }
+
+    /**
+     * Verifies whether the correct layout is created for the tab switcher in LayoutManagerChrome.
+     */
+    public static void verifyTabSwitcherLayoutType(ChromeTabbedActivity cta) {
+        boolean isStartSurfaceRefactorEnabled = ChromeFeatureList.sStartSurfaceRefactor.isEnabled();
+        if (isStartSurfaceRefactorEnabled) {
+            Layout layout = cta.getLayoutManager().getTabSwitcherLayoutForTesting();
+            assertTrue(layout instanceof TabSwitcherLayout);
+        } else {
+            Layout layout = cta.getLayoutManager().getOverviewLayout();
+            assertTrue(layout instanceof TabSwitcherAndStartSurfaceLayout);
         }
     }
 }

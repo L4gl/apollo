@@ -1,10 +1,12 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "chrome/browser/device_api/managed_configuration_api.h"
 
+#include "base/check.h"
 #include "base/containers/contains.h"
+#include "base/test/gtest_tags.h"
 #include "base/test/test_future.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
@@ -91,10 +93,11 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
   return http_response;
 }
 
-bool DictValueEquals(std::unique_ptr<base::DictionaryValue> value,
+bool DictValueEquals(absl::optional<base::Value::Dict> value,
                      std::map<std::string, std::string> expected) {
+  DCHECK(value);
   std::map<std::string, std::string> actual;
-  for (auto entry : value->DictItems()) {
+  for (auto entry : *value) {
     if (!entry.second.is_string())
       return false;
     actual.insert({entry.first, entry.second.GetString()});
@@ -114,16 +117,15 @@ class ManagedConfigurationAPITestBase : public MixinBasedInProcessBrowserTest {
 
   void SetConfiguration(const std::string& conf_url,
                         const std::string& conf_hash) {
-    auto trusted_apps = std::make_unique<base::ListValue>();
-    auto entry = std::make_unique<base::DictionaryValue>();
-    entry->SetStringKey(ManagedConfigurationAPI::kOriginKey, kOrigin);
-    entry->SetStringKey(ManagedConfigurationAPI::kManagedConfigurationUrlKey,
-                        embedded_test_server()->GetURL(conf_url).spec());
-    entry->SetStringKey(ManagedConfigurationAPI::kManagedConfigurationHashKey,
-                        conf_hash);
-    trusted_apps->Append(std::move(entry));
+    base::Value::List trusted_apps;
+    base::Value::Dict entry;
+    entry.Set(ManagedConfigurationAPI::kOriginKey, kOrigin);
+    entry.Set(ManagedConfigurationAPI::kManagedConfigurationUrlKey,
+              embedded_test_server()->GetURL(conf_url).spec());
+    entry.Set(ManagedConfigurationAPI::kManagedConfigurationHashKey, conf_hash);
+    trusted_apps.Append(std::move(entry));
     profile()->GetPrefs()->Set(prefs::kManagedConfigurationPerOrigin,
-                               *trusted_apps);
+                               base::Value(std::move(trusted_apps)));
   }
 
   void ClearConfiguration() {
@@ -131,9 +133,9 @@ class ManagedConfigurationAPITestBase : public MixinBasedInProcessBrowserTest {
                                base::ListValue());
   }
 
-  std::unique_ptr<base::DictionaryValue> GetValues(
+  absl::optional<base::Value::Dict> GetValues(
       const std::vector<std::string>& keys) {
-    base::test::TestFuture<std::unique_ptr<base::DictionaryValue>> value_future;
+    base::test::TestFuture<absl::optional<base::Value::Dict>> value_future;
     api()->GetOriginPolicyConfiguration(origin_, keys,
                                         value_future.GetCallback());
     return value_future.Take();
@@ -202,6 +204,9 @@ IN_PROC_BROWSER_TEST_F(ManagedConfigurationAPITest,
 
 IN_PROC_BROWSER_TEST_F(ManagedConfigurationAPITest,
                        DataIsDownloadedAndPersists) {
+  base::AddFeatureIdTagToTestResult(
+      "screenplay-2447f309-0b17-4b53-8879-50ca6eeebc3f");
+
   // Intentionally do not handle requests so that data has to be read from
   // disk.
   EnableTestServer({});
@@ -219,7 +224,7 @@ IN_PROC_BROWSER_TEST_F(ManagedConfigurationAPITest, AppRemovedFromPolicyList) {
 
   ClearConfiguration();
   WaitForUpdate();
-  ASSERT_EQ(GetValues({kKey1, kKey2}), nullptr);
+  ASSERT_EQ(GetValues({kKey1, kKey2}), absl::nullopt);
 }
 
 IN_PROC_BROWSER_TEST_F(ManagedConfigurationAPITest, UnknownKeys) {

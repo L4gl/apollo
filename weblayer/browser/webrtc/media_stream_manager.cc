@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/memory/raw_ptr.h"
 #include "base/supports_user_data.h"
 #include "components/webrtc/media_stream_devices_controller.h"
 #include "content/public/browser/media_stream_request.h"
@@ -24,7 +25,7 @@ namespace {
 constexpr int kWebContentsUserDataKey = 0;
 
 struct UserData : public base::SupportsUserData::Data {
-  MediaStreamManager* manager = nullptr;
+  raw_ptr<MediaStreamManager> manager = nullptr;
 };
 
 }  // namespace
@@ -34,11 +35,14 @@ struct UserData : public base::SupportsUserData::Data {
 class MediaStreamManager::StreamUi : public content::MediaStreamUI {
  public:
   StreamUi(base::WeakPtr<MediaStreamManager> manager,
-           const blink::mojom::StreamDevices& devices)
+           const blink::mojom::StreamDevicesSet& stream_devices)
       : manager_(manager) {
     DCHECK(manager_);
-    streaming_audio_ = devices.audio_device.has_value();
-    streaming_video_ = devices.video_device.has_value();
+    DCHECK_EQ(1u, stream_devices.stream_devices.size());
+    streaming_audio_ =
+        stream_devices.stream_devices[0]->audio_device.has_value();
+    streaming_video_ =
+        stream_devices.stream_devices[0]->video_device.has_value();
   }
   StreamUi(const StreamUi&) = delete;
   StreamUi& operator=(const StreamUi&) = delete;
@@ -122,12 +126,12 @@ void MediaStreamManager::OnClientReadyToStream(JNIEnv* env,
   CHECK(request != requests_pending_client_approval_.end());
   if (allowed) {
     std::move(request->second.callback)
-        .Run(request->second.devices, request->second.result,
+        .Run(*request->second.stream_devices_set_, request->second.result,
              std::make_unique<StreamUi>(weak_factory_.GetWeakPtr(),
-                                        request->second.devices));
+                                        *request->second.stream_devices_set_));
   } else {
     std::move(request->second.callback)
-        .Run(blink::mojom::StreamDevices(),
+        .Run(blink::mojom::StreamDevicesSet(),
              blink::mojom::MediaStreamRequestResult::NO_HARDWARE, {});
   }
   requests_pending_client_approval_.erase(request);
@@ -141,22 +145,28 @@ void MediaStreamManager::StopStreaming(JNIEnv* env) {
 
 void MediaStreamManager::OnMediaAccessPermissionResult(
     content::MediaResponseCallback callback,
-    const blink::mojom::StreamDevices& devices,
+    const blink::mojom::StreamDevicesSet& stream_devices_set,
     blink::mojom::MediaStreamRequestResult result,
     bool blocked_by_permissions_policy,
     ContentSetting audio_setting,
     ContentSetting video_setting) {
+  // TODO(crbug.com/1300883): Generalize to multiple streams.
+  DCHECK((result != blink::mojom::MediaStreamRequestResult::OK &&
+          stream_devices_set.stream_devices.empty()) ||
+         (result == blink::mojom::MediaStreamRequestResult::OK &&
+          stream_devices_set.stream_devices.size() == 1u));
   if (result != blink::mojom::MediaStreamRequestResult::OK) {
-    std::move(callback).Run(devices, result, {});
+    std::move(callback).Run(stream_devices_set, result, {});
     return;
   }
 
   int request_id = next_request_id_++;
-  requests_pending_client_approval_[request_id] =
-      RequestPendingClientApproval(std::move(callback), devices, result);
+  requests_pending_client_approval_[request_id] = RequestPendingClientApproval(
+      std::move(callback), stream_devices_set, result);
   Java_MediaStreamManager_prepareToStream(
       base::android::AttachCurrentThread(), j_object_,
-      devices.audio_device.has_value(), devices.video_device.has_value(),
+      stream_devices_set.stream_devices[0]->audio_device.has_value(),
+      stream_devices_set.stream_devices[0]->video_device.has_value(),
       request_id);
 }
 
@@ -199,9 +209,11 @@ MediaStreamManager::RequestPendingClientApproval::
 
 MediaStreamManager::RequestPendingClientApproval::RequestPendingClientApproval(
     content::MediaResponseCallback callback,
-    const blink::mojom::StreamDevices& devices,
+    const blink::mojom::StreamDevicesSet& stream_devices_set,
     blink::mojom::MediaStreamRequestResult result)
-    : callback(std::move(callback)), devices(devices), result(result) {}
+    : callback(std::move(callback)),
+      stream_devices_set_(stream_devices_set.Clone()),
+      result(result) {}
 
 MediaStreamManager::RequestPendingClientApproval::
     ~RequestPendingClientApproval() = default;

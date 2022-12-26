@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,14 +23,14 @@ void ChromeAppKioskServiceAsh::BindLaunchController(
 }
 
 void ChromeAppKioskServiceAsh::InstallKioskApp(
-    mojom::AppInstallParamsPtr params,
+    const mojom::AppInstallParams& params,
     mojom::ChromeKioskLaunchController::InstallKioskAppCallback callback) {
   if (!GetController()) {
     std::move(callback).Run(mojom::ChromeKioskInstallResult::kUnknown);
     return;
   }
 
-  GetController()->InstallKioskApp(std::move(params), std::move(callback));
+  GetController()->InstallKioskApp(params.Clone(), std::move(callback));
 }
 
 void ChromeAppKioskServiceAsh::LaunchKioskApp(

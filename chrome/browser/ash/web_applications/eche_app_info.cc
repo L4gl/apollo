@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -44,10 +44,10 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForEcheApp() {
 }
 
 EcheSystemAppDelegate::EcheSystemAppDelegate(Profile* profile)
-    : web_app::SystemWebAppDelegate(web_app::SystemAppType::ECHE,
-                                    "Eche",
-                                    GURL("chrome://eche-app"),
-                                    profile) {}
+    : ash::SystemWebAppDelegate(ash::SystemWebAppType::ECHE,
+                                "Eche",
+                                GURL("chrome://eche-app"),
+                                profile) {}
 
 std::unique_ptr<WebAppInstallInfo> EcheSystemAppDelegate::GetWebAppInfo()
     const {
@@ -78,7 +78,7 @@ bool EcheSystemAppDelegate::ShouldHaveReloadButtonInMinimalUi() const {
 bool EcheSystemAppDelegate::ShouldAllowScriptsToCloseWindows() const {
   // For debug purposes, we do not allow closing windows via script under the
   // debug mode.
-  return !base::FeatureList::IsEnabled(chromeos::features::kEcheSWADebugMode);
+  return !base::FeatureList::IsEnabled(ash::features::kEcheSWADebugMode);
 }
 
 gfx::Rect EcheSystemAppDelegate::GetDefaultBounds(Browser* browser) const {
@@ -86,7 +86,7 @@ gfx::Rect EcheSystemAppDelegate::GetDefaultBounds(Browser* browser) const {
 }
 
 bool EcheSystemAppDelegate::IsAppEnabled() const {
-  return base::FeatureList::IsEnabled(chromeos::features::kEcheSWA);
+  return base::FeatureList::IsEnabled(ash::features::kEcheSWA);
 }
 
 // TODO(nayebi): Remove this after migrating completely from SWA to bubble.

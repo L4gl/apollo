@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -16,7 +16,7 @@ class Profile;
 
 // Helper class which watches |web_contents| to determine whether there is an
 // appropriate opportunity to show the PrivacySandboxPrompt. Consults with the
-// PrivacySandboxService to determine what type of dialog, if any, to show.
+// PrivacySandboxService to determine what type of prompt, if any, to show.
 // When an appropriate time is determined, calls Show() directly to the
 // PrivacySandboxPrompt.
 class PrivacySandboxPromptHelper
@@ -28,9 +28,9 @@ class PrivacySandboxPromptHelper
       delete;
   ~PrivacySandboxPromptHelper() override;
 
-  // Returns whether |profile| needs to be shown a Privacy Sandbox dialog. If
+  // Returns whether |profile| needs to be shown a Privacy Sandbox prompt. If
   // this returns false, there is no need to create this helper.
-  static bool ProfileRequiresDialog(Profile* profile);
+  static bool ProfileRequiresPrompt(Profile* profile);
 
  private:
   friend class content::WebContentsUserData<PrivacySandboxPromptHelper>;

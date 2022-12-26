@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,9 @@
   matches: ['<all_urls>'],
   js: {
     code: 'document.querySelectorAll(\'a\').forEach(' +
-        'function(anchor){anchor.href=\'javascript:void(0)\';})'
+        'function(anchor){anchor.href=\'javascript:void(0)\';})',
   },
-  run_at: 'document_end'
+  run_at: 'document_end',
 };
 
 /**
@@ -70,3 +70,20 @@
     return copy;
   }
 }
+
+/**
+ * Possible native assistant icons
+ * Must be in sync with the corresponding c++ enum
+ * @enum {number}
+ */
+/* #export */ const AssistantNativeIconType = {
+  NONE: 0,
+
+  // Web & App Activity.
+  WAA: 1,
+
+  // Device Applications Information.
+  DA: 2,
+
+  INFO: 3,
+};

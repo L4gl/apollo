@@ -1,4 +1,4 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -46,9 +46,7 @@
 #endif  //  BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/media/chromeos_login_media_access_handler.h"
-#include "chrome/browser/media/public_session_media_access_handler.h"
-#include "chrome/browser/media/public_session_tab_capture_access_handler.h"
+#include "chrome/browser/media/chromeos_login_and_lock_media_access_handler.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -93,23 +91,13 @@ MediaCaptureDevicesDispatcher::MediaCaptureDevicesDispatcher()
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   media_access_handlers_.push_back(
-      std::make_unique<ChromeOSLoginMediaAccessHandler>());
-  // Wrapper around ExtensionMediaAccessHandler used in Public Sessions.
-  media_access_handlers_.push_back(
-      std::make_unique<PublicSessionMediaAccessHandler>());
-#else
+      std::make_unique<ChromeOSLoginAndLockMediaAccessHandler>());
+#endif
   media_access_handlers_.push_back(
       std::make_unique<ExtensionMediaAccessHandler>());
-#endif
   media_access_handlers_.push_back(
       std::make_unique<DesktopCaptureAccessHandler>());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Wrapper around TabCaptureAccessHandler used in Public Sessions.
-  media_access_handlers_.push_back(
-      std::make_unique<PublicSessionTabCaptureAccessHandler>());
-#else
   media_access_handlers_.push_back(std::make_unique<TabCaptureAccessHandler>());
-#endif
 #endif
   media_access_handlers_.push_back(
       std::make_unique<PermissionBubbleMediaAccessHandler>());
@@ -150,7 +138,7 @@ void MediaCaptureDevicesDispatcher::ProcessMediaAccessRequest(
           blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE &&
       !base::FeatureList::IsEnabled(features::kUserMediaScreenCapturing)) {
     std::move(callback).Run(
-        blink::mojom::StreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED, nullptr);
     return;
   }
@@ -166,7 +154,7 @@ void MediaCaptureDevicesDispatcher::ProcessMediaAccessRequest(
       return;
     }
   }
-  std::move(callback).Run(blink::mojom::StreamDevices(),
+  std::move(callback).Run(blink::mojom::StreamDevicesSet(),
                           blink::mojom::MediaStreamRequestResult::NOT_SUPPORTED,
                           nullptr);
 }
@@ -250,7 +238,8 @@ void MediaCaptureDevicesDispatcher::GetDefaultDevicesForBrowserContext(
       devices.audio_device = *device;
     } else {
       const blink::MediaStreamDevices& audio_devices = GetAudioCaptureDevices();
-      devices.audio_device = audio_devices.front();
+      if (!audio_devices.empty())
+        devices.audio_device = audio_devices.front();
     }
   }
 

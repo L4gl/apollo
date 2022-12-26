@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -140,6 +140,8 @@ void ClientSidePhishingModel::PopulateFromDynamicUpdate(
   bool model_valid = false;
   int model_version_field = 0;
 
+  bool tflite_valid = visual_tflite_model.IsValid();
+
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           kOverrideCsdModelFlag) &&
       !model_str.empty()) {
@@ -186,11 +188,10 @@ void ClientSidePhishingModel::PopulateFromDynamicUpdate(
           "SBClientPhishing.ModelDynamicUpdateVersion", model_version_field,
           kMaxVersion + 1);
     }
-  }
 
-  bool tflite_valid = visual_tflite_model.IsValid();
-  if (tflite_valid) {
-    visual_tflite_model_ = std::move(visual_tflite_model);
+    if (tflite_valid) {
+      visual_tflite_model_ = std::move(visual_tflite_model);
+    }
   }
 
   if (model_valid || tflite_valid) {
@@ -230,6 +231,13 @@ void ClientSidePhishingModel::ClearMappedRegionForTesting() {
 
 void* ClientSidePhishingModel::GetFlatBufferMemoryAddressForTesting() {
   return mapped_region_.mapping.memory();
+}
+
+void ClientSidePhishingModel::NotifyCallbacksOfUpdateForTesting() {
+  // base::Unretained is safe because this is a singleton.
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&ClientSidePhishingModel::NotifyCallbacksOnUI,
+                                base::Unretained(this)));
 }
 
 void ClientSidePhishingModel::MaybeOverrideModel() {

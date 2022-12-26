@@ -1,4 +1,4 @@
-// Copyright 2022 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -39,7 +39,8 @@ namespace ash {
 
 namespace {
 
-const char kTestEnterpriseServiceAccountId[] = "service_account@example.com";
+const char kTestEnterpriseServiceAccountEmail[] =
+    "service_account@system.gserviceaccount.com";
 const char kTestRefreshToken[] = "fake-refresh-token";
 const char kTestUserinfoToken[] = "fake-userinfo-token";
 const char kTestLoginToken[] = "fake-login-token";
@@ -72,7 +73,7 @@ class KioskEnterpriseTest : public KioskBaseTest {
     userinfo_token_info.scopes.insert(
         "https://www.googleapis.com/auth/userinfo.email");
     userinfo_token_info.audience = gaia_urls->oauth2_chrome_client_id();
-    userinfo_token_info.email = kTestEnterpriseServiceAccountId;
+    userinfo_token_info.email = kTestEnterpriseServiceAccountEmail;
     fake_gaia_.fake_gaia()->IssueOAuthToken(kTestRefreshToken,
                                             userinfo_token_info);
 
@@ -89,7 +90,7 @@ class KioskEnterpriseTest : public KioskBaseTest {
     access_token_info.token = kTestAccessToken;
     access_token_info.scopes.insert(kTestAppScope);
     access_token_info.audience = kTestClientId;
-    access_token_info.email = kTestEnterpriseServiceAccountId;
+    access_token_info.email = kTestEnterpriseServiceAccountEmail;
     fake_gaia_.fake_gaia()->IssueOAuthToken(kTestLoginToken, access_token_info);
 
     DeviceOAuth2TokenService* token_service =
@@ -109,7 +110,7 @@ class KioskEnterpriseTest : public KioskBaseTest {
     settings_helper_.SetString(kAccountsPrefDeviceLocalAccountAutoLoginId,
                                account_id);
     settings_helper_.SetString(kServiceAccountIdentity,
-                               kTestEnterpriseServiceAccountId);
+                               kTestEnterpriseServiceAccountEmail);
   }
 
  private:

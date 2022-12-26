@@ -1,4 +1,4 @@
-// Copyright 2012 The Chromium Authors. All rights reserved.
+// Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -70,7 +70,7 @@ viz::AggregatedRenderPass* AddRenderPassWithDamage(
 template <typename RenderPassType>
 inline viz::SolidColorDrawQuad* AddQuad(RenderPassType* pass,
                                         const gfx::Rect& rect,
-                                        SkColor color) {
+                                        SkColor4f color) {
   viz::SharedQuadState* shared_state = pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(gfx::Transform(), rect, rect, gfx::MaskFilterInfo(),
                        absl::nullopt, false, 1, SkBlendMode::kSrcOver, 0);

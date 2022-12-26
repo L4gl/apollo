@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -55,7 +55,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #elif BUILDFLAG(IS_LINUX)
 #include "device/bluetooth/dbus/dbus_bluez_manager_wrapper_linux.h"
@@ -66,8 +66,8 @@
 #endif
 
 #if BUILDFLAG(IS_LINUX)
-#include "ui/views/linux_ui/linux_ui.h"  // nogncheck
-#include "ui/views/linux_ui/linux_ui_factory.h"  // nogncheck
+#include "ui/linux/linux_ui.h"          // nogncheck
+#include "ui/linux/linux_ui_factory.h"  // nogncheck
 #endif
 
 namespace content {
@@ -116,7 +116,7 @@ ShellBrowserMainParts::~ShellBrowserMainParts() = default;
 
 void ShellBrowserMainParts::PostCreateMainMessageLoop() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::DBusThreadManager::Initialize();
+  ash::DBusThreadManager::Initialize();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   chromeos::LacrosDBusThreadManager::Initialize();
 #endif
@@ -142,6 +142,11 @@ int ShellBrowserMainParts::PreEarlyInitialization() {
 void ShellBrowserMainParts::InitializeBrowserContexts() {
   set_browser_context(new ShellBrowserContext(false));
   set_off_the_record_browser_context(new ShellBrowserContext(true));
+  // Persistent Origin Trials needs to be instantiated as soon as possible
+  // during browser startup, to ensure data is available prior to the first
+  // request.
+  browser_context_->GetOriginTrialsControllerDelegate();
+  off_the_record_browser_context_->GetOriginTrialsControllerDelegate();
 }
 
 void ShellBrowserMainParts::InitializeMessageLoopContext() {
@@ -154,7 +159,7 @@ void ShellBrowserMainParts::ToolkitInitialized() {
     return;
 
 #if BUILDFLAG(IS_LINUX)
-  views::LinuxUI::SetInstance(CreateLinuxUi());
+  ui::LinuxUi::SetInstance(ui::GetDefaultLinuxUi());
 #endif
 }
 
@@ -197,7 +202,7 @@ void ShellBrowserMainParts::PostMainMessageLoopRun() {
   browser_context_.reset();
   off_the_record_browser_context_.reset();
 #if BUILDFLAG(IS_LINUX)
-  views::LinuxUI::SetInstance(nullptr);
+  ui::LinuxUi::SetInstance(nullptr);
 #endif
   performance_manager_lifetime_.reset();
 }
@@ -212,7 +217,7 @@ void ShellBrowserMainParts::PostDestroyThreads() {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::DBusThreadManager::Shutdown();
+  ash::DBusThreadManager::Shutdown();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
   chromeos::LacrosDBusThreadManager::Shutdown();
 #endif

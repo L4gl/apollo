@@ -1,15 +1,15 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "extensions/browser/media_capture_util.h"
 
-#include <algorithm>
 #include <string>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/check.h"
+#include "base/ranges/algorithm.h"
 #include "content/public/browser/media_capture_devices.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -30,11 +30,8 @@ const MediaStreamDevice* GetRequestedDeviceOrDefault(
     const MediaStreamDevices& devices,
     const std::string& requested_device_id) {
   if (!requested_device_id.empty()) {
-    auto it =
-        std::find_if(devices.begin(), devices.end(),
-                     [requested_device_id](const MediaStreamDevice& device) {
-                       return device.id == requested_device_id;
-                     });
+    auto it = base::ranges::find(devices, requested_device_id,
+                                 &MediaStreamDevice::id);
     return it != devices.end() ? &(*it) : nullptr;
   }
 
@@ -59,7 +56,11 @@ void GrantMediaStreamRequest(content::WebContents* web_contents,
          request.video_type ==
              blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE);
 
-  blink::mojom::StreamDevices devices;
+  // TOOD(crbug.com/1300883): Generalize to multiple streams.
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  blink::mojom::StreamDevices& devices = *stream_devices_set.stream_devices[0];
 
   if (request.audio_type ==
       blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE) {
@@ -84,8 +85,8 @@ void GrantMediaStreamRequest(content::WebContents* web_contents,
   // TODO(jamescook): Should we show a recording icon somewhere? If so, where?
   std::unique_ptr<MediaStreamUI> ui;
   std::move(callback).Run(
-      devices,
-      devices.audio_device.has_value() || devices.video_device.has_value()
+      stream_devices_set,
+      (devices.audio_device.has_value() || devices.video_device.has_value())
           ? blink::mojom::MediaStreamRequestResult::OK
           : blink::mojom::MediaStreamRequestResult::INVALID_STATE,
       std::move(ui));

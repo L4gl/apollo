@@ -56,8 +56,7 @@
               },
               "legacy_gclient_config": {
                 "apply_configs": [
-                  "android",
-                  "enable_reclient"
+                  "android"
                 ],
                 "config": "chromium"
               }
@@ -100,5 +99,8 @@
     ]
   },
   "builder_group": "chromium.android",
-  "recipe": "chromium"
+  "recipe": "chromium",
+  "sheriff_rotations": [
+    "android"
+  ]
 }

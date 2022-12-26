@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -27,7 +27,7 @@ class AppRegistrarObserver : public base::CheckedObserver {
 
   virtual void OnWebAppProfileWillBeDeleted(const AppId& app_id) {}
 
-  virtual void OnAppRegistrarDestroyed() {}
+  virtual void OnAppRegistrarDestroyed() = 0;
 
   // Called after remembering the user choice to always launch an app via
   // a given protocol.
@@ -63,6 +63,9 @@ class AppRegistrarObserver : public base::CheckedObserver {
   // this event is also fired during browser startup after the policy has been
   // applied.
   virtual void OnWebAppSettingsPolicyChanged() {}
+
+  virtual void OnAlwaysShowToolbarInFullscreenChanged(const AppId& app_id,
+                                                      bool show) {}
 };
 
 }  // namespace web_app

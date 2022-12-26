@@ -1,11 +1,13 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #ifndef CC_PAINT_PAINT_OP_WRITER_H_
 #define CC_PAINT_PAINT_OP_WRITER_H_
 
+#include "base/bits.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_filter.h"
@@ -60,6 +62,7 @@ class CC_PAINT_EXPORT PaintOpWriter {
   void Write(const SkRect& rect);
   void Write(const SkIRect& rect);
   void Write(const SkRRect& rect);
+  void Write(const SkColor4f& color);
   void Write(const SkPath& path, UsePaintCache);
   void Write(const sk_sp<SkData>& data);
   void Write(const SkColorSpace* data);
@@ -168,9 +171,8 @@ class CC_PAINT_EXPORT PaintOpWriter {
              const SkM44& current_ctm);
   void Write(const LightingPointPaintFilter& filter, const SkM44& current_ctm);
   void Write(const LightingSpotPaintFilter& filter, const SkM44& current_ctm);
-  void Write(const StretchPaintFilter& filter, const SkM44& current_ctm);
 
-  void Write(const PaintRecord* record,
+  void Write(const PaintRecord& record,
              const gfx::Rect& playback_rect,
              const gfx::SizeF& post_scale);
   void Write(const SkRegion& region);
@@ -191,7 +193,7 @@ class CC_PAINT_EXPORT PaintOpWriter {
   raw_ptr<char> memory_ = nullptr;
   size_t size_ = 0u;
   size_t remaining_bytes_ = 0u;
-  const PaintOp::SerializeOptions& options_;
+  const raw_ref<const PaintOp::SerializeOptions> options_;
   bool valid_ = true;
 
   // Indicates that the following security constraints must be applied during

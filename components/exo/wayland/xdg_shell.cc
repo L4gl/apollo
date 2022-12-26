@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -145,21 +145,6 @@ uint32_t HandleXdgSurfaceConfigureCallback(
   wl_client_flush(wl_resource_get_client(resource));
   return serial;
 }
-
-struct WaylandXdgSurface {
-  WaylandXdgSurface(std::unique_ptr<XdgShellSurface> shell_surface,
-                    SerialTracker* const serial_tracker)
-      : shell_surface(std::move(shell_surface)),
-        serial_tracker(serial_tracker) {}
-
-  WaylandXdgSurface(const WaylandXdgSurface&) = delete;
-  WaylandXdgSurface& operator=(const WaylandXdgSurface&) = delete;
-
-  std::unique_ptr<XdgShellSurface> shell_surface;
-
-  // Owned by Server, which always outlives this surface.
-  SerialTracker* const serial_tracker;
-};
 
 // Wrapper around shell surface that allows us to handle the case where the
 // xdg surface resource is destroyed before the toplevel resource.
@@ -707,6 +692,8 @@ void xdg_wm_base_get_xdg_surface(wl_client* client,
   // before they are enabled and can become visible.
   shell_surface->SetEnabled(false);
 
+  shell_surface->SetSecurityDelegate(GetSecurityDelegate(client));
+
   std::unique_ptr<WaylandXdgSurface> wayland_shell_surface =
       std::make_unique<WaylandXdgSurface>(std::move(shell_surface),
                                           data->serial_tracker);
@@ -787,6 +774,13 @@ static const struct zxdg_decoration_manager_v1_interface
 };
 
 }  // namespace
+
+WaylandXdgSurface ::WaylandXdgSurface(
+    std::unique_ptr<XdgShellSurface> shell_surface,
+    SerialTracker* const serial_tracker)
+    : shell_surface(std::move(shell_surface)), serial_tracker(serial_tracker) {}
+
+WaylandXdgSurface::~WaylandXdgSurface() = default;
 
 void bind_zxdg_decoration_manager(wl_client* client,
                                   void* data,

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -54,7 +54,12 @@ enum class MessagePriority { kUrgent, kNormal };
 // The constants of message scope type.
 //
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.messages
-enum class MessageScopeType { WINDOW = 0, WEB_CONTENTS = 1, NAVIGATION = 2 };
+enum class MessageScopeType {
+  WINDOW = 0,
+  WEB_CONTENTS = 1,
+  NAVIGATION = 2,
+  ORIGIN = 3
+};
 
 // Enumerates unique identifiers for various messages. Used for recording
 // messages related histograms.
@@ -99,9 +104,17 @@ enum class MessageIdentifier {
   VR_SERVICES_UPGRADE = 24,
   TAILORED_SECURITY_DISABLED = 25,
   AR_CORE_UPGRADE = 26,
-  INSTANT_APPS = 27,
+  // Removed: INSTANT_APPS = 27,
   ABOUT_THIS_SITE = 28,
   TRANSLATE = 29,
+  OFFER_NOTIFICATION = 30,
+  EXTERNAL_NAVIGATION = 31,
+  FRAMEBUST_BLOCKED = 32,
+  DESKTOP_SITE_GLOBAL_DEFAULT_OPT_OUT = 33,
+  DESKTOP_SITE_GLOBAL_OPT_IN = 34,
+  PASSWORD_MANAGER_ERROR = 35,
+  DOWNLOAD_INCOGNITO_WARNING = 36,
+  RESTORE_CUSTOM_TAB = 37,
 
   // Insert new values before this line.
   COUNT

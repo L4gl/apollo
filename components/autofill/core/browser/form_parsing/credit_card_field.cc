@@ -1,4 +1,4 @@
-// Copyright 2013 The Chromium Authors. All rights reserved.
+// Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,15 +15,16 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/autofill_regex_constants.h"
-#include "components/autofill/core/browser/autofill_regexes.h"
 #include "components/autofill/core/browser/field_filler.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/autofill_scanner.h"
 #include "components/autofill/core/browser/form_parsing/form_field.h"
 #include "components/autofill/core/browser/form_parsing/regex_patterns.h"
+#include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_regex_constants.h"
+#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -299,28 +300,20 @@ bool CreditCardField::LikelyCardMonthSelectField(AutofillScanner* scanner) {
   if (field->options.size() < 12 || field->options.size() > 13)
     return false;
 
-  // Filter out years.
-  const std::u16string kNumericalYearRe = u"[1-9][0-9][0-9][0-9]";
-  for (const auto& option : field->options) {
-    if (MatchesPattern(option.value, kNumericalYearRe))
-      return false;
-  }
-  for (const auto& option : field->options) {
-    if (MatchesPattern(option.content, kNumericalYearRe))
-      return false;
-  }
-
-  // Look for numerical months.
-  const std::u16string kNumericalMonthRe = u"12";
-  if (MatchesPattern(field->options.back().value, kNumericalMonthRe) ||
-      MatchesPattern(field->options.back().content, kNumericalMonthRe)) {
-    return true;
-  }
-
-  // Maybe do more matches here. e.g. look for (translated) December.
-
-  // Unsure? Return false.
-  return false;
+  auto matches_december = [](const SelectOption& option) {
+    static constexpr char16_t kNumericalDecemberRe[] = u"12";
+    // Maybe we should do more here? E.g., look for (translated) "December".
+    return MatchesRegex<kNumericalDecemberRe>(option.value) ||
+           MatchesRegex<kNumericalDecemberRe>(option.content);
+  };
+  auto matches_year = [](const SelectOption& option) {
+    static constexpr char16_t kNumericalYearRe[] = u"[1-9][0-9][0-9][0-9]";
+    return MatchesRegex<kNumericalYearRe>(option.value) ||
+           MatchesRegex<kNumericalYearRe>(option.content);
+  };
+  // If in doubt, return false.
+  return matches_december(field->options.back()) &&
+         !base::ranges::any_of(field->options, matches_year);
 }
 
 // static
@@ -341,12 +334,12 @@ bool CreditCardField::LikelyCardYearSelectField(
 
   // Filter out days - elements for date entries would have
   // numbers 1 to 9 as well in them, which we can filter on.
-  const std::u16string kSingleDigitDateRe = u"\\b[1-9]\\b";
-  for (const auto& option : field->options) {
-    if (MatchesPattern(option.content, kSingleDigitDateRe)) {
-      return false;
-    }
-  }
+  auto matches_single_digit_date = [](const SelectOption& option) {
+    static constexpr char16_t kSingleDigitDateRe[] = u"\\b[1-9]\\b";
+    return MatchesRegex<kSingleDigitDateRe>(option.content);
+  };
+  if (base::ranges::any_of(field->options, matches_single_digit_date))
+    return false;
 
   // Another way to eliminate days - filter out 'day' fields.
   base::span<const MatchPatternRef> day_patterns =
@@ -359,12 +352,12 @@ bool CreditCardField::LikelyCardYearSelectField(
 
   // Filter out birth years - a website would not offer 1999 as a credit card
   // expiration year, but show it in the context of a birth year selector.
-  const std::u16string kBirthYearRe = u"(1999|99)";
-  for (const auto& option : field->options) {
-    if (MatchesPattern(option.content, kBirthYearRe)) {
-      return false;
-    }
-  }
+  auto matches_birth_year = [](const SelectOption& option) {
+    static constexpr char16_t kBirthYearRe[] = u"(1999|99)";
+    return MatchesRegex<kBirthYearRe>(option.content);
+  };
+  if (base::ranges::any_of(field->options, matches_birth_year))
+    return false;
 
   // Test if three consecutive items in `field->options` mention three
   // consecutive year dates.
@@ -472,9 +465,9 @@ CreditCardField::CreditCardField(LogManager* log_manager)
 CreditCardField::~CreditCardField() {}
 
 void CreditCardField::AddClassifications(
-    FieldCandidatesMap* field_candidates) const {
-  for (size_t index = 0; index < numbers_.size(); ++index) {
-    AddClassification(numbers_[index], CREDIT_CARD_NUMBER,
+    FieldCandidatesMap& field_candidates) const {
+  for (auto* number : numbers_) {
+    AddClassification(number, CREDIT_CARD_NUMBER,
                       kBaseCreditCardParserScore, field_candidates);
   }
 
@@ -514,7 +507,7 @@ bool CreditCardField::ParseExpirationDate(AutofillScanner* scanner,
                                           LogManager* log_manager,
                                           const LanguageCode& page_language,
                                           PatternSource pattern_source) {
-  if (!expiration_date_ && base::LowerCaseEqualsASCII(
+  if (!expiration_date_ && base::EqualsCaseInsensitiveASCII(
                                scanner->Cursor()->form_control_type, "month")) {
     expiration_date_ = scanner->Cursor();
     expiration_month_ = nullptr;
@@ -528,23 +521,18 @@ bool CreditCardField::ParseExpirationDate(AutofillScanner* scanner,
 
   // First try to parse split month/year expiration fields by looking for a
   // pair of select fields that look like month/year.
-  size_t month_year_saved_cursor = scanner->SaveCursor();
-
-  if (LikelyCardMonthSelectField(scanner)) {
-    expiration_month_ = scanner->Cursor();
-    scanner->Advance();
-    if (LikelyCardYearSelectField(scanner, log_manager, page_language,
-                                  pattern_source)) {
-      expiration_year_ = scanner->Cursor();
-      scanner->Advance();
-      return true;
-    }
-    expiration_month_ = nullptr;
-    expiration_year_ = nullptr;
+  if (ParseInAnyOrder(
+          scanner, {{&expiration_month_,
+                     base::BindRepeating(&LikelyCardMonthSelectField, scanner)},
+                    {&expiration_year_,
+                     base::BindRepeating(&LikelyCardYearSelectField, scanner,
+                                         log_manager, page_language,
+                                         pattern_source)}})) {
+    return true;
   }
 
   // If that fails, do a general regex search.
-  scanner->RewindTo(month_year_saved_cursor);
+  size_t month_year_saved_cursor = scanner->SaveCursor();
   const auto kMatchCCType =
       kDefaultMatchParamsWith<MatchFieldType::kNumber,
                               MatchFieldType::kTelephone,

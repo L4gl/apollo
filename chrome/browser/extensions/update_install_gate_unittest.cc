@@ -1,4 +1,4 @@
-// Copyright 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -62,10 +62,10 @@ scoped_refptr<const Extension> CreateApp(const std::string& extension_id,
                                 DictionaryBuilder()
                                     .Set("scripts", ListBuilder()
                                                         .Append("background.js")
-                                                        .Build())
-                                    .Build())
-                           .Build())
-                  .Build())
+                                                        .BuildList())
+                                    .BuildDict())
+                           .BuildDict())
+                  .BuildDict())
           .SetID(extension_id)
           .Build();
   return app;
@@ -84,8 +84,8 @@ scoped_refptr<const Extension> CreateExtension(const std::string& extension_id,
                   .Set("background", DictionaryBuilder()
                                          .Set("page", "background.html")
                                          .Set("persistent", persistent)
-                                         .Build())
-                  .Build())
+                                         .BuildDict())
+                  .BuildDict())
           .SetID(extension_id)
           .Build();
   return extension;
@@ -175,7 +175,7 @@ class UpdateInstallGateTest : public testing::Test {
   void MakeExtensionListenForOnUpdateAvailable(
       const std::string& extension_id) {
     const char kOnUpdateAvailableEvent[] = "runtime.onUpdateAvailable";
-    event_router_->AddEventListener(kOnUpdateAvailableEvent, NULL,
+    event_router_->AddEventListener(kOnUpdateAvailableEvent, nullptr,
                                     extension_id);
   }
 

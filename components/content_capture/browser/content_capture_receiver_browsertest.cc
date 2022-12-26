@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -23,7 +23,7 @@ class ContentCaptureBrowserTest : public content::ContentBrowserTest {
     // Navigate to the initial page.
     const GURL main_frame_url = embedded_test_server()->GetURL(kMainFrameUrl);
     ASSERT_TRUE(NavigateToURL(web_contents(), main_frame_url));
-    main_frame_ = web_contents()->GetMainFrame();
+    main_frame_ = web_contents()->GetPrimaryMainFrame();
     EXPECT_NE(nullptr, main_frame_);
 
     // Create a provider and add a consumer.
@@ -71,8 +71,8 @@ class ContentCaptureBrowserTest : public content::ContentBrowserTest {
  protected:
   ContentCaptureTestHelper helper_;
 
-  raw_ptr<content::RenderFrameHost> main_frame_ = nullptr;
-  raw_ptr<content::RenderFrameHost> fenced_frame_ = nullptr;
+  raw_ptr<content::RenderFrameHost, DanglingUntriaged> main_frame_ = nullptr;
+  raw_ptr<content::RenderFrameHost, DanglingUntriaged> fenced_frame_ = nullptr;
 
   FakeContentCaptureSender main_frame_sender_;
   FakeContentCaptureSender fenced_frame_sender_;

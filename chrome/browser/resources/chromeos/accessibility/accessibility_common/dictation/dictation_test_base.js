@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2021 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,13 +10,45 @@ GEN_INCLUDE(['../../common/testing/mock_language_settings_private.js']);
 GEN_INCLUDE(['../../common/testing/mock_speech_recognition_private.js']);
 
 /**
+ * @typedef {{
+ *   name: (string|undefined),
+ *   repeat: (number|undefined),
+ *   smart: (boolean|undefined),
+ * }}
+ */
+let ParseTestExpectations;
+
+/** A class that represents a test case for parsing text. */
+class ParseTestCase {
+  /**
+   * @param {string} text The text to be parsed
+   * @param {!ParseTestExpectations} expectations
+   * @constructor
+   */
+  constructor(text, expectations) {
+    /** @type {string} */
+    this.text = text;
+    /** @type {string|undefined} */
+    this.expectedName = expectations.name;
+    /** @type {number|undefined} */
+    this.expectedRepeat = expectations.repeat;
+    /** @type {boolean|undefined} */
+    this.expectedSmart = expectations.smart;
+  }
+}
+
+/**
  * Base class for tests for Dictation feature using accessibility common
  * extension browser tests.
  */
 DictationE2ETestBase = class extends E2ETestBase {
   constructor() {
     super();
-    this.mockAccessibilityPrivate = MockAccessibilityPrivate;
+    this.navigateLacrosWithAutoComplete = true;
+
+    this.mockAccessibilityPrivate = new MockAccessibilityPrivate();
+    this.iconType = this.mockAccessibilityPrivate.DictationBubbleIconType;
+    this.hintType = this.mockAccessibilityPrivate.DictationBubbleHintType;
     chrome.accessibilityPrivate = this.mockAccessibilityPrivate;
 
     this.mockInputIme = MockInputIme;
@@ -30,9 +62,6 @@ DictationE2ETestBase = class extends E2ETestBase {
 
     this.mockSpeechRecognitionPrivate = new MockSpeechRecognitionPrivate();
     chrome.speechRecognitionPrivate = this.mockSpeechRecognitionPrivate;
-
-    this.iconType = this.mockAccessibilityPrivate.DictationBubbleIconType;
-    this.hintType = this.mockAccessibilityPrivate.DictationBubbleHintType;
 
     this.dictationEngineId =
         '_ext_ime_egfdjlfmgnehecnclamagfafdccgfndpdictation';
@@ -64,7 +93,7 @@ DictationE2ETestBase = class extends E2ETestBase {
     const reinit = module => {
       accessibilityCommon = new module.AccessibilityCommon();
     };
-import('/accessibility_common/accessibility_common_loader.js').then(reinit);
+    import('/accessibility_common/accessibility_common_loader.js').then(reinit);
   }
 
   /** @override */
@@ -75,10 +104,15 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
     await importModule(
         'Dictation', '/accessibility_common/dictation/dictation.js');
     assertNotNullNorUndefined(Dictation);
+    await importModule(
+        'LocaleInfo', '/accessibility_common/dictation/locale_info.js');
     await new Promise(resolve => {
       chrome.accessibilityFeatures.dictation.set({value: true}, resolve);
     });
     await this.setPref(Dictation.DICTATION_LOCALE_PREF, 'en-US');
+
+    // By default, Dictation JS tests should use regex parsing.
+    accessibilityCommon.dictation_.disablePumpkinForTesting_();
   }
 
   /** @override */
@@ -92,19 +126,37 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
 #include "base/command_line.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "ui/accessibility/accessibility_features.h"
+#include "components/prefs/pref_service.h"
+#include "ash/constants/ash_pref_names.h"
     `);
   }
 
   /** @override */
   testGenPreamble() {
     super.testGenPreamble();
+
     GEN(`
+  browser()->profile()->GetPrefs()->SetBoolean(
+        ash::prefs::kDictationAcceleratorDialogHasBeenAccepted, true);
+
   base::OnceClosure load_cb =
     base::BindOnce(&ash::AccessibilityManager::SetDictationEnabled,
         base::Unretained(ash::AccessibilityManager::Get()),
         true);
     `);
-    super.testGenPreambleCommon('kAccessibilityCommonExtensionId');
+
+    // Allow informational Pumpkin messages.
+    super.testGenPreambleCommon(
+        /*extensionIdName=*/ 'kAccessibilityCommonExtensionId',
+        /*failOnConsoleError=*/ true,
+        /*allowedMessages=*/[
+          'Pumpkin installed, but data is empty',
+          `wasm streaming compile failed: TypeError: Failed to execute ` +
+              `'compile' on 'WebAssembly': Incorrect response MIME type. ` +
+              `Expected 'application/wasm'.`,
+          'falling back to ArrayBuffer instantiation',
+          'Pumpkin module loaded.',
+        ]);
   }
 
   /** Turns on Dictation and checks IME and Speech Recognition state. */
@@ -196,6 +248,7 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
   /**
    * Checks that the latest IME commit text matches the expected value.
    * @param {string} expected
+   * @return {!Promise}
    */
   async assertCommittedText(expected) {
     if (!this.mockInputIme.getLastCommittedParameters()) {
@@ -217,10 +270,11 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
   /**
    * Async function to get a preference value from Settings.
    * @param {string} name
+   * @return {!Promise<*>}
    */
   async getPref(name) {
     return new Promise(resolve => {
-      chrome.settingsPrivate.getPref(name, (ret) => {
+      chrome.settingsPrivate.getPref(name, ret => {
         resolve(ret);
       });
     });
@@ -229,6 +283,7 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
   /**
    * Async function to set a preference value in Settings.
    * @param {string} name
+   * @return {!Promise}
    */
   async setPref(name, value) {
     return new Promise(resolve => {
@@ -251,6 +306,11 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
   /** @return {PumpkinParseStrategy} */
   getPumpkinParseStrategy() {
     return accessibilityCommon.dictation_.speechParser_.pumpkinParseStrategy_;
+  }
+
+  /** @return {InputController} */
+  getInputController() {
+    return accessibilityCommon.dictation_.inputController_;
   }
 
   // Speech recognition methods.
@@ -307,6 +367,7 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
    * Waits for the updateDictationBubble() API to be called with the given
    * properties.
    * @param {DictationBubbleProperties} targetProps
+   * @return {!Promise}
    */
   async waitForUIProperties(targetProps) {
     // Poll until the updateDictationBubble() API gets called with
@@ -321,7 +382,7 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
           clearInterval(intervalId);
           resolve();
         }
-      });
+      }, 100);
     });
   }
 
@@ -371,5 +432,66 @@ import('/accessibility_common/accessibility_common_loader.js').then(reinit);
       icon: ${props.icon}
       text: ${props.text}
       hints: ${props.hints}`);
+  }
+
+  /**
+   * Always allows Dictation commands, even if the Dictation locale and browser
+   * locale differ. Only used for testing.
+   */
+  alwaysEnableCommands() {
+    LocaleInfo.alwaysEnableCommandsForTesting = true;
+  }
+
+  /**
+   * @param {!ParseTestCase} testCase
+   * @return {!Promise}
+   */
+  async runInputTextParseTestCase(testCase) {
+    const macro = await this.getInputTextStrategy().parse(testCase.text);
+    this.runParseTestCaseAssertions(testCase, macro);
+  }
+
+  /**
+   * @param {!ParseTestCase} testCase
+   * @return {!Promise}
+   */
+  async runSimpleParseTestCase(testCase) {
+    const macro = await this.getSimpleParseStrategy().parse(testCase.text);
+    this.runParseTestCaseAssertions(testCase, macro);
+  }
+
+  /**
+   * @param {!ParseTestCase} testCase
+   * @return {!Promise}
+   */
+  async runPumpkinParseTestCase(testCase) {
+    const macro = await this.getPumpkinParseStrategy().parse(testCase.text);
+    this.runParseTestCaseAssertions(testCase, macro);
+  }
+
+  /**
+   * @param {!ParseTestCase} testCase
+   * @param {?Macro} macro
+   */
+  runParseTestCaseAssertions(testCase, macro) {
+    const expectedName = testCase.expectedName;
+    const expectedRepeat = testCase.expectedRepeat;
+    const expectedSmart = testCase.expectedSmart;
+    if (!macro) {
+      assertEquals(undefined, expectedName);
+      assertEquals(undefined, expectedRepeat);
+      assertEquals(undefined, expectedSmart);
+      return;
+    }
+
+    if (expectedName) {
+      assertEquals(expectedName, macro.getNameAsString());
+    }
+    if (expectedRepeat) {
+      assertEquals(expectedRepeat, macro.repeat_);
+    }
+    if (expectedSmart) {
+      assertEquals(expectedSmart, macro.isSmart());
+    }
   }
 };

@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -19,7 +19,7 @@ namespace blink {
 
 class Document;
 
-enum class TimelinePhase { kInactive, kBefore, kActive, kAfter };
+enum class TimelinePhase { kInactive, kActive };
 
 class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
@@ -40,18 +40,23 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
   ~AnimationTimeline() override = default;
 
   virtual V8CSSNumberish* currentTime();
+  virtual CSSNumericValue* getCurrentTime(const String& rangeName) {
+    return nullptr;
+  }
+
   absl::optional<AnimationTimeDelta> CurrentTime();
   absl::optional<double> CurrentTimeMilliseconds();
   absl::optional<double> CurrentTimeSeconds();
 
   virtual V8CSSNumberish* duration();
 
-  String phase();
   TimelinePhase Phase() { return CurrentPhaseAndTime().phase; }
 
   virtual bool IsDocumentTimeline() const { return false; }
   virtual bool IsScrollTimeline() const { return false; }
   virtual bool IsCSSScrollTimeline() const { return false; }
+  virtual bool IsViewTimeline() const { return false; }
+
   virtual bool IsActive() const = 0;
   virtual AnimationTimeDelta ZeroTime() = 0;
   // https://w3.org/TR/web-animations-1/#monotonically-increasing-timeline
@@ -71,7 +76,17 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
       const Timing&) {
     return AnimationTimeDelta();
   }
-  Document* GetDocument() { return document_; }
+
+  // Converts timeline offsets to start and end delays in time units based on
+  // the timeline duration. In the event that the timeline is not an instance
+  // of a view timeline, the delays are zero.
+  using TimeDelayPair = std::pair<AnimationTimeDelta, AnimationTimeDelta>;
+  virtual TimeDelayPair TimelineOffsetsToTimeDelays(
+      const Timing& timing) const {
+    return std::make_pair(AnimationTimeDelta(), AnimationTimeDelta());
+  }
+
+  Document* GetDocument() const { return document_; }
   virtual void AnimationAttached(Animation*);
   virtual void AnimationDetached(Animation*);
 
@@ -85,7 +100,7 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
   Animation* Play(AnimationEffect*, ExceptionState& = ASSERT_NO_EXCEPTION);
 
   virtual bool NeedsAnimationTimingUpdate();
-  virtual bool HasAnimations() const { return !animations_.IsEmpty(); }
+  virtual bool HasAnimations() const { return !animations_.empty(); }
   virtual bool HasOutdatedAnimation() const {
     return outdated_animation_count_ > 0;
   }

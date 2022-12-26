@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -50,6 +50,9 @@ class ProfileMenuView : public ProfileMenuViewBase {
   friend class ProfileMenuViewSignoutTest;
   friend class ProfileMenuViewSyncErrorButtonTest;
   friend class ProfileMenuInteractiveUiTest;
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  friend class ProfileMenuViewSigninErrorButtonTest;
+#endif
 
   // views::BubbleDialogDelegateView:
   std::u16string GetAccessibleWindowTitle() const override;
@@ -88,7 +91,7 @@ class ProfileMenuView : public ProfileMenuViewBase {
   void BuildSyncInfo();
   void BuildFeatureButtons();
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-  void BuildSelectableProfiles();
+  void BuildAvailableProfiles();
   void BuildProfileManagementFeatureButtons();
 #endif
 

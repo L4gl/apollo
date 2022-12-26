@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -68,6 +68,8 @@ class ClientSidePhishingModel {
   void ClearMappedRegionForTesting();
   // Get flatbuffer memory address.
   void* GetFlatBufferMemoryAddressForTesting();
+  // Notifies all the callbacks of a change in model.
+  void NotifyCallbacksOfUpdateForTesting();
 
   // Called to check the command line and maybe override the current model.
   void MaybeOverrideModel();
